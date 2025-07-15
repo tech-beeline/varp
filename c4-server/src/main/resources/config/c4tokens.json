@@ -1,0 +1,507 @@
+{
+    "scopes": [
+        {
+            "name": "DocumentRootContext",
+            "keywords": [
+                "workspace"
+            ],
+            "snippets": [
+                {
+                    "label": "Workspace Template",
+                    "detail": "Add a new workspace",
+                    "insertText": "workspace name \"Your Description\" {\n\n\tmodel {\n\n\t}\n\n\tviews {\n\n\t}\n\n}"
+                }
+            ]
+        },
+        {
+            "name": "WorkspaceDslContext",
+            "keywords": [
+                "name",
+                "description",
+                "properties",
+                "!identifers",
+                "!docs",
+                "!adrs",
+                "model",
+                "views",
+                "configuration"
+            ]
+        },
+        {
+            "name": "ModelDslContext",
+            "keywords": [
+                "!identifers",
+                "group",
+                "person",
+                "softwareSystem",
+                "deploymentEnvironment",
+                "element"
+            ],
+            "hasRelations": true,
+            "snippets": [
+                {
+                    "label": "Person Template",
+                    "detail": "Add a new person",
+                    "insertText": "${1:identifier} = person ${2:name} \"Your Description\""
+                },
+                {
+                    "label": "SoftwareSystem Template",
+                    "detail": "Add a new softwareSystem",
+                    "insertText": "${1:identifier} = softwareSystem ${2:name} \"Your Description\" \"Tags\" {\n\n}"
+                },
+                {
+                    "label": "DeploymentEnvironment Template",
+                    "detail": "Add a new deploymentEnvironment",
+                    "insertText": "${1:identifier} = deploymentEnvironment ${2:name} {\n\n}"
+                }
+            ]
+        },
+        {
+            "name": "PersonDslContext",
+            "keywords": [
+                "description",
+                "tags",
+                "url",
+                "properties",
+                "perspectives"
+            ],
+            "hasRelations": true
+        },
+        {
+            "name": "SoftwareSystemDslContext",
+            "keywords": [
+                "!docs",
+                "!adrs",
+                "group",
+                "container",
+                "description",
+                "tags",
+                "url",
+                "properties",
+                "perspectives"
+            ],
+            "hasRelations": true,
+            "snippets": [
+                {
+                    "label": "Container Template",
+                    "detail": "Add a new container",
+                    "insertText": "${1:identifier} = container ${2:name} \"Your Description\" \"Technology\" \"Tags\" {\n\n}"
+                },
+                {
+                    "label": "Container Template (short)",
+                    "detail": "Add a new container",
+                    "insertText": "${1:identifier} = container ${2:name} \"Your Description\" \"Technology\" \"Tags\""
+                }
+
+            ]
+        },
+        {
+            "name": "ContainerDslContext",
+            "keywords": [
+                "!docs",
+                "!adrs",
+                "group",
+                "component",
+                "description",
+                "technology",
+                "tags",
+                "url",
+                "properties",
+                "perspectives"
+            ],
+            "hasRelations": true,
+            "snippets": [
+                {
+                    "label": "Component Template",
+                    "detail": "Add a new component",
+                    "insertText": "${1:identifier} = component ${2:name} \"Your Description\" \"Technology\" \"Tags\" {\n\n}"
+                },
+                {
+                    "label": "Component Template (short)",
+                    "detail": "Add a new component",
+                    "insertText": "${1:identifier} = component ${2:name} \"Your Description\" \"Technology\" \"Tags\""
+                }
+
+            ]
+        },
+        {
+            "name": "ComponentDslContext",
+            "keywords": [
+                "!docs",
+                "!adrs",
+                "description",
+                "technology",
+                "tags",
+                "url",
+                "properties",
+                "perspectives"
+            ],
+            "hasRelations": true
+        },
+        {
+            "name": "DeploymentEnvironmentDslContext",
+            "keywords": [
+                "group",
+                "deploymentGroup",
+                "deploymentNode"
+            ],
+            "hasRelations": true
+        },
+        {
+            "name": "DeploymentNodeDslContext",
+            "keywords": [
+                "group",
+                "deploymentNode",
+                "infrastructureNode",
+                "softwareSystemInstance",
+                "containerInstance",
+                "description",
+                "technology",
+                "instances",
+                "tags",
+                "url",
+                "properties",
+                "perspectives"
+            ],
+            "hasRelations": true
+        },
+        {
+            "name": "InfrastructureNodeDslContext",
+            "keywords": [
+                "description",
+                "technology",
+                "tags",
+                "url",
+                "properties",
+                "perspectives"
+            ],
+            "hasRelations": true
+        },
+        {
+            "name": "SoftwareSystemInstanceDslContext",
+            "keywords": [
+                "description",
+                "tags",
+                "url",
+                "properties",
+                "perspectives",
+                "healthCheck"
+            ],
+            "hasRelations": true
+        },
+        {
+            "name": "ContainerInstanceDslContext",
+            "keywords": [
+                "description",
+                "tags",
+                "url",
+                "properties",
+                "perspectives",
+                "healthCheck"
+            ],
+            "hasRelations": true
+        },
+        {
+            "name": "ViewsDslContext",
+            "keywords": [
+                "systemLandscape",
+                "systemContext",
+                "container",
+                "component",
+                "filtered",
+                "dynamic",
+                "deployment",
+                "custom",
+                "image",
+                "styles",
+                "theme",
+                "themes",
+                "branding"
+            ],
+            "snippets": [
+                {
+                    "label": "systemLandscape View Template",
+                    "detail": "Add a new systemLandscape View",
+                    "insertText": "systemLandscape ${1:key} \"Your Description\" {\n  include * \n  autoLayout\n}"
+                },
+                {
+                    "label": "systemContext View Template",
+                    "detail": "Add a new systemContext View",
+                    "insertText": "systemContext ${1:software_system_identifier} ${2:key} \"Your Description\" {\n  include * \n  autoLayout\n}"
+                },
+                {
+                    "label": "container View Template",
+                    "detail": "Add a new container View",
+                    "insertText": "container ${1:software_system_identifier} ${2:key} \"Your Description\" {\n  include * \n  autoLayout\n}"
+                },
+                {
+                    "label": "component View Template",
+                    "detail": "Add a new component View",
+                    "insertText": "component ${1:container_identifier} ${2:key} \"Your Description\" {\n  include * \n  autoLayout\n}"
+                },
+                {
+                    "label": "dynamic View Template",
+                    "detail": "Add a new dynamic View",
+                    "insertText": "dynamic ${1:identifier} ${2:key} \"Your Description\" {\n  autoLayout\n}"
+                },
+                {
+                    "label": "deployment View Template",
+                    "detail": "Add a new deployment View",
+                    "insertText": "deployment ${1:environment} ${2:software_system_identifier} ${3:key} \"Your Description\" {\n  autoLayout\n}"
+                },
+                {
+                    "label": "custom View Template",
+                    "detail": "Add a new custom View",
+                    "insertText": "custom ${1:key} \"Your Title\" \"Your Description\" {\n  include * \n  autoLayout\n}"
+                }
+            ]
+        },
+        {
+            "name": "SystemLandscapeViewDslContext",
+            "keywords": [
+                "include",
+                "exclude",
+                "autoLayout",
+                "default",
+                "animation",
+                "title",
+                "description",
+                "properties"
+            ]
+        },
+        {
+            "name": "SystemContextViewDslContext",
+            "keywords": [
+                "include",
+                "exclude",
+                "autoLayout",
+                "default",
+                "animation",
+                "title",
+                "description",
+                "properties"
+            ]
+        },
+        {
+            "name": "ContainerViewDslContext",
+            "keywords": [
+                "include",
+                "exclude",
+                "autoLayout",
+                "default",
+                "animation",
+                "title",
+                "description",
+                "properties"
+            ]
+        },
+        {
+            "name": "ComponentViewDslContext",
+            "keywords": [
+                "include",
+                "exclude",
+                "autoLayout",
+                "default",
+                "animation",
+                "title",
+                "description",
+                "properties"
+            ]
+        },
+        {
+            "name": "DynamicViewDslContext",
+            "keywords": [
+                "autoLayout",
+                "default",
+                "title",
+                "description",
+                "properties"
+            ]
+        },
+        {
+            "name": "DeploymentViewDslContext",
+            "keywords": [
+                "include",
+                "exclude",
+                "autoLayout",
+                "default",
+                "animation",
+                "title",
+                "description",
+                "properties"
+            ]
+        },
+        {
+            "name": "StylesDslContext",
+            "keywords": [
+                "element",
+                "relationship"
+            ],
+            "snippets": [
+                {
+                    "label": "element Style Template",
+                    "detail": "Add a new element Style",
+                    "insertText": "element \"Tag\" {\n\n}"
+                },
+                {
+                    "label": "relationship Style Template",
+                    "detail": "Add a new relationship Style",
+                    "insertText": "relationship \"Tag\" {\n\n}"
+                }
+            ]
+        },
+        {
+            "name": "ElementStyleDslContext",
+            "keywords": [
+                "shape",
+                "icon",
+                "width",
+                "height",
+                "background",
+                "color",
+                "colour",
+                "stroke",
+                "strokeWidth",
+                "fontSize",
+                "border",
+                "opacity",
+                "metadata",
+                "description"
+            ]
+        },
+        {
+            "name": "RelationshipStyleDslContext",
+            "keywords": [
+                "thickness",
+                "color",
+                "colour",
+                "dashed",
+                "style",
+                "routing",
+                "fontSize",
+                "width",
+                "position",
+                "opacity"
+            ]
+        },
+        {
+            "name": "BrandingDslContext",
+            "keywords": [
+                "logo",
+                "font"
+            ]
+        },
+        {
+            "name": "TerminologyDslContext",
+            "keywords": [
+                "enterprise",
+                "person",
+                "softwareSystem",
+                "container",
+                "component",
+                "deploymentNode",
+                "infrastructureNode",
+                "relationship"
+            ]
+        },
+        {
+            "name": "ConfigurationDslContext",
+            "keywords": [
+                "visibility",
+                "users",
+                "properties",
+                "scope"
+            ]
+        }
+    ],
+    "details": [
+        {
+            "keyword": "shape",
+            "choice": [
+                "Box",
+                "RoundedBox",
+                "Circle",
+                "Ellipse",
+                "Hexagon",
+                "Cylinder",
+                "Pipe",
+                "Person",
+                "Robot",
+                "Folder",
+                "WebBrowser",
+                "MobileDevicePortrait",
+                "MobileDeviceLandscape",
+                "Component"
+            ]
+        },
+        {
+            "keyword": "style",
+            "choice": [
+                "solid",
+                "dashed",
+                "dotted"
+            ]
+        },
+        {
+            "keyword": "border",
+            "choice": [
+                "solid",
+                "dashed",
+                "dotted"
+            ]
+        },
+        {
+            "keyword": "routing",
+            "choice": [
+                "Direct",
+                "Orthogonal",
+                "Curved"
+            ]
+        },
+        {
+            "keyword": "dashed",
+            "choice": [
+                "true",
+                "false"
+            ]
+        },
+        {
+            "keyword": "metadata",
+            "choice": [
+                "true",
+                "false"
+            ]
+        },
+        {
+            "keyword": "description",
+            "choice": [
+                "true",
+                "false"
+            ]
+        },
+        {
+            "keyword": "autoLayout",
+            "choice": [
+                "tb",
+                "bt",
+                "lr",
+                "rl"
+            ]
+        },
+        {
+            "keyword": "visibility",
+            "choice": [
+                "private",
+                "public"
+            ]
+        },
+        {
+            "keyword": "scope",
+            "choice": [
+                "landscape",
+                "softwaresystem",
+                "none"
+            ]
+        }
+    ]
+}

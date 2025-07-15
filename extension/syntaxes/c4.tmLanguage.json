@@ -1,0 +1,86 @@
+{
+    "name": "C4 DSL",
+    "scopeName": "source.c4",
+    "fileTypes": [
+        "c4"
+    ],
+    "patterns": [
+        {
+            "include": "#comments"
+        },
+        {
+            "name": "keyword.control.c4",
+            "match": "\\b(workspace|model|views|styles|group|configuration)\\b"        
+        },
+        {
+            "name": "storage.type.c4",
+            "match": "\\b(constant|docs|adrs|impliedRelationships|refs)\\b"        
+        },
+        {
+            "name": "keyword.other.c4",
+            "match": "\\-\\>"
+        },
+        {
+            "name": "keyword.other.c4",
+            "match": "\\b(true|false|private|public|none|landscape)\\b"
+        },
+        {
+            "name" : "support.type.c4",
+            "match": "\\b(person|software[s,S]ystem|deployment[e,E]nvironment|deployment[n,N]ode|infrastructure[n,N]ode|containerInstance|softwareSystemInstance|system[l,L]andscape|system[c,C]ontext|container|component|filtered|dynamic|deployment|themes|branding|element|relationship)\\b"        
+        },
+        {
+			"name": "variable.other.property.c4",
+            "match": "\\b(include|exclude|auto[l,L]ayout|animation[s,S]tep|shape|icon|width|height|background|colou?r|stroke|strokeWidth|font[s,S]ize|border|opacity|metadata|description|thickness|dashed|routing|position|title)\\b"
+        },
+        {
+			"name": "variable.other.property.c4",
+            "match": "\\b(url|properties|perspectives|tags|instances|name|default|visibility|users|scope)\\b"
+        },
+        {
+            "name": "constant.numeric.c4",
+            "match": "\\b[1-9][0-9]*\\b"
+        },
+        {
+            "name": "string.quoted.double.c4",
+            "begin": "\"",
+            "end": "\""
+        },
+        {
+            "name": "string.quoted.single.c4",
+            "begin": "'",
+            "end": "'"
+        }
+    ],
+    "repository": 
+        {
+            "comments": {
+                "patterns": [
+                    {
+                        "name": "comment.block.c4",
+                        "begin": "/\\*",
+                        "beginCaptures": {
+                            "0": {
+                                "name": "punctuation.definition.comment.c4"
+                            }
+                        },
+                        "end": "\\*/",
+                        "endCaptures": {
+                            "0": {
+                                "name": "punctuation.definition.comment.c4"
+                            }
+                        }
+                    }, {
+                        "begin": "(^\\s+)?(?=//|#)",
+                        "beginCaptures": {
+                            "1": {
+                                "name": "punctuation.whitespace.comment.leading.cs"
+                            }
+                        },
+                        "end": "(?=$)",
+                        "name":"comment.line.c4"
+                    }
+                ]
+            }
+        }
+    
+}

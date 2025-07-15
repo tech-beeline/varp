@@ -1,0 +1,31 @@
+name: Build Extension
+run-name: ${{ github.actor }} is runing build 🚀
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'      
+
+      - name: Set Java 17.x
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'      
+
+      - name: Run install
+        uses: borales/actions-yarn@v4
+        with:
+          dir: ./extension
+          cmd: install
+
+      - name: Build production bundle
+        uses: borales/actions-yarn@v4
+        with:
+          dir: ./extension        
+          cmd: package-github

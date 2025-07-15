@@ -1,0 +1,227 @@
+{
+  "name": "c4-varp",
+  "displayName": "C4 Architecture As A Code",
+  "description": "Extension for working with Architecture As A Code in the C4 model. Includes syntax highlighting, diagram preview, and tools for working with IaaC.",
+  "publisher": "vcomit",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tech-beeline/"
+  },
+  "license": "Apache-2.0",
+  "icon": "images/logo.png",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "c4",
+    "c4 model",
+    "architecture",
+    "dsl",
+    "structurizr",
+    "cloud",
+    "beeline"
+  ],
+  "contributes": {
+    "snippets": [
+      {
+        "language": "c4",
+        "path": "./c4.json"
+      },
+      {
+        "language": "markdown",
+        "path": "./md.json"
+      },
+      {
+        "language": "yaml",
+        "path": "./yaml.json"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "ArchitectureAsACodeView",
+          "name": "Architecture As A Code"
+        },
+        {
+          "id": "ArchitectureCatalogueView",
+          "name": "Architecture Catalogue"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "c4.architectureCatalogue.showDescription",
+        "title": "Show pattern description"
+      },
+      {
+        "command": "c4.architectureCatalogue.add",
+        "title": "Add pattern to workspace",
+        "shortTitle": "Add",
+        "when": "view == architectureCatalogue && viewItem == leaf",
+        "icon": "$(add)"
+      }
+    ],
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "c4.architectureCatalogue.add",
+          "when": "view == architectureCatalogue && viewItem == leaf",
+          "group": "inline@1"
+        }
+      ]
+    },
+    "languages": [
+      {
+        "id": "c4",
+        "aliases": [
+          "c4"
+        ],
+        "extensions": [
+          ".dsl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "c4",
+        "scopeName": "source.c4",
+        "path": "./syntaxes/c4.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "",
+      "properties": {
+        "c4.diagram.structurizr.autolayout.url": {
+          "type": "string",
+          "default": "https://structurizr.com",
+          "scope": "application",
+          "description": "Server for diagram preview rendering"
+        },
+        "c4.decorations.enabled": {
+          "type": "string",
+          "enum": [
+            "off",
+            "onChange",
+            "onSave"
+          ],
+          "default": "onChange",
+          "scope": "application",
+          "description": "Determines when text decoration takes place"
+        },
+        "c4.languageserver.logs.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "If enabled server logs are written into workspace folder."
+        },
+        "c4.editor.autoformat.indent": {
+          "type": "integer",
+          "default": 4,
+          "description": "The number of spaces per indentation, when calling format document"
+        },
+        "c4.sSL\\TLS.disabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Disable SSL\\TLS verification"
+        },
+        "c4.beeline.api.secret": {
+          "type": "string",
+          "default": "",
+          "description": "Workspace API Secret"
+        },
+        "c4.beeline.api.key": {
+          "type": "string",
+          "default": "",
+          "description": "Workspace API Key"
+        },
+        "c4.beeline.api.url": {
+          "type": "string",
+          "default": "",
+          "description": "ArchOPS automation server URL"
+        },
+        "c4.beeline.cloud.token": {
+          "type": "string",
+          "default": "",
+          "description": "Security token for cloud connect"
+        },
+        "c4.beeline.cloud.url": {
+          "type": "string",
+          "default": "https://cloud.beeline.ru",
+          "description": "Public cloud for IaaC integration"
+        },
+        "c4.beeline.glossaries": {
+          "type": "string",
+          "default": "Product,Service,Customer",
+          "description": "Data dictionary names for data flow markup on architecture"
+        }        
+      }
+    }
+  },
+  "colors": [
+    {
+      "id": "c4.textdecoration.foreground",
+      "description": "Specifies the foreground color for the annotations",
+      "defaults": {
+        "dark": "#adbec5",
+        "light": "#797a79",
+        "highContrast": "#adbec5"
+      }
+    },
+    {
+      "id": "c4.textdecoration.background",
+      "description": "Specifies the background color for the annotations",
+      "defaults": {
+        "dark": "#1e2c31",
+        "light": "#f4f5f4",
+        "highContrast": "#1e2c31"
+      }
+    }
+  ],
+  "activationEvents": [
+    "onLanguage:c4"
+  ],
+  "main": "./pack/extension",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/vscode": "1.60.0",
+    "@vscode/vsce": "^3.2.1",
+    "source-map-loader": "^4.0.2",
+    "rimraf": "^5.0.0",
+    "ts-loader": "^9.4.2",
+    "ts-node": "^10.9.1",
+    "typed-rest-client": "^2.1.0",
+    "typescript": "^5.7.2",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "webpack": "^5.92.1",
+    "webpack-cli": "^5.1.4"
+  },
+  "scripts": {
+    "prepare": "yarn run clean && yarn run build",
+    "clean": "rimraf lib pack",
+    "build": "tsc && webpack --mode=production",
+    "build-server": "cd ../c4-server && mvnw package -f ./pom.xml -Djps.track.ap.dependencies=false -DassembleDirectory=../extension/server -DoutputDirectory=../extension/",
+    "clean-server": "cd ../c4-server && mvnw clean -f ./pom.xml",
+    "build-all": "yarn build-server && yarn build",
+    "clean-all": "rimraf server && yarn clean-server && yarn clean",
+    "watch": "tsc -w",
+    "watch:webpack": "webpack --mode=development --watch",
+    "package": "yarn clean-all && yarn build-all && vsce package",
+    "package-client-only": "yarn clean && yarn build && vsce package",
+    "publish": "vsce publish",
+    "build-server-github": "cd ../c4-server && mvn package -f ./pom.xml -Djps.track.ap.dependencies=false -DassembleDirectory=../extension/server -DoutputDirectory=../extension/",
+    "build-github": "tsc && webpack --mode=production",
+    "package-github": "yarn build-server-github && yarn build-github && vsce package"
+  },
+  "dependencies": {
+    "global": "^4.4.0"
+  },
+  "vsce": {
+    "dependencies": true,
+    "yarn": true
+  }  
+}

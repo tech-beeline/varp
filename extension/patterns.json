@@ -1,0 +1,251 @@
+{
+    "label": "Каталог паттернов",
+    "langId": "",
+    "snippetName": "",
+    "hover": [],
+    "childrens": [
+        {
+            "label": "C4",
+            "langId": "c4",
+            "snippetName": "",
+            "hover": [],
+            "childrens": [
+                {
+                "label": "Default Workspace",
+                "langId": "c4",
+                "snippetName": "Microservice",
+                "hover": ["Пример простой архитектуры в нотации Structurizr DSL"],
+                "childrens": []
+                },
+                {
+                    "label": "Capability",
+                    "langId": "c4",
+                    "snippetName": "Capability",
+                    "hover": [
+                        "#### Публикация technical capability продукта\n",
+                        "Шаблон для описания технической возможности продукта [инструкция](https://docs.bw.vimpelcom.ru/workflow/ptr/2%20Определение%20перечня%20ТС/)"
+                    ],
+                    "childrens": []
+                },
+                {
+                    "label": "API",
+                    "langId": "c4",
+                    "snippetName": "Integration",
+                    "hover": [
+                        "#### Публикация спецификации API продукта\n",
+                        "Шаблон для описания спецификации API продукта [инструкция](https://docs.bw.vimpelcom.ru/workflow/ptr/3.7%20API/)"
+                    ],
+                    "childrens": []
+                },              
+                {
+                    "label": "Beeline Cloud",
+                    "langId": "c4",
+                    "snippetName": "",
+                    "hover": [],
+                    "childrens": [
+                        {
+                            "label": "Kafka",
+                            "langId": "c4",
+                            "snippetName": "Kafka",
+                            "hover": ["Apache Kafka — это — распределенный брокер сообщений. Он обеспечивает связь и обмен информацией между приложениями или отдельными модулями в режиме реального времени по принципу «публикация-подписка»."],
+                            "childrens": []
+                        },
+                        {
+                            "label": "MongoDB",
+                            "langId": "c4",
+                            "snippetName": "Mongo",
+                            "hover": ["MongoDB — документо-ориентированная система управления базами данных NoSQL."],
+                            "childrens": []
+                        },
+                        {
+                            "label": "PostgreSQL",
+                            "langId": "c4",
+                            "snippetName": "PostgreSQL",
+                            "hover": [],
+                            "childrens": []
+                        },
+                        {
+                            "label": "Redis",
+                            "langId": "c4",
+                            "snippetName": "Redis",
+                            "hover": ["Redis — это СУБД класса NoSQL c открытым исходным кодом для данных типа «ключ-значение»."],
+                            "childrens": []
+                        },
+                        {
+                            "label": "VM",
+                            "langId": "c4",
+                            "snippetName": "VM",
+                            "hover": ["Виртуальная машина в Vega Cloud"],
+                            "childrens": []
+                        }
+                    ]
+                },
+                {
+                    "label": "DataFort Cloud",
+                    "langId": "c4",
+                    "snippetName": "",
+                    "hover": [],
+                    "childrens": [
+                        {
+                            "label": "Usergate",
+                            "langId": "c4",
+                            "snippetName": "Usergate",
+                            "hover": [
+                                "#### Usergate в облаке DataFort"
+                            ],
+                            "childrens": []
+                        },
+                        {
+                            "label": "Sterra",
+                            "langId": "c4",
+                            "snippetName": "Sterra",
+                            "hover": [
+                                "#### Sterra в облаке DataFort"
+                            ],
+                            "childrens": []
+                        },
+                        {
+                            "label": "Sangfor NGAF",
+                            "langId": "c4",
+                            "snippetName": "Sangfor NGAF",
+                            "hover": [
+                                "#### Cloud NGFW Pro в облаке DataFort"
+                            ],
+                            "childrens": []
+                        },
+                        {
+                            "label": "Cloud LAN network",
+                            "langId": "c4",
+                            "snippetName": "Cloud LAN network",
+                            "hover": [
+                                "#### Cloud LAN network в облаке DataFort"
+                            ],
+                            "childrens": []
+                        },
+                        {
+                            "label": "VDI Horizon",
+                            "langId": "c4",
+                            "snippetName": "VDI Horizon",
+                            "hover": [
+                                "#### VDI Horizon в облаке DataFort"
+                            ],
+                            "childrens": []
+                        },
+                        {
+                            "label": "Intracloud_Vlan",
+                            "langId": "c4",
+                            "snippetName": "Intracloud_Vlan",
+                            "hover": [
+                                "#### Cloud Interconnect услуга DataFort"
+                            ],
+                            "childrens": []
+                        },
+                        {
+                            "label": "Kaspesky EPP Multitenant",
+                            "langId": "c4",
+                            "snippetName": "Kaspesky EPP Multitenant",
+                            "hover": [
+                                "#### Cloud Endpoint Protection Platform (EPP) в облаке DataFort"
+                            ],
+                            "childrens": []
+                        },
+                        {
+                            "label": "Kaspesky EPP Dedicated",
+                            "langId": "c4",
+                            "snippetName": "Kaspesky EPP Dedicated",
+                            "hover": [
+                                "#### Cloud Endpoint Protection Platform (EPP) в облаке DataFort"
+                            ],
+                            "childrens": []
+                        },
+                        {
+                            "label": "NSC T0",
+                            "langId": "c4",
+                            "snippetName": "NSC T0",
+                            "hover": [
+                                "#### NSX EDGE в облаке DataFort"
+                            ],
+                            "childrens": []
+                        },
+                        {
+                            "label": "NSC T1",
+                            "langId": "c4",
+                            "snippetName": "NSC T1",
+                            "hover": [
+                                "#### NSX EDGE в облаке DataFort"
+                            ],
+                            "childrens": []
+                        },
+                        {
+                            "label": "Cloud Compute",
+                            "langId": "c4",
+                            "snippetName": "Cloud Compute",
+                            "hover": [
+                                "#### Cloud Compute pool в облаке DataFort"
+                            ],
+                            "childrens": []
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "label": "ADR",
+            "langId": "markdown",
+            "snippetName": "",
+            "hover": [],
+            "childrens": [
+                {
+                    "label": "Capability",
+                    "langId": "markdown",
+                    "snippetName": "Capability",
+                    "hover": ["Шаблон типового архитектурного решения по выбору способа реализации возможности"],
+                    "childrens": []
+                },
+                {
+                    "label": "DataModel",
+                    "langId": "markdown",
+                    "snippetName": "DataModel",
+                    "hover": ["Шаблон типового архитектурного решения по выбору модели данных"],
+                    "childrens": []
+                },
+                {
+                    "label": "Integration",
+                    "langId": "markdown",
+                    "snippetName": "Integration",
+                    "hover": ["Шаблон типового архитектурного решения по выбору способа интеграции"],
+                    "childrens": []
+                },
+                {
+                    "label": "Quality",
+                    "langId": "markdown",
+                    "snippetName": "Quality",
+                    "hover": ["Шаблон типового архитектурного решения по выбору способа реализации нефункциональных требований"],
+                    "childrens": []
+                },
+                {
+                    "label": "Technology",
+                    "langId": "markdown",
+                    "snippetName": "Technology",
+                    "hover": ["Шаблон типового архитектурного решения по выбору технологий"],
+                    "childrens": []
+                }
+            ]    
+        },
+        {
+            "label": "Yaml",
+            "langId": "yaml",
+            "snippetName": "",
+            "hover": [],
+            "childrens": [
+                {
+                    "label": "SLA",
+                    "langId": "yaml",
+                    "snippetName": "SLA",
+                    "hover": ["Шаблон описания нефункциональных требований к интерфейсам"],
+                    "childrens": []
+                }
+            ]  
+        }
+    ]
+}

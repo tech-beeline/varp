@@ -1,0 +1,31 @@
+{
+    "SLA": {
+        "scope": "yaml",
+        "prefix": "",
+        "body":[
+           "sla: 1.0.0 # версия формата SLA",
+           "info: # описание",
+           "  title: Шаблон SLA для описания НФТ продукта",
+           "  description: Описание содержимого",
+           "  version: ${1:версия SLA, анпример 1.0} #версия SLA",
+           "rest: # Протокол. В текущей версии поддеривается rest и soap",
+           "  ${2:полное имя переменной интерфейсв, например fdmshowcaseapp.container_api.fdm_interface}: #идентификатор REST API. Этот ключ определяет переменную в пространстве structurizr, с которой связаны данные НФТ",
+           "      \"${3:полное именование endpoint, например /api/v1/systems/{code}}\" : # endpoint предоставляемого метода",
+           "        get: # http метод интерфейса",
+           "          rps: ${4:rps} # Максимальная нагрузка. ПО умолчанию запросов в секунду",
+           "          latency: ${5:latency} # Максимальное время отклика в миллисекунах",
+           "          error_rate: ${6:error_rate} # Минимальный процент успешных ответов",
+           "        put:",
+           "          rps: ${4:rps}",
+           "          latency: ${5:latency}",
+           "          error_rate: ${6:error_rate}",
+           "",
+           "soap:",
+           "  ${2:полное имя переменной интерфейсв, например fdmshowcaseapp.container_api.fdm_interface}:",
+           "    ${7:полное именование метода, например GetAllCapabilities}: # Для SOAP: Название метода",
+           "      rps: ${4:rps}",
+           "      latency: ${5:latency}",
+           "      error_rate: ${6:error_rate}"
+        ]
+    }                
+}

@@ -78,3 +78,30 @@ Generate Terraform scripts for environments with a single click.
 | `c4.beeline.cloud.token` | String | | Beeline Cloud security token |
 | `c4.beeline.cloud.url` | URL | `https://cloud.beeline.ru` | Beeline Cloud API URL |
 | `c4.beeline.glossaries` | Comma-separated list | `Product,Service,Customer` | Data dictionaries for model integration |
+
+## Getting Started
+
+### Building the Extension
+
+**Requirements:**
+- Node.js 20+
+- Yarn
+- JDK 17+
+- Apache Maven
+
+**Build commands:**
+```bash
+cd ./extension/
+yarn install
+yarn package
+```
+
+### How to install extension in VSCode
+
+In order to install the extension at Visual Studio Code:
+
+1. Open the extensions sidebar (at left vertical sidebar)
+2. Click on the ellipsis in the right upper corner
+3. Choose Install from VSIX
+4. Open .vsix file built earlier
+5. Open C4 Structurizr workspace, check message "C4 DSL Language Server is ready" at right side of statusbar

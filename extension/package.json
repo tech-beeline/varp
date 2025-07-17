@@ -5,7 +5,7 @@
   "publisher": "vcomit",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tech-beeline/"
+    "url": "https://github.com/tech-beeline/varp"
   },
   "license": "Apache-2.0",
   "icon": "images/logo.png",

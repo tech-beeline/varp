@@ -1,65 +1,80 @@
-# A VS Code extension for C4 DSL Models
+# C4 DSL Model Extension for Visual Studio Code
 
-## Description
+## Overview
 
-This is a VS Code extension for specifying software architecture models with the [Structurizr DSL](https://github.com/structurizr/dsl).
+This Visual Studio Code extension enables software architecture modeling using the [Structurizr DSL](https://github.com/structurizr/dsl). The Structurizr DSL implements the "diagram as text" approach ([learn more](https://structurizr.com/help/text)) and provides a textual representation of the [C4 model](https://c4model.com/).
 
-Structurizr DSL, an example of the [diagram as text](https://structurizr.com/help/text) trend, is the textual representation of the [C4 model](https://c4model.com/).
+The extension includes:
+- A language server built on the official Structurizr DSL parser
+- Advanced capabilities for architectural description automation
+- Diagram visualization
+- DSL conversion to other formats
 
-Technically there is language server built on top of the origin [Structurizr DSL](https://github.com/structurizr/dsl) parser.
+## Prerequisites
 
-In addition to the functionality of the language server, the plugin provides extensive capabilities for automating the creation of architectural descriptions, as well as displaying diagrams and converting DSL into other formats.
+- **Java 17+** ([download](https://java.com/en/download/)) - required for the language server
+- Workspace containing model files with `.dsl` extension
+- Support for multiple workspaces and `!include` files
 
-## Pre-requisites
+## Features
 
-A [Java VM](http://java.com/en/download/) is required for running the language server. Java 21 or higher is required.
+### Syntax Highlighting
 
-You must open a workspace that contains your models, which need to have the file extension `.dsl`
+Field values like `name` and `technology` are highlighted when the diagram contains no errors.
 
-Multiple workspaces and !include files are supported.
+### Diagram Preview
 
-## Syntax highlight
+Error-free diagrams can be previewed by clicking the diagram icon next to the corresponding view.
 
-If there are no errors in the diagram, the values ​​of fields such as **name** or **technology** are highlighted.
+![Diagram Preview](images/preview.png)
 
-## Diagram Preview
+### Code Snippets
 
-If there are no errors in the diagram, then the diagram display is available. To activate it, you need to click on the diagram preview next to the corresponding view.
+The Explorer provides quick access to frequently used code blocks for faster architecture modeling.
 
-## Code snippets
+![Architecture as Code](images/plugin_aac.gif)
 
-To speed up the creation of architectural descriptions, the Explorer provides a menu with frequently used code blocks.
+## ArchOps Server Integration Features
 
-## Features available when integrating with the ArchOps server
+### API Specification Parsing
 
-### API specification parsing
+Create components matching API descriptions with method specification imports from:
+- Swagger
+- WSDL
+- Protocol Buffers
 
-It is possible to create components that will correspond to the API description. For them, it is possible to import method specifications from Swagger/WSDL/protobuf
+![SLA Integration](images/plugin_sla.gif)
 
-### Integration with tech-radar
+### Tech Radar Integration
 
-When filling technologies in containers or interactions, it is possible to load a list of technologies from the company's techn-radar.
+Load technology lists from your company's tech radar when specifying container or interaction technologies.
 
-### Capability tooltips and completions
+![Technology Integration](images/plugin_tech.gif)
 
-It is possible to create components that indicate the capabilities of containers. There is an integration that allows loading descriptions of capabilities from the company's capabilities map.
+### Capability Tooltips and Completions
 
-### Terraform integration
+Create capability-aware components with descriptions loaded from your company's capabilities map.
 
-You can automatically create a terraform script for each environment by clicking on the link next to the environment name.
+![Capability Integration](images/plugin_capability.gif)
 
-## Configuration Options
+### Terraform Integration
+
+Generate Terraform scripts for environments with a single click.
+
+![Terraform Integration](images/terraform.gif)
+
+## Configuration
 
 | Option | Values | Default | Description |
 |--------|--------|---------|-------------|
-| c4.diagram.structurizr.autolayout.url | | https://structurizr.com | URL of server for diagram rendering (Cloud Structurizr or OnPremises) |
-| c4.editor.autoformat.indent | | 4 | The number of spaces per indentation, when calling format document |
-| c4.languageserver.logs.enabled | true\false | false | If enabled language server logs are written to the current workspace folder (c4-language-server.log). |
-| c4.decorations.enabled | <ul><li>off</li><li>onChange</li><li>onSave</li></ul> | onChange | Text decorations can take place when editing (onChange) or when file is saved (onSave). It can also be switched off. |
-| c4.SSL\TLS.disabled | true\false | false | Disable SSL\\TLS verification (if needed) |
-| c4.beeline.api.url | | | URL to ArchOPS server  |
-| c4.beeline.api.key | | | Workspace API Key for ArchOPS server Access |
-| c4.beeline.api.secret | | | Workspace API Secret for ArchOPS server Access |
-| c4.beeline.cloud.token | | | Security token for Beeline Cloud Access |
-| c4.beeline.cloud.url | | https://cloud.beeline.ru | Cloud API URL  |
-| c4.beeline.glossaries | | Product,Service,Customer | Data dictionaries available for loading into the model. Can be used in model props to create data flow diagrams based on the model. |
+| `c4.diagram.structurizr.autolayout.url` | URL | `https://structurizr.com` | Diagram rendering server (Cloud or On-Premises) |
+| `c4.editor.autoformat.indent` | Number | `4` | Spaces per indentation level |
+| `c4.languageserver.logs.enabled` | `true`/`false` | `false` | Enable language server logging to `c4-language-server.log` |
+| `c4.decorations.enabled` | `off`, `onChange`, `onSave` | `onChange` | Text decoration timing |
+| `c4.SSL\TLS.disabled` | `true`/`false` | `false` | Disable SSL/TLS verification |
+| `c4.beeline.api.url` | URL | | ArchOPS server URL |
+| `c4.beeline.api.key` | String | | ArchOPS API key |
+| `c4.beeline.api.secret` | String | | ArchOPS API secret |
+| `c4.beeline.cloud.token` | String | | Beeline Cloud security token |
+| `c4.beeline.cloud.url` | URL | `https://cloud.beeline.ru` | Beeline Cloud API URL |
+| `c4.beeline.glossaries` | Comma-separated list | `Product,Service,Customer` | Data dictionaries for model integration |

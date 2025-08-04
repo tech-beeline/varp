@@ -14,10 +14,10 @@
     limitations under the License.
 */
 
-type RefreshOptions = {
-  viewKey: string;
-  document: string;
-  svg: string | undefined;
+type CodeLensCommandArgs = {
+    encodedWorkspace: string;
+    diagramKey: string;
+    diagramAsDot: string;
 };
 
-export { RefreshOptions };
+export { CodeLensCommandArgs };

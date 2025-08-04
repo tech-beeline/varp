@@ -45,7 +45,6 @@ import static org.aspectj.lang.Aspects.*;
 public class C4ColorProviderTest {
 
     private C4DocumentManager documentManager;
-    //private C4ColorProvider colorProvider;
 
     @BeforeEach
     public void initialize() throws IOException, URISyntaxException {

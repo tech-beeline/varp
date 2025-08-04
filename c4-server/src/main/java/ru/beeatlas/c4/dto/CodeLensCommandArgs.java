@@ -14,10 +14,14 @@
     limitations under the License.
 */
 
-type RefreshOptions = {
-  viewKey: string;
-  document: string;
-  svg: string | undefined;
-};
+package ru.beeatlas.c4.dto;
 
-export { RefreshOptions };
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+
+public record CodeLensCommandArgs(String encodedWorkspace, String diagramKey, String diagramAsDot) {
+    private static final Gson GSON = new Gson();
+    public static CodeLensCommandArgs fromJson(JsonObject jsonObject) {
+        return GSON.fromJson(jsonObject, CodeLensCommandArgs.class);
+    }    
+}

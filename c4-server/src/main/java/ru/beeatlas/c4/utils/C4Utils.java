@@ -20,12 +20,15 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import com.structurizr.export.Diagram;
+import com.structurizr.view.AutomaticLayout;
 import com.structurizr.view.ComponentView;
 import com.structurizr.view.ContainerView;
 import com.structurizr.view.DeploymentView;
@@ -129,6 +132,19 @@ public class C4Utils {
         }
     
         return text.substring(beginIndex, endIndex);
-    }      
+    }
+
+    public static String export2Dot(ModelView modelView) {
+        AutomaticLayout automaticLayout = modelView.getAutomaticLayout();
+        DOTExporter exporter = (automaticLayout == null)
+                ? new DOTExporter(RankDirection.TopBottom, 300, 300)
+                : new DOTExporter(
+                        RankDirection.valueOf(automaticLayout.getRankDirection().name()),
+                        automaticLayout.getRankSeparation(),
+                        automaticLayout.getNodeSeparation());
+        exporter.setLocale(Locale.US);
+        Diagram diagram = exporter.export(modelView);
+        return diagram.getDefinition();
+    }
 
 }

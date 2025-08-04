@@ -194,6 +194,7 @@
     "ts-loader": "^9.4.2",
     "ts-node": "^10.9.1",
     "typed-rest-client": "^2.1.0",
+    "@hpcc-js/wasm-graphviz": "^1.10.0",
     "typescript": "^5.7.2",
     "vscode-languageclient": "^9.0.1",
     "vscode-languageserver": "^9.0.1",

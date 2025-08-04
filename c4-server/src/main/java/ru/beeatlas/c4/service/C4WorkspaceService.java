@@ -17,11 +17,16 @@
 package ru.beeatlas.c4.service;
 
 import java.util.concurrent.CompletableFuture;
-
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.structurizr.Workspace;
+import com.structurizr.util.WorkspaceUtils;
+import com.structurizr.view.ModelView;
+import com.structurizr.view.View;
 
-import ru.beeatlas.c4.dto.C4UpdateViewDto;
+import ru.beeatlas.c4.dto.RefreshOptions;
+import ru.beeatlas.c4.utils.C4Utils;
+import ru.beeatlas.c4.utils.SVGReader;
 import ru.beeatlas.c4.commands.C4ExecuteCommandProvider;
 import ru.beeatlas.c4.commands.C4ExecuteCommandResult;
 import ru.beeatlas.c4.custom.Custom;
@@ -38,6 +43,7 @@ public class C4WorkspaceService implements WorkspaceService {
 
 	private static final Logger logger = LoggerFactory.getLogger(C4WorkspaceService.class);
 	private C4TextDocumentService documentService;
+	private SVGReader svgReader = new SVGReader(400, true);
 
 	public C4WorkspaceService(C4TextDocumentService documentService) {
 		this.documentService = documentService;
@@ -86,10 +92,16 @@ public class C4WorkspaceService implements WorkspaceService {
 					JsonElement decorations = documentService
 							.textDecorations((JsonObject) params.getArguments().get(0));
 					return C4ExecuteCommandResult.TEXT_DECORATIONS.setResultData(decorations).toJson();
-				case C4ExecuteCommandProvider.REFRESH_PREVIEW:
-					String encodedContent = documentService
-							.getUpdatedView(C4UpdateViewDto.fromJson((JsonObject) params.getArguments().get(0)));
-					return C4ExecuteCommandResult.OK.setMessage(encodedContent).toJson();
+				case C4ExecuteCommandProvider.REFRESH_PREVIEW: {
+					RefreshOptions refreshOptions = RefreshOptions.fromJson((JsonObject) params.getArguments().get(0));
+					Workspace workspace = documentService.getWorkspace(refreshOptions.document());
+					try {
+						String jsonContent = WorkspaceUtils.toJson(workspace, false);
+						return C4ExecuteCommandResult.OK.setMessage(jsonContent).toJson();
+					} catch (Exception e) {
+						return C4ExecuteCommandResult.OK;
+					}
+				}
 				case C4ExecuteCommandProvider.AUTO_FORMAT_INDENT:
 					var newIndent = ((JsonObject) params.getArguments().get(0)).get("indent").getAsJsonPrimitive()
 							.getAsInt();
@@ -105,6 +117,34 @@ public class C4WorkspaceService implements WorkspaceService {
 				case C4ExecuteCommandProvider.SEND_DEPLOYMENT_TELEMETRY:
 					Custom.getInstance().deploymentTelemetry();
 					return C4ExecuteCommandResult.OK;
+				case C4ExecuteCommandProvider.WORKSPACE_2_DOT: {
+					RefreshOptions refreshOptions = RefreshOptions.fromJson((JsonObject) params.getArguments().get(0));
+					Workspace workspace = documentService.getWorkspace(refreshOptions.document());
+					View view = workspace.getViews().getViewWithKey(refreshOptions.viewKey());
+					if (view != null && view instanceof ModelView) {
+						ModelView modelView = (ModelView) view;
+						String dot = C4Utils.export2Dot(modelView);
+						return C4ExecuteCommandResult.OK.setMessage(dot).toJson();
+					}
+					return C4ExecuteCommandResult.OK;
+				}
+				case C4ExecuteCommandProvider.SVG_LAYOUT: {
+					RefreshOptions refreshOptions = RefreshOptions.fromJson((JsonObject) params.getArguments().get(0));
+					Workspace workspace = documentService.getWorkspace(refreshOptions.document());
+					if(workspace == null) {
+						return C4ExecuteCommandResult.OK;
+					}
+					View view = workspace.getViews().getViewWithKey(refreshOptions.viewKey());
+					try {
+						if (view != null && view instanceof ModelView) {
+							svgReader.parseAndApplyLayout((ModelView) view, refreshOptions.svg());
+						}
+						String jsonContent = WorkspaceUtils.toJson(workspace, false);
+						return C4ExecuteCommandResult.OK.setMessage(jsonContent).toJson();
+					} catch (Exception e) {
+						return C4ExecuteCommandResult.OK;
+					}
+				}
 				default:
 					return C4ExecuteCommandProvider.execute(params.getCommand(), params.getArguments(), null).toJson();
 			}

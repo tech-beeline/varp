@@ -46,6 +46,7 @@ import { c4InsertSla } from "./custom/C4InsertSla";
 import { c4ExportDeployment } from "./custom/C4ExportDeployment";
 import * as config from "./config";
 import { StructurizrPreviewService } from "./services/StructurizrPreviewService";
+import { CodeLensCommandArgs } from "./types/CodeLensCommandArgs";
 
 var proc: cp.ChildProcess;
 
@@ -159,34 +160,32 @@ function initExtension(context: ExtensionContext) {
 
   c4ExportDeployment();
 
-  commands.registerCommand("c4.show.diagram", async (...args: string[]) => {
+  commands.registerCommand("c4.show.diagram", async (args : CodeLensCommandArgs) => {
 
     const autolayoutUrl = workspace.getConfiguration().get(config.DIAGRAM_STRUCTURIZR_AUTOLAYOUT_URL) as string;
 
     if (autolayoutUrl.length === 0) {
     } else if(autolayoutUrl === 'https://structurizr.com') {
-      const encodedView = args[0];
-      const diagramKey = args[1];
-      structurizrPreviewService.currentDiagram = diagramKey;
+      structurizrPreviewService.currentDiagram = args.diagramKey;
       structurizrPreviewService.currentDocument = window.activeTextEditor?.document as TextDocument;
-      await structurizrPreviewService.updateWebView(encodedView);
+      await structurizrPreviewService.updateWebView(args.encodedWorkspace);
     }
     else {
-      const encodedWorkspaceJson = args[0];
-      const diagramKey = args[1];
-      onpremisesPreviewService.currentDiagram = diagramKey;
-      onpremisesPreviewService.currentDocument = window.activeTextEditor
-        ?.document as TextDocument;
-
-      try {
-        await onpremisesPreviewService.updateWebView(encodedWorkspaceJson);
-      } catch (err) {
-      }
+      onpremisesPreviewService.currentDiagramAsDot = args.diagramAsDot;
+      onpremisesPreviewService.currentDiagram = args.diagramKey;
+      onpremisesPreviewService.currentDocument = window.activeTextEditor?.document as TextDocument;
+      await onpremisesPreviewService.updateWebView();
     }
   });
 
   workspace.onDidSaveTextDocument((document: TextDocument) => {
-    structurizrPreviewService.triggerRefresh(document);
+    const autolayoutUrl = workspace.getConfiguration().get(config.DIAGRAM_STRUCTURIZR_AUTOLAYOUT_URL) as string;
+    if (autolayoutUrl.length === 0) {
+    } else if (autolayoutUrl === 'https://structurizr.com') {
+      structurizrPreviewService.triggerRefresh(document);
+    } else {
+      onpremisesPreviewService.triggerRefresh(document);
+    }
   });
 
   workspace.onDidChangeConfiguration(event => {

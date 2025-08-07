@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
 import java.util.HexFormat;
 
 class HashBasedMessageAuthenticationCode {
@@ -35,20 +36,12 @@ class HashBasedMessageAuthenticationCode {
         this.apiSecret = apiSecret;
     }
 
-    public static String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
-    }
-
     String generate(String content) throws NoSuchAlgorithmException, InvalidKeyException {
         SecretKeySpec signingKey = new SecretKeySpec(apiSecret.getBytes(), HMAC_SHA256_ALGORITHM);
         Mac mac = Mac.getInstance(HMAC_SHA256_ALGORITHM);
         mac.init(signingKey);
         byte[] rawHmac = mac.doFinal(content.getBytes());
-        return HexFormat.of().withLowerCase().formatHex(rawHmac);
+        return Base64.getEncoder().encodeToString(rawHmac);
     }
 
     public static String md5(String input) throws NoSuchAlgorithmException {

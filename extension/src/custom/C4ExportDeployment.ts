@@ -25,8 +25,9 @@ import {
 import { writeFile, mkdirSync, existsSync } from 'fs';
 import { join, basename } from 'path';
 import { HttpClient } from 'typed-rest-client/HttpClient';
-import { IHeaders, IRequestOptions } from "typed-rest-client/Interfaces";
+import { IRequestOptions } from "typed-rest-client/Interfaces";
 import { BEELINE_API_URL, NOTLS } from "../config";
+import { generateHmac } from "./hmac";
 
 const CONF_VEGA_TOKEN = "c4.vega.token";
 
@@ -57,13 +58,14 @@ export function c4ExportDeployment() {
       token.onCancellationRequested(() => { console.log("User canceled the long running operation"); });
 
       const beelineApiUrl = workspace.getConfiguration().get(BEELINE_API_URL) as string;
-      const path = '/api-gateway/terraform/v1/generate?environment='
+      const path = '/structurizr-backend/api/v1/workspace/terraform/generate';
       const encodedWorkspaceJson = args[0];
-      const name = args[1];
+      const name = '?environment=' + args[1];
       progress.report({ message: "Распаковка модели данных..." });
       const content = Buffer.from(encodedWorkspaceJson, 'base64').toString('utf8');
-      const headers: IHeaders = <IHeaders>{};
-      headers['Content-Type'] = 'text/plain';
+      const contentType = 'text/plain';
+      const headers = generateHmac('POST', path, content, contentType);
+      headers['Content-Type'] = contentType;
       headers['X-Token'] = vegaToken;
 
       const p = new Promise<void>(resolve => {

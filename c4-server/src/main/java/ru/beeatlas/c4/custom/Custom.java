@@ -23,11 +23,12 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.URL;
 import java.nio.charset.Charset;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.security.cert.X509Certificate;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -137,30 +138,28 @@ public class Custom {
         }
     }
 
-    private HttpsURLConnection beelineApiConnection(String method, String path, String body, String contentType) throws IOException {
+    private HttpsURLConnection beelineApiConnection(String method, String path, String body, String contentType) throws IOException, InvalidKeyException, NoSuchAlgorithmException {
         HttpsURLConnection conn = (HttpsURLConnection) new URL(beelineApiUrl + path).openConnection();
         conn.setRequestMethod(method);
         if(contentType != null) {
             conn.setRequestProperty("Content-Type", contentType);
         } else {
-            contentType = "";
+            contentType = ""; 
         }
         if(noTLS) {
             conn.setHostnameVerifier(allTrustingHostnameVerifier);
             conn.setSSLSocketFactory(allTrustingTrustManager);
         }
         if(!beelineApiKey.isEmpty() && !beelineApiSecret.isEmpty()) {
-            try {
-                body = (body == null) ? "" : HashBasedMessageAuthenticationCode.md5(body);
-                String nonce = Long.toString(System.currentTimeMillis());
-                HashBasedMessageAuthenticationCode code = new HashBasedMessageAuthenticationCode(beelineApiSecret);
-                HmacContent hmacContent = new HmacContent(method, path, body, contentType, nonce);
-                String generatedHmac = code.generate(hmacContent.toString());                
-                String xauth = beelineApiKey + ":" + Base64.getEncoder().encodeToString(generatedHmac.getBytes());
-                conn.setRequestProperty("X-Authorization", xauth);
-                conn.setRequestProperty("Nonce", nonce);
-            } catch (Exception e) {
-            }
+            String bodyMD5 = (body == null) ? "d41d8cd98f00b204e9800998ecf8427e"
+                    : HashBasedMessageAuthenticationCode.md5(body);
+            String nonce = Long.toString(System.currentTimeMillis());
+            HashBasedMessageAuthenticationCode code = new HashBasedMessageAuthenticationCode(beelineApiSecret);
+            HmacContent hmacContent = new HmacContent(method, path, bodyMD5, contentType, nonce);
+            String generatedHmac = code.generate(hmacContent.toString());
+            String xauth = beelineApiKey + ":" + generatedHmac;
+            conn.setRequestProperty("X-Authorization", xauth);
+            conn.setRequestProperty("Nonce", nonce);
         }
         return conn;
     }
@@ -296,14 +295,17 @@ public class Custom {
 
     private void updateTechCapabilities() {
         CompletableFuture.runAsync(() -> {
-            String path = "/api-gateway/capability/v1/tech";
+            String path = "/dashboard/api/tech-capabilities";
             try {
                 HttpsURLConnection conn = beelineApiConnection("GET", path, null, null);
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                     techCapabilities.set(Arrays.stream((new Gson()).fromJson(in, TechCapability[].class))
                             .collect(Collectors.toMap(TechCapability::code, Function.identity())));
+                } catch(IOException e) {
+                    throw e;
                 }
-            } catch (IOException e) {
+            } catch (Exception e) {
+                logger.debug(e.getMessage());
             }
         });
     }
@@ -316,22 +318,28 @@ public class Custom {
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                     technologies.set(Arrays.stream((new Gson()).fromJson(in, Technology[].class))
                             .collect(Collectors.toMap(Technology::label, Function.identity())));
+                } catch(IOException e) {
+                    throw e;
                 }
-            } catch (IOException e) {
+            } catch (Exception e) {
+                logger.debug(e.getMessage());
             }
         });
     }
 
     private void updateCapabilities() {
         CompletableFuture.runAsync(() -> {
-            String path = "/api-gateway/capability/v1/business";
+            String path = "/dashboard/api/capabilities";
             try {
                 HttpsURLConnection conn = beelineApiConnection("GET", path, null, null);
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                     capabilities.set(Arrays.stream((new Gson()).fromJson(in, Capability[].class))
-                            .collect(Collectors.toMap(Capability::code, Function.identity())));
+                            .collect(Collectors.toMap(Capability::code, Function.identity(), (existingCapability, newCapability) -> existingCapability)));
+                } catch(IOException e) {
+                    throw e;
                 }
-            } catch (IOException e) {
+            } catch (Exception e) {
+                logger.debug(e.getMessage());
             }
         });
     }
@@ -342,24 +350,27 @@ public class Custom {
                 List<String> glossariesAList = Arrays.asList(glossaries.split(",")).stream()
                         .map(String::toLowerCase).collect(Collectors.toList());
                 Map<String, Term> map = new HashMap<>();
-                String path = "/api-gateway/data-model/v1/glossaries";
+                String path = "/dashboard/api/v1/data-model/glossaries";
                 HttpsURLConnection conn = beelineApiConnection("GET", path, null, null);
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                     Arrays.stream((new Gson()).fromJson(in, Glossary[].class))
                             .filter(g -> glossariesAList.contains(g.name().toLowerCase()))
                             .forEach(g -> {
                                 try {
-                                    String path0 = MessageFormat.format("/api-gateway/data-model/v1/glossaries/{0}/terms", g.id());
+                                    String path0 = MessageFormat.format("/dashboard/api/v1/data-model/glossaries/{0}/terms", g.id());
                                     HttpsURLConnection conn0 = beelineApiConnection("GET", path0, null, null);
                                     try (BufferedReader in0 = new BufferedReader(new InputStreamReader(conn0.getInputStream()))) {
                                         Arrays.asList((new Gson()).fromJson(in0, Term[].class)).forEach(t -> map.put(t.name(), t));
                                     }
-                                } catch (IOException e0) {
+                                } catch (Exception e0) {
                                 }
                             });
                     terms.set(map);
+                } catch(IOException e) {
+                    throw e;
                 }
-            } catch (IOException e) {
+            } catch (Exception e) {
+                logger.debug(e.getMessage());
             }
         });
     }
@@ -935,7 +946,7 @@ public class Custom {
 
     private boolean sendTelemetry(String message) {
         try {
-            String path = "/api/v1/telemetry/c4plugin/start";
+            String path = "/dashboard/api/v1/telemetry/c4plugin/start";
             HttpsURLConnection conn = beelineApiConnection("POST", path, message, "application/json");
             conn.setRequestProperty("Accept", "text/plain");
 
@@ -952,7 +963,7 @@ public class Custom {
 
             conn.disconnect();
             return true;
-        } catch (IOException e) {
+        } catch (Exception e) {
             return false;
         }
     }

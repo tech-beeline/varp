@@ -162,10 +162,9 @@ function initExtension(context: ExtensionContext) {
 
   commands.registerCommand("c4.show.diagram", async (args : CodeLensCommandArgs) => {
 
-    const autolayoutUrl = workspace.getConfiguration().get(config.DIAGRAM_STRUCTURIZR_AUTOLAYOUT_URL) as string;
+    const render = workspace.getConfiguration().get(config.DIAGRAM_RENDER) as string;
 
-    if (autolayoutUrl.length === 0) {
-    } else if(autolayoutUrl === 'https://structurizr.com') {
+    if(render === 'https://structurizr.com') {
       structurizrPreviewService.currentDiagram = args.diagramKey;
       structurizrPreviewService.currentDocument = window.activeTextEditor?.document as TextDocument;
       await structurizrPreviewService.updateWebView(args.encodedWorkspace);
@@ -179,9 +178,8 @@ function initExtension(context: ExtensionContext) {
   });
 
   workspace.onDidSaveTextDocument((document: TextDocument) => {
-    const autolayoutUrl = workspace.getConfiguration().get(config.DIAGRAM_STRUCTURIZR_AUTOLAYOUT_URL) as string;
-    if (autolayoutUrl.length === 0) {
-    } else if (autolayoutUrl === 'https://structurizr.com') {
+    const autolayoutUrl = workspace.getConfiguration().get(config.DIAGRAM_RENDER) as string;
+    if (autolayoutUrl === 'https://structurizr.com') {
       structurizrPreviewService.triggerRefresh(document);
     } else {
       onpremisesPreviewService.triggerRefresh(document);

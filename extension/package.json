@@ -96,11 +96,15 @@
     "configuration": {
       "title": "",
       "properties": {
-        "c4.diagram.structurizr.autolayout.url": {
+        "c4.diagram.render": {
           "type": "string",
-          "default": "https://structurizr.com",
+          "enum": [
+            "embedded",
+            "https://structurizr.com"
+          ],
+          "default": "embedded",
           "scope": "application",
-          "description": "Server for diagram preview rendering"
+          "description": "Diagram preview render service"
         },
         "c4.decorations.enabled": {
           "type": "string",

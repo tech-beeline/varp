@@ -14,7 +14,7 @@
     limitations under the License.
 */
 
-export const DIAGRAM_STRUCTURIZR_AUTOLAYOUT_URL = "c4.diagram.structurizr.autolayout.url";
+export const DIAGRAM_RENDER = "c4.diagram.render";
 export const TEXT_DECORATIONS = "c4.decorations.enabled";
 export const LOGS_ENABLED = "c4.languageserver.logs.enabled";
 export const AUTO_FORMAT_INDENT = "c4.editor.autoformat.indent";

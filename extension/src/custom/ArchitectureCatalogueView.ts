@@ -18,9 +18,10 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as httpm from 'typed-rest-client/HttpClient';
-import { IRequestOptions } from 'typed-rest-client/Interfaces';
 import * as config from '../config';
 import { workspace } from 'vscode';
+import { generateHmac } from './hmac';
+import { IRequestOptions } from 'typed-rest-client/Interfaces';
 
 class Chapter extends vscode.TreeItem {
     title: string;
@@ -33,7 +34,7 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
 
   private INDEX_ID: string = '/index';
   private CONTENT_ID: string = '/content/';
-  private PATH = '/api-gateway/architecture/v1/';  
+  private PATH = '/architecture-center';  
 
   private currentPanel: vscode.WebviewPanel | undefined = undefined;
   private lastDocs: string | undefined = undefined;
@@ -50,7 +51,6 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
     let options: IRequestOptions = <IRequestOptions>{};
     options.ignoreSslError = workspace.getConfiguration().get(config.NOTLS) as boolean;
     const beelineApiUrl = workspace.getConfiguration().get(config.BEELINE_API_URL) as string;
-
     let httpc = new httpm.HttpClient('vscode-c4-dsl-plugin', [], options);
 
     this.initChapter = (chapters: Chapter[]) : Chapter[] => {
@@ -59,8 +59,9 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
         chapter.label = chapter.title;
 
         if (chapter.dsl.length > 0) {
-          let id = this.CONTENT_ID + chapter.dsl;
-          httpc.get(beelineApiUrl + this.PATH + id).
+          const id = this.CONTENT_ID + chapter.dsl;
+          const headers = generateHmac('GET', this.PATH + id);
+          httpc.get(beelineApiUrl + this.PATH + id, headers).
             then((result) => { return result.readBody() }).
             then((body) => { context.workspaceState.update(id, body); }).
             catch((error) => { }).
@@ -75,8 +76,9 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
             arguments: [chapter.title, chapter.docs]
           };
 
-          let id = this.CONTENT_ID + chapter.docs;
-          httpc.get(beelineApiUrl + this.PATH + id).
+          const id = this.CONTENT_ID + chapter.docs;
+          const headers = generateHmac('GET', this.PATH + id);
+          httpc.get(beelineApiUrl + this.PATH + id, headers).
           then((result) => { return result.readBody() }).
           then((body) => { context.workspaceState.update(id, body); }).
           catch((error) => { }).
@@ -99,7 +101,8 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
     };
 
     this.initRoot = async () : Promise<Chapter[]> =>  {
-        return Promise.resolve(httpc.get(beelineApiUrl + this.PATH + this.INDEX_ID).
+        const headers = generateHmac('GET', this.PATH + this.INDEX_ID);
+        return Promise.resolve(httpc.get(beelineApiUrl + this.PATH + this.INDEX_ID, headers).
         then((res) => { return res.readBody(); }).
         then((body) => { return JSON.parse(body) as Chapter; }).
         then((root) => {
@@ -127,8 +130,9 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
         }
       };
 
-      let id = this.CONTENT_ID + element.dsl;
-      httpc.get(beelineApiUrl + this.PATH + id).then((result) => { return result.readBody(); }).then((body) => {
+      const id = this.CONTENT_ID + element.dsl;
+      const headers = generateHmac('GET', this.PATH + id);
+      httpc.get(beelineApiUrl + this.PATH + id, headers).then((result) => { return result.readBody(); }).then((body) => {
         createFile(id, body);
         context.workspaceState.update(id, body);
       }).catch((error) => {
@@ -159,8 +163,9 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
 
       if (this.lastDocs !== args[1]) {
         this.lastDocs = args[1];
-        let id = this.CONTENT_ID + args[1];
-        httpc.get(beelineApiUrl + this.PATH + id).then((result) => { return result.readBody() }).then((body) => {
+        const id = this.CONTENT_ID + args[1];
+        const headers = generateHmac('GET', this.PATH + id);
+        httpc.get(beelineApiUrl + this.PATH + id, headers).then((result) => { return result.readBody() }).then((body) => {
           context.workspaceState.update(id, body);
           if (this.currentPanel !== undefined) {
             this.currentPanel.webview.html = body;

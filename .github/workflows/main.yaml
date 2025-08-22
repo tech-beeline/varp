@@ -1,5 +1,5 @@
-name: Build Extension
-run-name: ${{ github.actor }} is runing build 🚀
+name: Main
+run-name: ${{ github.actor }} is runing build at main branch 🚀
 on:
   push:
     branches:

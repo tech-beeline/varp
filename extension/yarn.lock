@@ -1028,6 +1028,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "c4-varp@workspace:."
   dependencies:
+    "@secretlint/secretlint-formatter-sarif": "npm:^10.1.1"
     "@secretlint/secretlint-rule-no-dotenv": "npm:^10.1.1"
     "@secretlint/secretlint-rule-preset-recommend": "npm:^10.1.1"
     "@types/node": "npm:^20.8.4"

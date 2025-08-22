@@ -186,6 +186,7 @@
   ],
   "main": "./dist/extension",
   "devDependencies": {
+    "@secretlint/secretlint-rule-preset-recommend": "^10.1.1",
     "@types/node": "^20.8.4",
     "@types/vscode": "^1.73.0",
     "@vscode/vsce": "^3.2.1",
@@ -194,8 +195,7 @@
     "typed-rest-client": "^2.1.0",
     "typescript": "^5.7.2",
     "vscode-languageclient": "^9.0.1",
-    "vscode-languageserver": "^9.0.1",
-    "@secretlint/secretlint-rule-preset-recommend": "^10.1.1"
+    "vscode-languageserver": "^9.0.1"
   },
   "scripts": {
     "check-types": "tsc --noEmit",

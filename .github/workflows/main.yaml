@@ -3,9 +3,7 @@ run-name: ${{ github.actor }} is runing build 🚀
 on:
   push:
     branches:
-      - '*'
-      - '!main'
-      - '!release'
+      - main
 jobs:
   build:
     runs-on: ubuntu-latest

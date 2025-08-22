@@ -186,6 +186,7 @@
   ],
   "main": "./dist/extension",
   "devDependencies": {
+    "@secretlint/secretlint-rule-no-dotenv": "^10.1.1",
     "@secretlint/secretlint-rule-preset-recommend": "^10.1.1",
     "@types/node": "^20.8.4",
     "@types/vscode": "^1.73.0",

@@ -23,6 +23,7 @@
 **/server/
 **/node_modules/
 **/package-lock.json
-**/yarn.lock
 **/mvnw
 **/mvnw.cmd
+**/.yarn
+**/.yarnrc.yml

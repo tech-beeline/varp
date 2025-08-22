@@ -1,11 +1,9 @@
-name: Push
-run-name: ${{ github.actor }} is runing build on push event🚀
+name: Main
+run-name: ${{ github.actor }} is runing build at main branch 🚀
 on:
   push:
     branches:
-      - '*'
-      - '!main'
-      - '!release'
+      - main
 jobs:
   build:
     runs-on: ubuntu-latest

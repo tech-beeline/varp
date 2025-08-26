@@ -24,8 +24,9 @@ import {
 
 import * as fs from 'fs';
 import * as httpm from 'typed-rest-client/HttpClient';
-import { IHeaders, IRequestOptions } from "typed-rest-client/Interfaces";
+import { IRequestOptions } from "typed-rest-client/Interfaces";
 import { BEELINE_API_URL, NOTLS } from "../config";
+import { generateHmac } from "./hmac";
 
 export function c4InsertSla() {
   commands.registerCommand("c4.insert.sla", async (...args: any[]) => {
@@ -48,11 +49,10 @@ export function c4InsertSla() {
         const insertSla = (content: string) => {
 
           const beelineApiUrl = workspace.getConfiguration().get(BEELINE_API_URL) as string;
-          const path = '/api-gateway/integration/v1/sla'
- 
-          const headers: IHeaders = <IHeaders>{};
-          headers['Content-Type'] = 'text/plain';
-
+          const path = '/structurizr-backend/api/v1/integration/sla'
+          const contentType = 'text/plain';
+          const headers = generateHmac('POST', path, content, contentType);
+          headers['Content-Type'] = contentType;
           progress.report({ message: "Формирование SLA..." });
           httpc.post(beelineApiUrl + path, content, headers)
             .then((result) => { return result.readBody() }).then((body) => {

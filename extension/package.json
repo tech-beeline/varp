@@ -11,7 +11,7 @@
   "icon": "images/logo.png",
   "version": "1.0.0",
   "engines": {
-    "vscode": "^1.60.0"
+    "vscode": "^1.73.0"
   },
   "categories": [
     "Programming Languages"
@@ -161,7 +161,7 @@
           "type": "string",
           "default": "Product,Service,Customer",
           "description": "Data dictionary names for data flow markup on architecture"
-        }        
+        }
       }
     }
   },
@@ -188,45 +188,42 @@
   "activationEvents": [
     "onLanguage:c4"
   ],
-  "main": "./pack/extension",
+  "main": "./dist/extension",
   "devDependencies": {
-    "@types/node": "^22.10.2",
-    "@types/vscode": "1.60.0",
+    "@secretlint/secretlint-formatter-sarif": "^10.1.1",
+    "@secretlint/secretlint-rule-no-dotenv": "^10.1.1",
+    "@secretlint/secretlint-rule-preset-recommend": "^10.1.1",
+    "@types/node": "^20.8.4",
+    "@types/vscode": "^1.73.0",
     "@vscode/vsce": "^3.2.1",
-    "source-map-loader": "^4.0.2",
+    "esbuild": "^0.25.9",
     "rimraf": "^5.0.0",
-    "ts-loader": "^9.4.2",
-    "ts-node": "^10.9.1",
     "typed-rest-client": "^2.1.0",
     "@hpcc-js/wasm-graphviz": "^1.10.0",
     "typescript": "^5.7.2",
     "vscode-languageclient": "^9.0.1",
-    "vscode-languageserver": "^9.0.1",
-    "webpack": "^5.92.1",
-    "webpack-cli": "^5.1.4"
+    "vscode-languageserver": "^9.0.1"
   },
   "scripts": {
+    "check-types": "tsc --noEmit",
     "prepare": "yarn run clean && yarn run build",
     "clean": "rimraf lib pack",
-    "build": "tsc && webpack --mode=production",
+    "build": "npm run check-types && node esbuild.js --production",
     "build-server": "cd ../c4-server && mvnw package -f ./pom.xml -Djps.track.ap.dependencies=false -DassembleDirectory=../extension/server -DoutputDirectory=../extension/",
     "clean-server": "cd ../c4-server && mvnw clean -f ./pom.xml",
     "build-all": "yarn build-server && yarn build",
     "clean-all": "rimraf server && yarn clean-server && yarn clean",
     "watch": "tsc -w",
-    "watch:webpack": "webpack --mode=development --watch",
     "package": "yarn clean-all && yarn build-all && vsce package",
     "package-client-only": "yarn clean && yarn build && vsce package",
     "publish": "vsce publish",
     "build-server-github": "cd ../c4-server && mvn package -f ./pom.xml -Djps.track.ap.dependencies=false -DassembleDirectory=../extension/server -DoutputDirectory=../extension/",
-    "build-github": "tsc && webpack --mode=production",
+    "build-github": "npm run check-types && node esbuild.js --production",
     "package-github": "yarn build-server-github && yarn build-github && vsce package"
   },
-  "dependencies": {
-    "global": "^4.4.0"
-  },
   "vsce": {
-    "dependencies": true,
+    "dependencies": false,
     "yarn": true
-  }  
+  },
+  "packageManager": "yarn@4.9.3"
 }

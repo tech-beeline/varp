@@ -36,6 +36,7 @@ jobs:
       - name: Build
         run: yarn package-github
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/upload-artifact@v4
         with:
-          pattern: c4-varp-*.vsix
+          path: c4-varp-*.vsix
+          name: Build

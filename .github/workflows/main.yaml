@@ -38,5 +38,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          path: c4-varp-1.0.0.vsix
+          compression-level: 0
+          path: ${{ github.workspace }}/extension/*.vsix
           name: Build

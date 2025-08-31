@@ -35,3 +35,7 @@ jobs:
 
       - name: Build
         run: yarn package-github
+
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: *.vsix

@@ -40,4 +40,4 @@ jobs:
         with:
           compression-level: 0
           path: ${{ github.workspace }}/extension/*.vsix
-          name: Build
+          name: extension

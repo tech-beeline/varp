@@ -38,4 +38,4 @@ jobs:
 
       - uses: actions/download-artifact@v5
         with:
-          pattern: *.vsix
+          pattern: c4-varp-*.vsix

@@ -347,6 +347,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@hpcc-js/wasm-graphviz@npm:^1.10.0":
+  version: 1.11.0
+  resolution: "@hpcc-js/wasm-graphviz@npm:1.11.0"
+  checksum: 10c0/5b55fd369f97046697975c1bcca508104c1a5c506be709155a22bd7592fe15b5de92ea7780d753bc22a13536b887a76b1b2210971c5750c5966950ff481c7e73
+  languageName: node
+  linkType: hard
+
 "@isaacs/balanced-match@npm:^4.0.1":
   version: 4.0.1
   resolution: "@isaacs/balanced-match@npm:4.0.1"
@@ -1028,6 +1035,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "c4-varp@workspace:."
   dependencies:
+    "@hpcc-js/wasm-graphviz": "npm:^1.10.0"
     "@secretlint/secretlint-formatter-sarif": "npm:^10.1.1"
     "@secretlint/secretlint-rule-no-dotenv": "npm:^10.1.1"
     "@secretlint/secretlint-rule-preset-recommend": "npm:^10.1.1"

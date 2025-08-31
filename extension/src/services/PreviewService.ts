@@ -41,7 +41,8 @@ class PreviewService {
 //  private extensionUri: Uri;
 //  private lastHashCode: number = 0;
 //  private GRAPHVIZ_ID: string = '/graphviz';
-  private VIEW_TYPE: string = 'Structurizr Preview';
+  private title: string = 'Structurizr Preview';
+  private id: string = 'structurizrPreview';
   private graphviz: Graphviz;
 
   private jsjquery: Uri;
@@ -109,6 +110,17 @@ class PreviewService {
     }
   }
 
+  public async getSvg(context: ExtensionContext) {
+    this.panel?.webview.onDidReceiveMessage(
+      message => {
+
+      },
+      undefined,
+      context.subscriptions
+    );    
+    this.panel?.webview.postMessage( { svg: 'svg' });
+  }
+
   public async updateWebView() {
     const refreshOptions: RefreshOptions = {
       viewKey: this._currentDiagram,
@@ -148,8 +160,8 @@ class PreviewService {
 
   private createPanel(): WebviewPanel {
     const panel = window.createWebviewPanel(
-      this.VIEW_TYPE,
-      this.VIEW_TYPE,
+      this.id,
+      this.title,
       ViewColumn.Two,
       {
         retainContextWhenHidden: true,
@@ -207,7 +219,7 @@ class PreviewService {
 
     <link href="${panel.webview.asWebviewUri(this.cssjoint)}" rel="stylesheet" media="screen" />
     <link href="${panel.webview.asWebviewUri(this.cssstructurizrdiagram)}" rel="stylesheet" media="screen" />
-    <title>${this.VIEW_TYPE}</title>
+    <title>${this.title}</title>
     <style>
     </style>
 </head>
@@ -219,6 +231,7 @@ class PreviewService {
 
 <script>
         var diagram;
+        const vscode = acquireVsCodeApi();
         window.addEventListener('message', event => {
             const message = event.data;
             if(message.body !== undefined) {
@@ -229,6 +242,9 @@ class PreviewService {
                     diagram.changeView(message.view);
                 });
               });
+            } else if(message.svg !== undefined) {
+              const svgMarkup = diagram.exportCurrentDiagramToSVG(true, true);
+              vscode.postMessage({ svg: svgMarkup })
             } else {
               diagram.changeView(message.view);
             }

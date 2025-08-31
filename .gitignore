@@ -27,3 +27,5 @@
 **/mvnw.cmd
 **/.yarn
 **/.yarnrc.yml
+/extension/*.cjs
+/extension/*.mjs

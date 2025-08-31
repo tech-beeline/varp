@@ -63,6 +63,10 @@
         "shortTitle": "Add",
         "when": "view == architectureCatalogue && viewItem == leaf",
         "icon": "$(add)"
+      },
+      {
+        "command": "c4.diagram.export.svg",
+        "title": "Export to .svg"
       }
     ],
     "menus": {
@@ -71,6 +75,13 @@
           "command": "c4.architectureCatalogue.add",
           "when": "view == architectureCatalogue && viewItem == leaf",
           "group": "inline@1"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "when": "activeWebviewPanelId == structurizrPreview",
+          "command": "c4.diagram.export.svg",
+          "group": "navigation"
         }
       ]
     },
@@ -190,6 +201,7 @@
   ],
   "main": "./dist/extension",
   "devDependencies": {
+    "@hpcc-js/wasm-graphviz": "^1.10.0",
     "@secretlint/secretlint-formatter-sarif": "^10.1.1",
     "@secretlint/secretlint-rule-no-dotenv": "^10.1.1",
     "@secretlint/secretlint-rule-preset-recommend": "^10.1.1",
@@ -199,7 +211,6 @@
     "esbuild": "^0.25.9",
     "rimraf": "^5.0.0",
     "typed-rest-client": "^2.1.0",
-    "@hpcc-js/wasm-graphviz": "^1.10.0",
     "typescript": "^5.7.2",
     "vscode-languageclient": "^9.0.1",
     "vscode-languageserver": "^9.0.1"
@@ -225,5 +236,5 @@
     "dependencies": false,
     "yarn": true
   },
-  "packageManager": "yarn@4.9.3"
+  "packageManager": "yarn@4.9.4"
 }

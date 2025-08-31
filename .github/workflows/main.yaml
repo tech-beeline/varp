@@ -38,5 +38,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          path: c4-varp-*.vsix
+          path: c4-varp-1.0.0.vsix
           name: Build

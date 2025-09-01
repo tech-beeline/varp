@@ -16,31 +16,27 @@
 
 import {
   ExtensionContext,
+  SaveDialogOptions,
   TextDocument,
   Uri,
   ViewColumn,
   WebviewPanel,
   commands,
   window,
-//  workspace,
 } from "vscode";
-//import * as config from '../config';
-//import { Buffer } from "buffer";
+
 import { CommandResultCode, RefreshOptions } from "../types";
-
-//import * as httpm from 'typed-rest-client/HttpClient';
-//import { IHeaders, IRequestOptions } from 'typed-rest-client/Interfaces';
-
 import { Graphviz } from "@hpcc-js/wasm-graphviz";
+import { writeFile } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 
 class PreviewService {
   private panel: WebviewPanel | undefined;
   private _currentDiagram: string;
   private _currentDocument: TextDocument;
   private _currentDiagramAsDot: string;
-//  private extensionUri: Uri;
-//  private lastHashCode: number = 0;
-//  private GRAPHVIZ_ID: string = '/graphviz';
+
   private title: string = 'Structurizr Preview';
   private id: string = 'structurizrPreview';
   private graphviz: Graphviz;
@@ -109,16 +105,39 @@ class PreviewService {
       });
     }
   }
-
+  
   public async getSvg(context: ExtensionContext) {
     this.panel?.webview.onDidReceiveMessage(
-      message => {
+      async message => {
+        const getUserDocumentsPath = (): string => {
+          const userHomeDir = homedir();
+          const documentsPath = join(userHomeDir, 'Documents');
+          return documentsPath;
+        };
 
+        const options: SaveDialogOptions = {
+          defaultUri: Uri.file(join(getUserDocumentsPath(), this._currentDiagram)),
+          filters: {
+            'Svg Files': ['svg'],
+            'All Files': ['*']
+          },
+          title: 'Export to .svg file'
+        };
+
+        const uri = await window.showSaveDialog(options);
+
+        if (uri) {
+          writeFile(uri.fsPath, Buffer.from(message.svg), (error) => {
+            if (error !== null) {
+              window.showErrorMessage(error.message);
+            }
+          });
+        }
       },
       undefined,
       context.subscriptions
-    );    
-    this.panel?.webview.postMessage( { svg: 'svg' });
+    );
+    this.panel?.webview.postMessage({ svg: 'svg' });
   }
 
   public async updateWebView() {
@@ -134,28 +153,6 @@ class PreviewService {
         this.panel.webview.postMessage( { 'body' : result.message, 'view' : this._currentDiagram });
       }
     });
-
-//     const hashCode = (s: string) => s.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a }, 0);
-//     const currentHashCode = hashCode(encodedContent);
-//     if(this.lastHashCode === currentHashCode && this.panel) {
-// //      this.panel.webview.postMessage( { 'body' : undefined, 'view' : this.currentDiagram });
-//     } else {
-//       this.lastHashCode = currentHashCode;
-//       const content = Buffer.from(encodedContent, 'base64').toString('utf8');
-//       let headers: IHeaders = <IHeaders>{};
-//       headers['Content-Type'] = 'application/json';
-//       const autolayoutUrl = workspace.getConfiguration().get(config.DIAGRAM_STRUCTURIZR_AUTOLAYOUT_URL) as string;
-//       const options: IRequestOptions = <IRequestOptions>{};
-//       options.ignoreSslError = workspace.getConfiguration().get(config.NOTLS) as boolean;
-//       const httpc = new httpm.HttpClient('vscode-c4-dsl-plugin', [], options);
-//       httpc.post(autolayoutUrl + this.GRAPHVIZ_ID, content, headers).then((result) => { return result.readBody() }).then((body) => {
-//         //this.panel ??= this.createPanel();
-//         //this.panel.webview.postMessage( { 'body' : body, 'view' : this.currentDiagram });
-//       }).catch((error) => { 
-//         //this.panel ??= this.createPanel();
-//         //this.panel.webview.postMessage( { 'body' : content, 'view' : this.currentDiagram });
-//       }).finally(() => {});
-//     }
   }
 
   private createPanel(): WebviewPanel {
@@ -166,37 +163,9 @@ class PreviewService {
       {
         retainContextWhenHidden: true,
         enableScripts: true,
-        //localResourceRoots: [Uri.joinPath(this.extensionUri, 'css'), Uri.joinPath(this.extensionUri, 'js')]
         localResourceRoots: this.localResourceRoots
       }
     );
-
-//    const jsjquery = Uri.joinPath(this.extensionUri, 'js', 'jquery-3.6.3.min.js');
-//    const jsjquerysrc = panel.webview.asWebviewUri(jsjquery);
-//    const jslodash = Uri.joinPath(this.extensionUri, 'js', 'lodash-4.17.21.js');    
-//    const jslodashsrc = panel.webview.asWebviewUri(jslodash);    
-//    const jsbackbone = Uri.joinPath(this.extensionUri, 'js', 'backbone-1.4.1.js');    
-//    const jsbackbonesrc = panel.webview.asWebviewUri(jsbackbone);
-//    const jsjoint = Uri.joinPath(this.extensionUri, 'js', 'joint-3.6.5.js');
-//    const jsjointsrc = panel.webview.asWebviewUri(jsjoint);
-//    const jscanvg = Uri.joinPath(this.extensionUri, 'js', 'canvg-1.5.4.js');
-//    const jscanvgsrc = panel.webview.asWebviewUri(jscanvg);
-//    const jspanzoom = Uri.joinPath(this.extensionUri, 'js', 'panzoom.min.js');
-//    const jspanzoomsrc = panel.webview.asWebviewUri(jspanzoom);
-//    const jsstructurizr = Uri.joinPath(this.extensionUri, 'js', 'structurizr.js');    
-//    const jsstructurizrsrc = panel.webview.asWebviewUri(jsstructurizr);                                       
-//    const jsstructurizrutil = Uri.joinPath(this.extensionUri, 'js', 'structurizr-util.js');    
-//    const jsstructurizrutilsrc = panel.webview.asWebviewUri(jsstructurizrutil);                                           
-//    const jsstructurizrui = Uri.joinPath(this.extensionUri, 'js', 'structurizr-ui.js');        
-//    const jsstructurizruisrc = panel.webview.asWebviewUri(jsstructurizrui);
-//    const jsstructurizrworkspace = Uri.joinPath(this.extensionUri, 'js', 'structurizr-workspace.js');    
-//    const jsstructurizrworkspacesrc = panel.webview.asWebviewUri(jsstructurizrworkspace);    
-//    const jsstructurizrdiagram = Uri.joinPath(this.extensionUri, 'js', 'structurizr-diagram.js');    
-//    const jsstructurizrdiagramsrc = panel.webview.asWebviewUri(jsstructurizrdiagram);    
-//    const cssjoint = Uri.joinPath(this.extensionUri, 'css', 'joint-3.6.5.css');
-//    const cssjointsrc = panel.webview.asWebviewUri(cssjoint);        
-//    const cssstructurizrdiagram = Uri.joinPath(this.extensionUri, 'css', 'structurizr-diagram.css');    
-//    const cssstructurizrdiagramsrc = panel.webview.asWebviewUri(cssstructurizrdiagram);    
 
     panel.webview.html = `
 <!DOCTYPE html>

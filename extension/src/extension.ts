@@ -164,6 +164,10 @@ function initExtension(context: ExtensionContext) {
     onpremisesPreviewService.getSvg(context);
   });
 
+  commands.registerCommand("c4.diagram.export.mx", async () => {
+    onpremisesPreviewService.getMx(context);
+  });
+
   commands.registerCommand("c4.show.diagram", async (args : CodeLensCommandArgs) => {
 
     const render = workspace.getConfiguration().get(config.DIAGRAM_RENDER) as string;

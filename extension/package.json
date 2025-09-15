@@ -67,6 +67,10 @@
       {
         "command": "c4.diagram.export.svg",
         "title": "Export to .svg"
+      },
+      {
+        "command": "c4.diagram.export.mx",
+        "title": "Export to .drawio"
       }
     ],
     "menus": {
@@ -81,6 +85,11 @@
         {
           "when": "activeWebviewPanelId == structurizrPreview",
           "command": "c4.diagram.export.svg",
+          "group": "navigation"
+        },
+        {
+          "when": "activeWebviewPanelId == structurizrPreview",
+          "command": "c4.diagram.export.mx",
           "group": "navigation"
         }
       ]

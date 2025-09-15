@@ -147,4 +147,10 @@ public class C4Utils {
         return diagram.getDefinition();
     }
 
+    public static String export2Mx(ModelView modelView) {
+        MxExporter exporter = new MxExporter();
+        Diagram diagram = exporter.export(modelView);
+        return diagram.getDefinition();
+    }
+
 }

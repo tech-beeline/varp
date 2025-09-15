@@ -105,7 +105,43 @@ class PreviewService {
       });
     }
   }
-  
+
+  getUserDocumentsPath() {
+    const userHomeDir = homedir();
+    const documentsPath = join(userHomeDir, 'Documents');
+    return documentsPath;
+  }
+
+  public async getMx(context: ExtensionContext) {
+      const refreshOptions: RefreshOptions = {
+        viewKey: this._currentDiagram,
+        document: this._currentDocument.uri.path,
+        svg: undefined
+      };
+      commands.executeCommand("c4-server.view-2-mx", refreshOptions).then(async (callback) => {
+        const result = callback as CommandResultCode;
+        const options: SaveDialogOptions = {
+          defaultUri: Uri.file(join(this.getUserDocumentsPath(), this._currentDiagram)),
+          filters: {
+            'Svg Files': ['drawio'],
+            'All Files': ['*']
+          },
+          title: 'Export to .drawio file'
+        };
+
+        const uri = await window.showSaveDialog(options);
+
+        if (uri) {
+          writeFile(uri.fsPath, Buffer.from(result.message), (error) => {
+            if (error !== null) {
+              window.showErrorMessage(error.message);
+            }
+          });
+        }
+
+      });
+  }
+
   public async getSvg(context: ExtensionContext) {
     this.panel?.webview.onDidReceiveMessage(
       async message => {

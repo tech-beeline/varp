@@ -136,6 +136,10 @@
                 <groupId>com.structurizr</groupId>
                 <artifactId>structurizr-dsl</artifactId>
               </weaveDependency>
+              <weaveDependency>
+                <groupId>com.structurizr</groupId>
+                <artifactId>structurizr-client</artifactId>
+              </weaveDependency>           
             </weaveDependencies>                    
           </configuration>
           <executions>

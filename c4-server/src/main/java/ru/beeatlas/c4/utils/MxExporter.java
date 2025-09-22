@@ -1,6 +1,12 @@
 package ru.beeatlas.c4.utils;
 
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
+import java.awt.image.*;
+
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -11,16 +17,44 @@ import com.structurizr.export.Diagram;
 import com.structurizr.export.IndentingWriter;
 import com.structurizr.model.*;
 import com.structurizr.util.StringUtils;
-import com.structurizr.view.*;
+import com.structurizr.view.ComponentView;
+import com.structurizr.view.DeploymentView;
+import com.structurizr.view.DynamicView;
+import com.structurizr.view.ElementStyle;
+import com.structurizr.view.ElementView;
+import com.structurizr.view.LineStyle;
+//import com.structurizr.view.*;
+import com.structurizr.view.ModelView;
+import com.structurizr.view.RelationshipStyle;
+import com.structurizr.view.RelationshipView;
+import com.structurizr.view.Shape;
+import com.structurizr.view.Vertex;
 
 /**
  * Exports Structurizr views to Graphviz DOT definitions.
  */
 public class MxExporter extends AbstractDiagramExporter {
 
+    private static final float HEXAGON_RATIO = 0.89f;
+
     private static final Logger logger = LoggerFactory.getLogger(MxExporter.class);
 
     private static final String DEFAULT_FONT = "Arial";
+
+    private class Group {
+        public Group(String name, String fullName) {
+            this.name = name;
+            this.fullName = fullName;
+        }
+        public String name;
+        public String fullName;
+        public HashMap<String, Group> childrens = new HashMap<>();
+        public int minX = Integer.MAX_VALUE;
+        public int minY = Integer.MAX_VALUE;
+        public int maxX = Integer.MIN_VALUE;
+        public int maxY = Integer.MIN_VALUE;
+    }
+    private HashMap<String, Group> groups = new HashMap<>();
 
     private int clusterInternalMargin = 25;
 
@@ -47,8 +81,119 @@ public class MxExporter extends AbstractDiagramExporter {
         writer.writeLine("<mxCell id=\"1\" parent=\"0\" />");
     }
 
+    private void updateGroup(Group group, ModelView view) {
+        for(Group childrenGroup : group.childrens.values()) {
+            updateGroup(childrenGroup, view);
+        }
+        for(Group childrenGroup : group.childrens.values()) {
+            if(childrenGroup.minX  < group.minX) {
+                group.minX = childrenGroup.minX;
+            }
+            if(childrenGroup.minY < group.minY) {
+                group.minY = childrenGroup.minY;
+            }
+            if(childrenGroup.maxX > group.maxX) {
+                group.maxX = childrenGroup.maxX;
+            }
+            if(childrenGroup.maxY > group.maxY) {
+                group.maxY = childrenGroup.maxY;
+            }
+        }
+
+        int fontSize = 16;
+        int metadataFontSize = 11;
+
+        ElementStyle groupStyle = getGroupStyle(group, view);
+
+        if (groupStyle != null) {
+            if(groupStyle.getFontSize() != null) {
+                fontSize = groupStyle.getFontSize();
+                metadataFontSize = fontSize - 5;
+            }
+        }
+
+        BufferedImage bufferedImage = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = bufferedImage.createGraphics();
+        Font font = new Font(DEFAULT_FONT, Font.PLAIN, fontSize);
+        graphics.setFont(font);
+        FontMetrics metrics = graphics.getFontMetrics();
+        Font metadataFont = new Font(DEFAULT_FONT, Font.PLAIN, metadataFontSize);
+        graphics.setFont(metadataFont);
+        FontMetrics metadataMetrics = graphics.getFontMetrics();
+        group.minX -= clusterInternalMargin;
+        group.minY -= clusterInternalMargin;
+        group.maxX += clusterInternalMargin;
+        group.maxY += clusterInternalMargin + metrics.getHeight() + metadataMetrics.getHeight();
+    }
+
+    private ElementStyle getGroupStyle(Group group, ModelView view) {
+        // is there a style for the group?
+        ElementStyle groupStyle = view.getViewSet().getConfiguration().getStyles().findElementStyle("Group:" + group.fullName);
+
+        if (groupStyle == null || StringUtils.isNullOrEmpty(groupStyle.getColor())) {
+            // no, so is there a default group style?
+            groupStyle = view.getViewSet().getConfiguration().getStyles().findElementStyle("Group");
+        }
+        return groupStyle;
+    }
+
+    private void drawGroup(Group group, ModelView view, IndentingWriter writer) {
+
+        for(Group childrenGroup : group.childrens.values()) {
+            drawGroup(childrenGroup, view, writer);
+        }
+
+        ElementStyle groupStyle = getGroupStyle(group, view);
+
+        String color = "#333333";
+        int fontSize = 16;
+        int metadataFontSize = 11;
+
+        if (groupStyle != null) {
+            if(!StringUtils.isNullOrEmpty(groupStyle.getColor())) {
+                color = groupStyle.getColor();
+            }
+            if(groupStyle.getFontSize() != null) {
+                fontSize = groupStyle.getFontSize();
+                metadataFontSize = fontSize - 5;
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("<object placeholders=\"1\" c4Name=\"").append(group.name);
+        sb.append("\" c4Type=\"GroupScopeBoundary\" c4Application=\"Group\" label=\"&lt;font style=&quot;font-size: ").append(fontSize);
+        sb.append("px&quot;&gt;&lt;b&gt;&lt;div style=&quot;text-align: left&quot;&gt;%c4Name%&lt;/div&gt;&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;text-align: left&quot;&gt;[%c4Application%]&lt;/div&gt;\" id=\"")
+                .append(UUID.randomUUID());
+        sb.append("\">");
+        writer.writeLine(sb.toString());
+        sb.setLength(0);
+        writer.indent();
+        sb.append("<mxCell style=\"rounded=1;fontSize=").append(metadataFontSize);
+        sb.append(";whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=#666666;fontColor=").append(color);
+        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 4;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        writer.writeLine(sb.toString());
+        sb.setLength(0);        
+        writer.indent();
+        sb.append("<mxGeometry x=\"").append(group.minX);
+        sb.append("\" y=\"").append(group.minY);
+        sb.append("\" width=\"").append(group.maxX - group.minX);
+        sb.append("\" height=\"").append(group.maxY - group.minY);
+        sb.append("\" as=\"geometry\" />");
+        writer.writeLine(sb.toString());
+        writer.outdent();
+        writer.writeLine("</mxCell>");
+        writer.outdent();
+        writer.writeLine("</object>");        
+    }
+
     @Override
     protected void writeFooter(ModelView view, IndentingWriter writer) {
+        for(Group childrenGroup : groups.values()) {
+            updateGroup(childrenGroup, view);
+        }
+        for(Group rootGroup : groups.values()) {
+            drawGroup(rootGroup, view, writer);
+        }        
         writer.outdent();
         writer.writeLine("</root>");
         writer.outdent();
@@ -69,74 +214,71 @@ public class MxExporter extends AbstractDiagramExporter {
 
     @Override
     protected void startGroupBoundary(ModelView view, String group, IndentingWriter writer) {
-
-        logger.info("startGroupBoundary");
-
-        String color = "#cccccc";
-        int metadataFontSize = 11;
-
         String groupSeparator = view.getModel().getProperties().get(GROUP_SEPARATOR_PROPERTY_NAME);
-        String groupName = StringUtils.isNullOrEmpty(groupSeparator) ? group : group.substring(group.lastIndexOf(groupSeparator) + groupSeparator.length());
 
-        // is there a style for the group?
-        ElementStyle elementStyle = view.getViewSet().getConfiguration().getStyles().findElementStyle("Group:" + group);
+        String[] startGroups = group.split(groupSeparator);
 
-        if (elementStyle == null || StringUtils.isNullOrEmpty(elementStyle.getColor())) {
-            // no, so is there a default group style?
-            elementStyle = view.getViewSet().getConfiguration().getStyles().findElementStyle("Group");
-        }
-
-        if (elementStyle != null && !StringUtils.isNullOrEmpty(elementStyle.getColor())) {
-            color = elementStyle.getColor();
-            metadataFontSize = elementStyle.getFontSize() - 5;
-        }
-
-        int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE;
-        int maxX = Integer.MIN_VALUE, maxY = Integer.MIN_VALUE;
-
-        for (ElementView elementView : view.getElements()) {
-            GroupableElement ge = (GroupableElement)elementView.getElement();
-            logger.info(group + " " + ge.getGroup());
-            if(group.equals(ge.getGroup()) || (ge.getGroup() != null && ge.getGroup().startsWith(group) )) {
-                logger.info("!");
-                ElementStyle elementStyle0 = view.getViewSet().getConfiguration().getStyles().findElementStyle(ge);                
-                if(elementView.getX() < minX) {
-                    minX = elementView.getX();
+        {
+            String fullName = "";
+            HashMap<String, Group> childrens = groups;
+            for(String startGroup : startGroups) {
+                Group g = childrens.get(startGroup);
+                fullName += startGroup;
+                if(g == null) {
+                    g = new Group(startGroup, fullName);
+                    childrens.put(startGroup, g);
                 }
-                if(elementView.getY() < minY) {
-                    minY = elementView.getY();
-                }
-                if(elementView.getX() + elementStyle0.getWidth() > maxX) {
-                    maxX = elementView.getX() + elementStyle0.getWidth();
-                }
-                if(elementView.getY() + elementStyle0.getHeight() > maxY) {
-                    maxY = elementView.getY() + elementStyle0.getHeight();
-                }
+                fullName += groupSeparator;
+                childrens = g.childrens;
             }
         }
 
-        minX -= clusterInternalMargin;
-        minY -= clusterInternalMargin;
-        maxX += clusterInternalMargin;
-        maxY += clusterInternalMargin;
+        for (ElementView elementView : view.getElements()) {
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("<object placeholders=\"1\" c4Name=\"").append(groupName);
-        sb.append(
-                "\" c4Type=\"GroupScopeBoundary\" c4Application=\"Group\" label=\"&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;&lt;div style=&quot;text-align: left&quot;&gt;%c4Name%&lt;/div&gt;&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;text-align: left&quot;&gt;[%c4Application%]&lt;/div&gt;\" id=\"")
-                .append(UUID.randomUUID());
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        writer.indent();
-        writer.writeLine("<mxCell style=\"rounded=1;fontSize=11;whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=#666666;fontColor=#333333;labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 4;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
-        writer.indent();
-        String line = String.format("<mxGeometry x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" as=\"geometry\" />", minX, minY, maxX - minX, maxY - minY);
-        writer.writeLine(line);
-        writer.outdent();
-        writer.writeLine("</mxCell>");
-        writer.outdent();
-        writer.writeLine("</object>");
+            GroupableElement ge = (GroupableElement)elementView.getElement();
+            if(ge.getGroup() == null) {
+                continue;
+            }
+            
+            Element element = (Element)elementView.getElement();
 
+            if (element instanceof StaticStructureElementInstance) {
+                StaticStructureElementInstance elementInstance = (StaticStructureElementInstance)element;
+                element = elementInstance.getElement();
+            }
+
+            ElementStyle elementStyle0 = view.getViewSet().getConfiguration().getStyles().findElementStyle(element);            
+            Shape shape = elementStyle0.getShape();
+
+            String[] elementGroups = ge.getGroup().split(groupSeparator);
+
+            HashMap<String, Group> childrens = groups;
+            for(String elementGroup : elementGroups) {
+
+                Group g = childrens.get(elementGroup);
+                if(g == null) {
+                    break;
+                }
+
+                if(elementView.getX() < g.minX) {
+                    g.minX = elementView.getX();
+                }
+                if(elementView.getY() < g.minY) {
+                    g.minY = elementView.getY();
+                }
+                if(elementView.getX() + elementStyle0.getWidth() > g.maxX) {
+                    g.maxX = elementView.getX() + elementStyle0.getWidth();
+                }
+
+                int height = (shape == Shape.Hexagon) ? (int) (HEXAGON_RATIO * elementStyle0.getWidth()) : elementStyle0.getHeight();
+
+                if(elementView.getY() + height > g.maxY) {
+                    g.maxY = elementView.getY() + height;
+                }
+
+                childrens = g.childrens;
+            }
+        }
     }
 
     @Override
@@ -445,7 +587,7 @@ public class MxExporter extends AbstractDiagramExporter {
         writer.indent();
         sb.append("<mxGeometry x=\"").append(x);
         sb.append("\" y=\"").append(y);
-        height = (int) (0.89 * width);
+        height = (int) (HEXAGON_RATIO * width);
         sb.append("\" width=\"").append(width);
         sb.append("\" height=\"").append(height);
         sb.append("\" as=\"geometry\" />");

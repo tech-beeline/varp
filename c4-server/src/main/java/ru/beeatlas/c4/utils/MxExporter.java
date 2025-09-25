@@ -1,12 +1,26 @@
-package ru.beeatlas.c4.utils;
+/*
+    Copyright 2025 VimpelCom PJSC
 
-import java.awt.Font;
-import java.awt.FontMetrics;
-import java.awt.Graphics2D;
-import java.awt.image.*;
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+*/
+
+package ru.beeatlas.c4.utils;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.Stack;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -17,13 +31,10 @@ import com.structurizr.export.Diagram;
 import com.structurizr.export.IndentingWriter;
 import com.structurizr.model.*;
 import com.structurizr.util.StringUtils;
-import com.structurizr.view.ComponentView;
 import com.structurizr.view.DeploymentView;
-import com.structurizr.view.DynamicView;
 import com.structurizr.view.ElementStyle;
 import com.structurizr.view.ElementView;
 import com.structurizr.view.LineStyle;
-//import com.structurizr.view.*;
 import com.structurizr.view.ModelView;
 import com.structurizr.view.RelationshipStyle;
 import com.structurizr.view.RelationshipView;
@@ -31,7 +42,7 @@ import com.structurizr.view.Shape;
 import com.structurizr.view.Vertex;
 
 /**
- * Exports Structurizr views to Graphviz DOT definitions.
+ * Exports Structurizr views to .drawio mxfile format.
  */
 public class MxExporter extends AbstractDiagramExporter {
 
@@ -39,22 +50,61 @@ public class MxExporter extends AbstractDiagramExporter {
 
     private static final Logger logger = LoggerFactory.getLogger(MxExporter.class);
 
-    private static final String DEFAULT_FONT = "Arial";
+    private static final String DEFAULT_FONT = "Helvetica";
+    private static final int BOUNDARY_FONT_SIZE = 24;
+    private static final int BOUNDARYMETA_FONT_SIZE = BOUNDARY_FONT_SIZE - 5;
 
-    private class Group {
-        public Group(String name, String fullName) {
+    private class GroupBoundary {
+        public GroupBoundary(String name, String fullName) {
             this.name = name;
             this.fullName = fullName;
         }
         public String name;
         public String fullName;
-        public HashMap<String, Group> childrens = new HashMap<>();
+        public HashMap<String, GroupBoundary> groupBoundaries = new HashMap<>();
         public int minX = Integer.MAX_VALUE;
         public int minY = Integer.MAX_VALUE;
         public int maxX = Integer.MIN_VALUE;
         public int maxY = Integer.MIN_VALUE;
     }
-    private HashMap<String, Group> groups = new HashMap<>();
+
+    private class SoftwareSystemBoundary {
+        SoftwareSystem softwareSystem;
+        public HashSet<GroupBoundary> groupBoundaries = new HashSet<>();
+        public LinkedList<Element> elements = new LinkedList<>();
+        public SoftwareSystemBoundary(SoftwareSystem softwareSystem) {
+            this.softwareSystem = softwareSystem;
+        }
+    }
+
+    private class DeploymentNodeBoundary {
+        public int minX = Integer.MAX_VALUE;
+        public int minY = Integer.MAX_VALUE;
+        public int maxX = Integer.MIN_VALUE;
+        public int maxY = Integer.MIN_VALUE;        
+        public DeploymentNode deploymentNode;
+        public HashSet<GroupBoundary> groupBoundaries = new HashSet<>();
+        public LinkedList<Element> elements = new LinkedList<>();
+        public LinkedList<DeploymentNodeBoundary> deploymentNodes = new LinkedList<>();
+        public DeploymentNodeBoundary(DeploymentNode deploymentNode) {
+            this.deploymentNode = deploymentNode;
+        }
+    }
+
+    private class ContainerBoundary {
+        Container container;
+        public HashSet<GroupBoundary> groupBoundaries = new HashSet<>();
+        public LinkedList<Element> elements = new LinkedList<>();
+        public ContainerBoundary(Container container) {
+            this.container = container;
+        }
+    }    
+
+    private HashMap<String, GroupBoundary> groupBoundaries = new HashMap<>();
+    private LinkedList<SoftwareSystemBoundary> softwareSystemBoundaries = new LinkedList<>();
+    private LinkedList<ContainerBoundary> containerBoundaries = new LinkedList<>();
+    private LinkedList<DeploymentNodeBoundary> deploymentNodeBoundaries = new LinkedList<>();
+    private Stack<DeploymentNodeBoundary> deploymentNodeBoundaryStack = new Stack<>();
 
     private int clusterInternalMargin = 25;
 
@@ -70,10 +120,18 @@ public class MxExporter extends AbstractDiagramExporter {
 
         writer.writeLine("<mxfile host=\"Electron\" agent=\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/28.0.6 Chrome/138.0.7204.100 Electron/37.2.3 Safari/537.36\" version=\"28.0.6\">");
         writer.indent();
-        writer.writeLine("<diagram name=\"Страница — 1\" id=\"NeoCpV-NzOcwAlcAnlzz\">");
+        StringBuilder sb = new StringBuilder();
+        sb.append("<diagram name=\"Страница — 1\" id=\"").append(view.getKey());
+        sb.append("\">");
+        writer.writeLine(sb.toString());
+        sb.setLength(0);
+        //writer.writeLine("<diagram name=\"Страница — 1\" id=\"NeoCpV-NzOcwAlcAnlzz\">");
         writer.indent();
-        String line = String.format("<mxGraphModel dx=\"0\" dy=\"0\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"%d\" pageHeight=\"%d\" math=\"0\" shadow=\"0\">", view.getPaperSize().getWidth(), view.getPaperSize().getHeight());
-        writer.writeLine(line);
+
+        sb.append("<mxGraphModel dx=\"0\" dy=\"0\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"").append(view.getPaperSize().getWidth());
+        sb.append("\" pageHeight=\"").append(view.getPaperSize().getHeight());
+        sb.append("\" math=\"0\" shadow=\"0\">");
+        writer.writeLine(sb.toString());
         writer.indent();
         writer.writeLine("<root>");
         writer.indent();
@@ -81,52 +139,38 @@ public class MxExporter extends AbstractDiagramExporter {
         writer.writeLine("<mxCell id=\"1\" parent=\"0\" />");
     }
 
-    private void updateGroup(Group group, ModelView view) {
-        for(Group childrenGroup : group.childrens.values()) {
-            updateGroup(childrenGroup, view);
+    private void updateGroupBoundary(GroupBoundary groupBoundary, ModelView view) {
+        for(GroupBoundary gb : groupBoundary.groupBoundaries.values()) {
+            updateGroupBoundary(gb, view);
         }
-        for(Group childrenGroup : group.childrens.values()) {
-            if(childrenGroup.minX  < group.minX) {
-                group.minX = childrenGroup.minX;
-            }
-            if(childrenGroup.minY < group.minY) {
-                group.minY = childrenGroup.minY;
-            }
-            if(childrenGroup.maxX > group.maxX) {
-                group.maxX = childrenGroup.maxX;
-            }
-            if(childrenGroup.maxY > group.maxY) {
-                group.maxY = childrenGroup.maxY;
-            }
+        for(GroupBoundary gb : groupBoundary.groupBoundaries.values()) {            
+            groupBoundary.minX = Math.min(groupBoundary.minX, gb.minX);
+            groupBoundary.minY = Math.min(groupBoundary.minY, gb.minY);
+            groupBoundary.maxX = Math.max(groupBoundary.maxX, gb.maxX);
+            groupBoundary.maxY = Math.max(groupBoundary.maxY, gb.maxY);
         }
 
-        int fontSize = 16;
-        int metadataFontSize = 11;
+        int fontSize = BOUNDARY_FONT_SIZE;
+        int metadataFontSize = BOUNDARYMETA_FONT_SIZE;
 
-        ElementStyle groupStyle = getGroupStyle(group, view);
+        ElementStyle es = getGroupStyle(groupBoundary, view);
 
-        if (groupStyle != null) {
-            if(groupStyle.getFontSize() != null) {
-                fontSize = groupStyle.getFontSize();
+        if (es != null) {
+            if(es.getFontSize() != null) {
+                fontSize = es.getFontSize();
                 metadataFontSize = fontSize - 5;
             }
         }
 
-        BufferedImage bufferedImage = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D graphics = bufferedImage.createGraphics();
-        Font font = new Font(DEFAULT_FONT, Font.PLAIN, fontSize);
-        graphics.setFont(font);
-        FontMetrics metrics = graphics.getFontMetrics();
-        Font metadataFont = new Font(DEFAULT_FONT, Font.PLAIN, metadataFontSize);
-        graphics.setFont(metadataFont);
-        FontMetrics metadataMetrics = graphics.getFontMetrics();
-        group.minX -= clusterInternalMargin;
-        group.minY -= clusterInternalMargin;
-        group.maxX += clusterInternalMargin;
-        group.maxY += clusterInternalMargin + metrics.getHeight() + metadataMetrics.getHeight();
+        groupBoundary.minX -= clusterInternalMargin;
+        groupBoundary.minY -= clusterInternalMargin;
+        groupBoundary.maxX += clusterInternalMargin;
+        groupBoundary.maxY += clusterInternalMargin;
+        groupBoundary.maxY += C4Utils.getFontHeight(DEFAULT_FONT, fontSize);
+        groupBoundary.maxY += C4Utils.getFontHeight(DEFAULT_FONT, metadataFontSize);
     }
 
-    private ElementStyle getGroupStyle(Group group, ModelView view) {
+    private ElementStyle getGroupStyle(GroupBoundary group, ModelView view) {
         // is there a style for the group?
         ElementStyle groupStyle = view.getViewSet().getConfiguration().getStyles().findElementStyle("Group:" + group.fullName);
 
@@ -137,24 +181,32 @@ public class MxExporter extends AbstractDiagramExporter {
         return groupStyle;
     }
 
-    private void drawGroup(Group group, ModelView view, IndentingWriter writer) {
+    private void writeGroupBoundary(GroupBoundary group, ModelView view, IndentingWriter writer) {
 
-        for(Group childrenGroup : group.childrens.values()) {
-            drawGroup(childrenGroup, view, writer);
+        for(GroupBoundary gb : group.groupBoundaries.values()) {
+            writeGroupBoundary(gb, view, writer);
         }
 
-        ElementStyle groupStyle = getGroupStyle(group, view);
+        ElementStyle es = getGroupStyle(group, view);
 
         String color = "#333333";
-        int fontSize = 16;
-        int metadataFontSize = 11;
+        String stroke = "#666666";
+        int strokeWidth = 4;
+        int fontSize = BOUNDARY_FONT_SIZE;
+        int metadataFontSize = BOUNDARYMETA_FONT_SIZE;
 
-        if (groupStyle != null) {
-            if(!StringUtils.isNullOrEmpty(groupStyle.getColor())) {
-                color = groupStyle.getColor();
+        if (es != null) {
+            if(!StringUtils.isNullOrEmpty(es.getColor())) {
+                color = es.getColor();
             }
-            if(groupStyle.getFontSize() != null) {
-                fontSize = groupStyle.getFontSize();
+            if(!StringUtils.isNullOrEmpty(es.getStroke())) {
+                stroke = es.getStroke();
+            }
+            if(es.getStrokeWidth() != null) {
+                strokeWidth = es.getStrokeWidth();
+            }
+            if(es.getFontSize() != null) {
+                fontSize = es.getFontSize();
                 metadataFontSize = fontSize - 5;
             }
         }
@@ -169,8 +221,10 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.setLength(0);
         writer.indent();
         sb.append("<mxCell style=\"rounded=1;fontSize=").append(metadataFontSize);
-        sb.append(";whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=#666666;fontColor=").append(color);
-        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 4;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        sb.append(";whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=").append(stroke);
+        sb.append(";fontColor=").append(color);
+        sb.append(";strokeWidth=").append(strokeWidth);
+        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=1 2;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);        
         writer.indent();
@@ -183,16 +237,183 @@ public class MxExporter extends AbstractDiagramExporter {
         writer.outdent();
         writer.writeLine("</mxCell>");
         writer.outdent();
-        writer.writeLine("</object>");        
+        writer.writeLine("</object>");
+    }
+
+    private void writeSoftwareSystemBoundary(SoftwareSystemBoundary softwareSystemBoundary, ModelView view, IndentingWriter writer) {
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        for(Element e : softwareSystemBoundary.elements) {
+            ElementView ev = view.getElementView(e);
+            if (e instanceof StaticStructureElementInstance) {
+                StaticStructureElementInstance elementInstance = (StaticStructureElementInstance)e;
+                e = elementInstance.getElement();
+            }
+            ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(e);            
+            minX = Math.min(minX, ev.getX());
+            minY = Math.min(minY, ev.getY());
+            maxX = Math.max(maxX, ev.getX() + es.getWidth());
+            int height = (es.getShape() == Shape.Hexagon) ? (int) (HEXAGON_RATIO * es.getWidth()) : es.getHeight();
+            maxY = Math.max(maxY, ev.getY() + height);
+        }
+
+        for(GroupBoundary gb : softwareSystemBoundary.groupBoundaries) {
+            minX = Math.min(minX, gb.minX);
+            minY = Math.min(minY, gb.minY);
+            maxX = Math.max(maxX, gb.maxX);
+            maxY = Math.max(maxY, gb.maxY);
+        }
+
+        int fontSize = BOUNDARY_FONT_SIZE;
+        int metadataFontSize = BOUNDARYMETA_FONT_SIZE;
+
+        minX -= clusterInternalMargin;
+        minY -= clusterInternalMargin;
+        maxX += clusterInternalMargin;
+        maxY += clusterInternalMargin;
+        maxY += C4Utils.getFontHeight(DEFAULT_FONT, fontSize);
+        maxY += C4Utils.getFontHeight(DEFAULT_FONT, metadataFontSize);
+
+        String stroke = "#666666";
+        int strokeWidth = 4;
+        ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(softwareSystemBoundary.softwareSystem);
+        if(!StringUtils.isNullOrEmpty(es.getStroke())) {
+            stroke = es.getStroke();
+        }
+        if(es.getStrokeWidth() != null) {
+            strokeWidth = es.getStrokeWidth();
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("<object placeholders=\"1\" c4Name=\"").append(softwareSystemBoundary.softwareSystem.getName());
+        sb.append("\" c4Type=\"SystemScopeBoundary\" c4Application=\"Software System\" label=\"&lt;font style=&quot;font-size: ").append(fontSize);
+        sb.append("px&quot;&gt;&lt;b&gt;&lt;div style=&quot;text-align: left&quot;&gt;%c4Name%&lt;/div&gt;&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;text-align: left&quot;&gt;[%c4Application%]&lt;/div&gt;\" id=\"").append(softwareSystemBoundary.softwareSystem.getId());
+        sb.append("\">");
+        writer.writeLine(sb.toString());
+        sb.setLength(0);
+        writer.indent();
+        sb.append("<mxCell style=\"rounded=1;fontSize=").append(metadataFontSize);
+        sb.append(";whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=").append(stroke);
+        sb.append(";fontColor=").append(stroke);
+        sb.append(";strokeWidth=").append(strokeWidth);
+        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 8;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        writer.writeLine(sb.toString());
+        sb.setLength(0);
+        writer.indent();
+        sb.append("<mxGeometry x=\"").append(minX);
+        sb.append("\" y=\"").append(minY);
+        sb.append("\" width=\"").append(maxX - minX);
+        sb.append("\" height=\"").append(maxY - minY);
+        sb.append("\" as=\"geometry\" />");
+
+        writer.writeLine(sb.toString());
+        writer.outdent();
+        writer.writeLine("</mxCell>");
+        writer.outdent();
+        writer.writeLine("</object>");
+    }
+
+    private void writeContainerBoundary(ContainerBoundary containerBoundary, ModelView view, IndentingWriter writer) {
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        for(Element e : containerBoundary.elements) {
+            ElementView ev = view.getElementView(e);
+            if (e instanceof StaticStructureElementInstance) {
+                StaticStructureElementInstance elementInstance = (StaticStructureElementInstance)e;
+                e = elementInstance.getElement();
+            }
+            ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(e);
+            minX = Math.min(minX, ev.getX());
+            minY = Math.min(minY, ev.getY());
+            maxX = Math.max(maxX, ev.getX() + es.getWidth());
+            int height = (es.getShape() == Shape.Hexagon) ? (int) (HEXAGON_RATIO * es.getWidth()) : es.getHeight();
+            maxY = Math.max(maxY, ev.getY() + height);
+        }
+
+        for(GroupBoundary gb : containerBoundary.groupBoundaries) {
+            minX = Math.min(minX, gb.minX);
+            minY = Math.min(minY, gb.minY);
+            maxX = Math.max(maxX, gb.maxX);
+            maxY = Math.max(maxY, gb.maxY);
+        }
+
+        int fontSize = BOUNDARY_FONT_SIZE;
+        int metadataFontSize = BOUNDARYMETA_FONT_SIZE;
+
+        minX -= clusterInternalMargin;
+        minY -= clusterInternalMargin;
+        maxX += clusterInternalMargin;
+        maxY += clusterInternalMargin;
+        maxY += C4Utils.getFontHeight(DEFAULT_FONT, fontSize);
+        maxY += C4Utils.getFontHeight(DEFAULT_FONT, metadataFontSize);
+
+        String color = "#333333";
+        String stroke = "#666666";
+        int strokeWidth = 4;
+        ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(containerBoundary.container);
+
+        if(!StringUtils.isNullOrEmpty(es.getColor())) {
+            color = es.getColor();
+        }
+        if(!StringUtils.isNullOrEmpty(es.getStroke())) {
+            stroke = es.getStroke();
+        }
+        if(es.getStrokeWidth() != null) {
+            strokeWidth = es.getStrokeWidth();
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("<object placeholders=\"1\" c4Name=\"").append(containerBoundary.container.getName());
+        sb.append("\" c4Type=\"ContainerScopeBoundary\" c4Application=\"Container\" label=\"&lt;font style=&quot;font-size: ").append(fontSize);
+        sb.append("px&quot;&gt;&lt;b&gt;&lt;div style=&quot;text-align: left&quot;&gt;%c4Name%&lt;/div&gt;&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;text-align: left&quot;&gt;[%c4Application%]&lt;/div&gt;\" id=\"").append(containerBoundary.container.getId());
+        sb.append("\">");
+        writer.writeLine(sb.toString());
+        sb.setLength(0);
+        writer.indent();
+        sb.append("<mxCell style=\"rounded=1;fontSize=").append(metadataFontSize);
+        sb.append(";whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=").append(stroke);
+        sb.append(";fontColor=").append(color);
+        sb.append(";strokeWidth=").append(strokeWidth);
+        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 8;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        writer.writeLine(sb.toString());
+        sb.setLength(0);
+        writer.indent();
+        sb.append("<mxGeometry x=\"").append(minX);
+        sb.append("\" y=\"").append(minY);
+        sb.append("\" width=\"").append(maxX - minX);
+        sb.append("\" height=\"").append(maxY - minY);
+        sb.append("\" as=\"geometry\" />");
+
+        writer.writeLine(sb.toString());
+        writer.outdent();
+        writer.writeLine("</mxCell>");
+        writer.outdent();
+        writer.writeLine("</object>");
     }
 
     @Override
     protected void writeFooter(ModelView view, IndentingWriter writer) {
-        for(Group childrenGroup : groups.values()) {
-            updateGroup(childrenGroup, view);
+        for(GroupBoundary gb : groupBoundaries.values()) {
+            updateGroupBoundary(gb, view);
         }
-        for(Group rootGroup : groups.values()) {
-            drawGroup(rootGroup, view, writer);
+        for(GroupBoundary gb : groupBoundaries.values()) {
+            writeGroupBoundary(gb, view, writer);
+        }
+        for(SoftwareSystemBoundary ssb : softwareSystemBoundaries) {
+            writeSoftwareSystemBoundary(ssb, view, writer);
+        }
+        for(ContainerBoundary cb : containerBoundaries) {
+            writeContainerBoundary(cb, view, writer);
+        }
+        for(DeploymentNodeBoundary dnb : deploymentNodeBoundaries) {
+            updateDeploymentNodeBoundary(dnb, view);
+        }
+        for(DeploymentNodeBoundary dnb : deploymentNodeBoundaries) {
+            writeDeploymentNodeBoundary(dnb, view, writer);
         }        
         writer.outdent();
         writer.writeLine("</root>");
@@ -215,68 +436,57 @@ public class MxExporter extends AbstractDiagramExporter {
     @Override
     protected void startGroupBoundary(ModelView view, String group, IndentingWriter writer) {
         String groupSeparator = view.getModel().getProperties().get(GROUP_SEPARATOR_PROPERTY_NAME);
-
-        String[] startGroups = group.split(groupSeparator);
-
-        {
-            String fullName = "";
-            HashMap<String, Group> childrens = groups;
-            for(String startGroup : startGroups) {
-                Group g = childrens.get(startGroup);
-                fullName += startGroup;
-                if(g == null) {
-                    g = new Group(startGroup, fullName);
-                    childrens.put(startGroup, g);
+        String[] groups = group.split(groupSeparator);
+        String fullName = "";
+        HashMap<String, GroupBoundary> groupBoundariesRoot = groupBoundaries;
+        for(String groupName : groups) {
+            GroupBoundary gb = groupBoundariesRoot.get(groupName);
+            fullName += groupName;
+            if(gb == null) {
+                gb = new GroupBoundary(groupName, fullName);
+                SoftwareSystemBoundary softwareSystemBoundary = softwareSystemBoundaries.peekLast();
+                if(softwareSystemBoundary != null) {
+                    softwareSystemBoundary.groupBoundaries.add(gb);
                 }
-                fullName += groupSeparator;
-                childrens = g.childrens;
+                ContainerBoundary containerBoundary = containerBoundaries.peekLast();
+                if(containerBoundary != null) {
+                    containerBoundary.groupBoundaries.add(gb);
+                }
+                if(deploymentNodeBoundaryStack.empty() == false) {
+                    DeploymentNodeBoundary deploymentNodeBoundary = deploymentNodeBoundaryStack.peek();
+                    deploymentNodeBoundary.groupBoundaries.add(gb);
+                }
+                groupBoundariesRoot.put(groupName, gb);
             }
+            fullName += groupSeparator;
+            groupBoundariesRoot = gb.groupBoundaries;
         }
 
-        for (ElementView elementView : view.getElements()) {
-
-            GroupableElement ge = (GroupableElement)elementView.getElement();
+        for (ElementView ev : view.getElements()) {
+            GroupableElement ge = (GroupableElement)ev.getElement();
             if(ge.getGroup() == null) {
                 continue;
             }
-            
-            Element element = (Element)elementView.getElement();
-
-            if (element instanceof StaticStructureElementInstance) {
-                StaticStructureElementInstance elementInstance = (StaticStructureElementInstance)element;
-                element = elementInstance.getElement();
+            Element e = (Element)ev.getElement();
+            if (e instanceof StaticStructureElementInstance) {
+                StaticStructureElementInstance elementInstance = (StaticStructureElementInstance)e;
+                e = elementInstance.getElement();
             }
-
-            ElementStyle elementStyle0 = view.getViewSet().getConfiguration().getStyles().findElementStyle(element);            
-            Shape shape = elementStyle0.getShape();
-
-            String[] elementGroups = ge.getGroup().split(groupSeparator);
-
-            HashMap<String, Group> childrens = groups;
-            for(String elementGroup : elementGroups) {
-
-                Group g = childrens.get(elementGroup);
-                if(g == null) {
+            ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(e);            
+            Shape shape = es.getShape();
+            groups = ge.getGroup().split(groupSeparator);
+            groupBoundariesRoot = groupBoundaries;
+            for(String groupName : groups) {
+                GroupBoundary gb = groupBoundariesRoot.get(groupName);
+                if(gb == null) {
                     break;
                 }
-
-                if(elementView.getX() < g.minX) {
-                    g.minX = elementView.getX();
-                }
-                if(elementView.getY() < g.minY) {
-                    g.minY = elementView.getY();
-                }
-                if(elementView.getX() + elementStyle0.getWidth() > g.maxX) {
-                    g.maxX = elementView.getX() + elementStyle0.getWidth();
-                }
-
-                int height = (shape == Shape.Hexagon) ? (int) (HEXAGON_RATIO * elementStyle0.getWidth()) : elementStyle0.getHeight();
-
-                if(elementView.getY() + height > g.maxY) {
-                    g.maxY = elementView.getY() + height;
-                }
-
-                childrens = g.childrens;
+                gb.minX = Math.min(gb.minX, ev.getX());
+                gb.minY = Math.min(gb.minY, ev.getY());
+                gb.maxX = Math.max(gb.maxX, ev.getX() + es.getWidth());
+                int height = (shape == Shape.Hexagon) ? (int) (HEXAGON_RATIO * es.getWidth()) : es.getHeight();
+                gb.maxY = Math.max(gb.maxY, ev.getY() + height);
+                groupBoundariesRoot = gb.groupBoundaries;
             }
         }
     }
@@ -287,27 +497,8 @@ public class MxExporter extends AbstractDiagramExporter {
 
     @Override
     protected void startSoftwareSystemBoundary(ModelView view, SoftwareSystem softwareSystem, IndentingWriter writer) {
-        // String color;
-        // if (softwareSystem.equals(view.getSoftwareSystem())) {
-        //     color = "#444444";
-        // } else {
-        //     color = "#cccccc";
-        // }
-
-        // ElementStyle elementStyle = view.getViewSet().getConfiguration().getStyles().findElementStyle(softwareSystem);
-        // ElementView elementView = view.getElementView(softwareSystem);
-
-        // String line = MessageFormat.format("<object placeholders=\"1\" c4Name=\"{0}\" c4Type=\"SystemScopeBoundary\" c4Application=\"Software System\" label=\"&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;&lt;div style=&quot;text-align: left&quot;&gt;%c4Name%&lt;/div&gt;&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;text-align: left&quot;&gt;[%c4Application%]&lt;/div&gt;\" id=\"{1}\">", softwareSystem.getName(), softwareSystem.getId());
-        // writer.writeLine(line);
-        // writer.indent();
-        // writer.writeLine("<mxCell style=\"rounded=1;fontSize=11;whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=#666666;fontColor=#333333;labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 4;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
-        // writer.indent();
-        // line = String.format("<mxGeometry x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" as=\"geometry\" />", elementView.getX(), elementView.getY(), elementStyle.getWidth(), elementStyle.getHeight());
-        // writer.writeLine(line);
-        // writer.outdent();
-        // writer.writeLine("</mxCell>");
-        // writer.outdent();
-        // writer.writeLine("</object>");
+        SoftwareSystemBoundary softwareSystemBoundary = new SoftwareSystemBoundary(softwareSystem);
+        softwareSystemBoundaries.add(softwareSystemBoundary);
     }
 
     @Override
@@ -316,37 +507,8 @@ public class MxExporter extends AbstractDiagramExporter {
 
     @Override
     protected void startContainerBoundary(ModelView view, Container container, IndentingWriter writer) {
-        String color = "#444444";
-        if (view instanceof ComponentView) {
-            if (container.equals(((ComponentView)view).getContainer())) {
-                color = "#444444";
-            } else {
-                color = "#cccccc";
-            }
-        } else if (view instanceof DynamicView) {
-            if (container.equals(((DynamicView)view).getElement())) {
-                color = "#444444";
-            } else {
-                color = "#cccccc";
-            }
-        }
-
-        // ElementStyle elementStyle = view.getViewSet().getConfiguration().getStyles().findElementStyle(container);
-        // ElementView elementView = view.getElementView(container);
-
-        // StringBuilder sb = new StringBuilder();
-        // sb.append("<object placeholders=\"1\" c4Name=\"").append(container.getName());
-        // sb.append(" c4Type=\"ContainerScopeBoundary\" c4Application=\"Container\" label=\"&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;&lt;div style=&quot;text-align: left&quot;&gt;%c4Name%&lt;/div&gt;&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;text-align: left&quot;&gt;[%c4Application%]&lt;/div&gt;\" id=\"").append(container.getId());
-        // writer.writeLine(sb.toString());
-        // writer.indent();
-        // writer.writeLine("<mxCell style=\"rounded=1;fontSize=11;whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=#666666;fontColor=#333333;labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 4;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
-        // writer.indent();
-        // String line = String.format("<mxGeometry x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" as=\"geometry\" />", elementView.getX(), elementView.getY(), elementStyle.getWidth(), elementStyle.getHeight());
-        // writer.writeLine(line);
-        // writer.outdent();
-        // writer.writeLine("</mxCell>");
-        // writer.outdent();
-        // writer.writeLine("</object>");
+        ContainerBoundary containerBoundary = new ContainerBoundary(container);
+        containerBoundaries.add(containerBoundary);
     }
 
     @Override
@@ -355,30 +517,132 @@ public class MxExporter extends AbstractDiagramExporter {
 
     @Override
     protected void startDeploymentNodeBoundary(DeploymentView view, DeploymentNode deploymentNode, IndentingWriter writer) {
-        // ElementStyle elementStyle = view.getViewSet().getConfiguration().getStyles().findElementStyle(deploymentNode);
-        // ElementView elementView = view.getElementView(deploymentNode);
+        DeploymentNodeBoundary newDeploymentNodeBoundary = new DeploymentNodeBoundary(deploymentNode);
+        
+        if(deploymentNodeBoundaryStack.empty() == true) {
+            deploymentNodeBoundaries.add(newDeploymentNodeBoundary);
+        } else {
+            DeploymentNodeBoundary deploymentNodeBoundary = deploymentNodeBoundaryStack.peek();
+            deploymentNodeBoundary.deploymentNodes.add(newDeploymentNodeBoundary);
+        }
 
-        // String line = MessageFormat.format("<object placeholders=\"1\" c4Name=\"{0}\" c4Type=\"DeploymentNodeScopeBoundary\" c4Application=\"DeploymentNode\" label=\"&lt;font style=&quot;font-size: 16px&quot;&gt;&lt;b&gt;&lt;div style=&quot;text-align: left&quot;&gt;%c4Name%&lt;/div&gt;&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;text-align: left&quot;&gt;[%c4Application%]&lt;/div&gt;\" id=\"{1}\">", deploymentNode.getName(), deploymentNode.getId());
-        // writer.writeLine(line);
-        // writer.indent();
-        // writer.writeLine("<mxCell style=\"rounded=1;fontSize=11;whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=#666666;fontColor=#333333;labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 4;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
-        // writer.indent();
-        // line = String.format("<mxGeometry x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" as=\"geometry\" />", elementView.getX(), elementView.getY(), elementStyle.getWidth(), elementStyle.getHeight());
-        // writer.writeLine(line);
-        // writer.outdent();
-        // writer.writeLine("</mxCell>");
-        // writer.outdent();
-        // writer.writeLine("</object>");
+        deploymentNodeBoundaryStack.push(newDeploymentNodeBoundary);
     }
 
     @Override
     protected void endDeploymentNodeBoundary(ModelView view, IndentingWriter writer) {
+        deploymentNodeBoundaryStack.pop();
+    }
+
+    private void writeDeploymentNodeBoundary(DeploymentNodeBoundary deploymentNodeBoundary, ModelView view, IndentingWriter writer) {
+        for(DeploymentNodeBoundary dnb : deploymentNodeBoundary.deploymentNodes) {
+            writeDeploymentNodeBoundary(dnb, view, writer);
+        }
+
+        String color = "#444444";
+        String strokeColor = "#666666";
+        int strokeWidth = 4;
+        int fontSize = BOUNDARY_FONT_SIZE;
+        int metadataFontSize = BOUNDARYMETA_FONT_SIZE;
+
+        ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(deploymentNodeBoundary.deploymentNode);
+
+        if(es != null) {
+            if(!StringUtils.isNullOrEmpty(es.getColor())) {
+                color = es.getColor();
+            }
+            if(!StringUtils.isNullOrEmpty(es.getStroke())) {
+                strokeColor = es.getStroke();
+            } 
+            if(es.getStrokeWidth() != null) {
+                strokeWidth = es.getStrokeWidth();
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("<object placeholders=\"1\" c4Name=\"").append(deploymentNodeBoundary.deploymentNode.getName());
+        sb.append("\" c4Type=\"DeploymentNodeScopeBoundary\" c4Application=\"DeploymentNode\" label=\"&lt;font style=&quot;font-size: ").append(fontSize);
+        sb.append("px&quot;&gt;&lt;b&gt;&lt;div style=&quot;text-align: left&quot;&gt;%c4Name%&lt;/div&gt;&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;text-align: left&quot;&gt;[%c4Application%]&lt;/div&gt;\" id=\"")
+                .append(deploymentNodeBoundary.deploymentNode.getId());
+        sb.append("\">");
+        writer.writeLine(sb.toString());
+        sb.setLength(0);
+        writer.indent();
+        sb.append("<mxCell style=\"rounded=1;fontSize=").append(metadataFontSize);
+        sb.append(";whiteSpace=wrap;html=1;arcSize=20;fillColor=none;strokeColor=").append(strokeColor);
+        sb.append(";fontColor=").append(color);
+        sb.append(";strokeWidth=").append(strokeWidth);
+        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        writer.writeLine(sb.toString());
+        sb.setLength(0);        
+        writer.indent();
+        sb.append("<mxGeometry x=\"").append(deploymentNodeBoundary.minX);
+        sb.append("\" y=\"").append(deploymentNodeBoundary.minY);
+        sb.append("\" width=\"").append(deploymentNodeBoundary.maxX - deploymentNodeBoundary.minX);
+        sb.append("\" height=\"").append(deploymentNodeBoundary.maxY - deploymentNodeBoundary.minY);
+        sb.append("\" as=\"geometry\" />");
+        writer.writeLine(sb.toString());
+        writer.outdent();
+        writer.writeLine("</mxCell>");
+        writer.outdent();
+        writer.writeLine("</object>");
+    }
+
+    private void updateDeploymentNodeBoundary(DeploymentNodeBoundary deploymentNodeBoundary, ModelView view) {
+        for(DeploymentNodeBoundary dnb : deploymentNodeBoundary.deploymentNodes) {
+            updateDeploymentNodeBoundary(dnb, view);
+            deploymentNodeBoundary.minX = Math.min(deploymentNodeBoundary.minX, dnb.minX);
+            deploymentNodeBoundary.minY = Math.min(deploymentNodeBoundary.minY, dnb.minY);
+            deploymentNodeBoundary.maxX = Math.max(deploymentNodeBoundary.maxX, dnb.maxX);
+            deploymentNodeBoundary.maxY = Math.max(deploymentNodeBoundary.maxY, dnb.maxY);
+        }
+        for(Element e : deploymentNodeBoundary.elements) {
+            ElementView ev = view.getElementView(e);
+            if (e instanceof StaticStructureElementInstance) {
+                StaticStructureElementInstance elementInstance = (StaticStructureElementInstance)e;
+                e = elementInstance.getElement();
+            }
+            ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(e);
+            deploymentNodeBoundary.minX = Math.min(deploymentNodeBoundary.minX, ev.getX());
+            deploymentNodeBoundary.minY = Math.min(deploymentNodeBoundary.minY, ev.getY());
+            deploymentNodeBoundary.maxX = Math.max(deploymentNodeBoundary.maxX, ev.getX() + es.getWidth());
+            int height = (es.getShape() == Shape.Hexagon) ? (int) (HEXAGON_RATIO * es.getWidth()) : es.getHeight();
+            deploymentNodeBoundary.maxY = Math.max(deploymentNodeBoundary.maxY, ev.getY() + height);
+        }
+        for(GroupBoundary gb : deploymentNodeBoundary.groupBoundaries) {
+            deploymentNodeBoundary.minX = Math.min(deploymentNodeBoundary.minX, gb.minX);
+            deploymentNodeBoundary.minY = Math.min(deploymentNodeBoundary.minY, gb.minY);
+            deploymentNodeBoundary.maxX = Math.max(deploymentNodeBoundary.maxX, gb.maxX);
+            deploymentNodeBoundary.maxY = Math.max(deploymentNodeBoundary.maxY, gb.maxY);
+        }
+
+        int fontSize = BOUNDARY_FONT_SIZE;
+        int metadataFontSize = BOUNDARYMETA_FONT_SIZE;
+
+        deploymentNodeBoundary.minX -= clusterInternalMargin;
+        deploymentNodeBoundary.minY -= clusterInternalMargin;
+        deploymentNodeBoundary.maxX += clusterInternalMargin;
+        deploymentNodeBoundary.maxY += clusterInternalMargin;
+        deploymentNodeBoundary.maxY += C4Utils.getFontHeight(DEFAULT_FONT, fontSize);
+        deploymentNodeBoundary.maxY += C4Utils.getFontHeight(DEFAULT_FONT, metadataFontSize);
     }
 
     @Override
     protected void writeElement(ModelView view, Element element, IndentingWriter writer) {
+        SoftwareSystemBoundary softwareSystemBoundary = softwareSystemBoundaries.peekLast();
+        if(softwareSystemBoundary != null) {
+            softwareSystemBoundary.elements.add(element);
+        }
+        ContainerBoundary containerBoundary = containerBoundaries.peekLast();
+        if(containerBoundary != null) {
+            containerBoundary.elements.add(element);
+        }
+        if(deploymentNodeBoundaryStack.empty() == false) {
+            DeploymentNodeBoundary deploymentNodeBoundary = deploymentNodeBoundaryStack.peek();
+            deploymentNodeBoundary.elements.add(element);
+        }
 
-        ElementView elementView = view.getElementView(element);
+        ElementView ev = view.getElementView(element);
         String id = element.getId();
 
         if (element instanceof StaticStructureElementInstance) {
@@ -386,14 +650,14 @@ public class MxExporter extends AbstractDiagramExporter {
             element = elementInstance.getElement();
         }
 
-        ElementStyle elementStyle = view.getViewSet().getConfiguration().getStyles().findElementStyle(element);
+        ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(element);
 
-        int nameFontSize = elementStyle.getFontSize() + 10;
-        int metadataFontSize = elementStyle.getFontSize() - 5;
-        int descriptionFontSize = elementStyle.getFontSize();
-        String color = elementStyle.getColor();
-        String stroke = elementStyle.getStroke();
-        String background = elementStyle.getBackground();
+        int nameFontSize = es.getFontSize() + 10;
+        int metadataFontSize = es.getFontSize() - 5;
+        int descriptionFontSize = es.getFontSize();
+        String color = es.getColor();
+        String stroke = es.getStroke();
+        String background = es.getBackground();
 
         Shape shape = view.getViewSet().getConfiguration().getStyles().findElementStyle(element).getShape();
         String name = element.getName();
@@ -402,16 +666,17 @@ public class MxExporter extends AbstractDiagramExporter {
         description = description.replace("&", "&amp;");
 
         if(element instanceof Person) {
-            person(writer,name,description,id,nameFontSize,metadataFontSize,descriptionFontSize,color,stroke,background,elementView.getX(), elementView.getY(), elementStyle.getWidth(), elementStyle.getHeight());
+            person(writer, name, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, ev.getX(), ev.getY(), es.getWidth(), es.getHeight());
         } else if(element instanceof Container) {
             Container container = ((Container)element);
-            elementShape(shape, writer, "Container", name, container.getTechnology(), description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, elementView.getX(), elementView.getY(), elementStyle.getWidth(), elementStyle.getHeight());
+            String technolodgy = container.getTechnology() == null ? "" : container.getTechnology().replace("&", "&amp;");
+            elementShape(shape, writer, "Container", name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, ev.getX(), ev.getY(), es.getWidth(), es.getHeight());
         } else if(element instanceof SoftwareSystem) {
-            elementShape(shape, writer, "Software System", name, null, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, elementView.getX(), elementView.getY(), elementStyle.getWidth(), elementStyle.getHeight());
+            elementShape(shape, writer, "Software System", name, null, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, ev.getX(), ev.getY(), es.getWidth(), es.getHeight());
         } else if(element instanceof Component) {
             Component component = ((Component)element);
-            String technolodgy = component.getTechnology() == null ? "" : component.getTechnology();
-            elementShape(shape, writer, "Component", name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, elementView.getX(), elementView.getY(), elementStyle.getWidth(), elementStyle.getHeight());
+            String technolodgy = component.getTechnology() == null ? "" : component.getTechnology().replace("&", "&amp;");
+            elementShape(shape, writer, "Component", name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, ev.getX(), ev.getY(), es.getWidth(), es.getHeight());
         }
     }
 
@@ -426,7 +691,7 @@ public class MxExporter extends AbstractDiagramExporter {
             case Pipe: pipe(writer, type, name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, x, y, width, height);
             break;
             case WebBrowser: webBrowser(writer, type, name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, x, y, width, height);
-            break;                                           
+            break;
             case RoundedBox:
             case Circle:
             case Ellipse:
@@ -517,7 +782,6 @@ public class MxExporter extends AbstractDiagramExporter {
     }
 
     private void roundedBox(IndentingWriter writer, String type, String name, String technolodgy, String description, String id, int nameFontSize, int metadataFontSize, int descriptionFontSize, String color, String stroke, String background, int x, int y, int width, int height) {
-        logger.info("aaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         StringBuilder sb = new StringBuilder();
         sb.append("<object placeholders=\"1\" c4Name=\"").append(name);
         sb.append("\" c4Type=\"").append(type);
@@ -724,11 +988,9 @@ public class MxExporter extends AbstractDiagramExporter {
         Element destination;
 
         RelationshipStyle relationshipStyle = view.getViewSet().getConfiguration().getStyles().findRelationshipStyle(relationshipView.getRelationship());
-        //relationshipStyle.setWidth(400);
         String color = relationshipStyle.getColor();
-        //String strock = relationshipStyle.
+        int fontSize = relationshipStyle.getFontSize();
         int descriptionFontSize = relationshipStyle.getFontSize();
-        int metadataFontSize = relationshipStyle.getFontSize() - 5;
 
         String description = relationshipView.getDescription();
         if (StringUtils.isNullOrEmpty(description)) {
@@ -742,44 +1004,28 @@ public class MxExporter extends AbstractDiagramExporter {
         if (StringUtils.isNullOrEmpty(description)) {
             description = "";
         } else {
-//            description = breakText(relationshipStyle.getWidth(), descriptionFontSize, description);
-//            description = String.format("<font point-size=\"%s\">%s</font>", descriptionFontSize, description);
+            description = description.replace("&", "&amp;");
         }
 
         String technology = relationshipView.getRelationship().getTechnology();
         if (StringUtils.isNullOrEmpty(technology)) {
             technology = "";
         } else {
-            //technology = String.format("<br /><font point-size=\"%s\">[%s]</font>", metadataFontSize, technology);
+            technology = technology.replace("&", "&amp;");
         }
-
-        String clusterConfig = "";
 
         if (relationshipView.getRelationship().getSource() instanceof DeploymentNode || relationshipView.getRelationship().getDestination() instanceof DeploymentNode) {
             source = relationshipView.getRelationship().getSource();
             if (source instanceof DeploymentNode) {
                 source = findElementInside((DeploymentNode)source, view);
             }
-
             destination = relationshipView.getRelationship().getDestination();
             if (destination instanceof DeploymentNode) {
                 destination = findElementInside((DeploymentNode)destination, view);
             }
-
-            if (source != null && destination != null) {
-
-                if (relationshipView.getRelationship().getSource() instanceof DeploymentNode) {
-                    clusterConfig += ",ltail=cluster_" + relationshipView.getRelationship().getSource().getId();
-                }
-
-                if (relationshipView.getRelationship().getDestination() instanceof DeploymentNode) {
-                    clusterConfig += ",lhead=cluster_" + relationshipView.getRelationship().getDestination().getId();
-                }
-            }
         } else {
             source = relationshipView.getRelationship().getSource();
             destination = relationshipView.getRelationship().getDestination();
-
             if (relationshipView.isResponse() != null && relationshipView.isResponse()) {
                 source = relationshipView.getRelationship().getDestination();
                 destination = relationshipView.getRelationship().getSource();
@@ -795,12 +1041,8 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.append("\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);
-
-        //String line = MessageFormat.format("<object placeholders=\"1\" c4Type=\"Relationship\" c4Technology=\"{0}\" c4Description=\"{1}\" label=\"&lt;div style=&quot;text-align: left&quot;&gt;&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;&lt;div style=&quot;text-align: center&quot;&gt;[%c4Technology%]&lt;/div&gt;&lt;/div&gt;\" id=\"{2}\">", technology, description, relationshipView.getId());
-        //writer.writeLine(line);
         writer.indent();
-//      line = MessageFormat.format("<mxCell style=\"endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;edgeStyle=orthogonalEdgeStyle;exitX=0.25;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;\" edge=\"1\" parent=\"1\" source=\"{0}\" target=\"{1}\">", source.getId(), destination.getId());
-        sb.append("<mxCell style=\"whiteSpace=wrap;endArrow=block;html=1;fontSize=").append(relationshipStyle.getFontSize());
+        sb.append("<mxCell style=\"whiteSpace=wrap;endArrow=block;html=1;fontSize=").append(descriptionFontSize);
         sb.append(";strokeWidth=").append(relationshipStyle.getThickness());
         sb.append(";fontColor=").append(color);
         if(relationshipStyle.getStyle() != LineStyle.Solid) {
@@ -814,9 +1056,6 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.append(";elbow=vertical;metaEdit=1;endSize=20;startSize=20;jumpStyle=arc;jumpSize=16;rounded=0;\" edge=\"1\" parent=\"1\" source=\"").append(source.getId());
         sb.append("\" target=\"").append(destination.getId());
         sb.append("\">");
-
-        //line = MessageFormat.format("<mxCell style=\"endArrow=blockThin;html=1;fontSize=10;fontColor=#404040;strokeWidth=1;endFill=1;strokeColor=#828282;elbow=vertical;metaEdit=1;endSize=14;startSize=14;jumpStyle=arc;jumpSize=16;rounded=0;\" edge=\"1\" parent=\"1\" source=\"{0}\" target=\"{1}\">", source.getId(), destination.getId());
-        //writer.writeLine(line);
         writer.writeLine(sb.toString());
         sb.setLength(0);
         writer.indent();
@@ -838,40 +1077,6 @@ public class MxExporter extends AbstractDiagramExporter {
         writer.writeLine("</mxCell>");
         writer.outdent();
         writer.writeLine("</object>");
-    }
-
-    private String escape(String s) {
-        if (StringUtils.isNullOrEmpty(s)) {
-            return s;
-        } else {
-            return s.replaceAll("\"", "\\\\\"");
-        }
-    }
-
-    private String shapeOf(ModelView view, Element element) {
-        if (element instanceof DeploymentNode) {
-            return "node";
-        }
-
-        Shape shape = view.getViewSet().getConfiguration().getStyles().findElementStyle(element).getShape();
-        switch(shape) {
-            case Circle:
-                return "circle";
-            case Component:
-                return "component";
-            case Cylinder:
-                return "cylinder";
-            case Ellipse:
-                return "ellipse";
-            case Folder:
-                return "folder";
-            case Hexagon:
-                return "hexagon";
-            case Diamond:
-                return "diamond";
-            default:
-                return "rect";
-        }
     }
 
     private Element findElementInside(DeploymentNode deploymentNode, ModelView view) {

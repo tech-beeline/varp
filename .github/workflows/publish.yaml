@@ -1,0 +1,41 @@
+name: Publish Extension to Marketpalce
+run-name: ${{ github.actor }} is running publish 🚀
+on:
+  workflow_dispatch:
+    branches:
+      - release
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set Java 17.x
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Run install
+        uses: borales/actions-yarn@v4
+        with:
+          dir: ./extension
+          cmd: install
+
+      - name: Build production bundle
+        uses: borales/actions-yarn@v4
+        with:
+          dir: ./extension
+          cmd: package-github
+
+      - name: Publish extension package
+        env:
+          VSCODE_MARKETPLACE_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_TOKEN }}
+        with:
+          dir: ./extension
+        run: npm run vsce -- publish -p $VSCODE_MARKETPLACE_TOKEN

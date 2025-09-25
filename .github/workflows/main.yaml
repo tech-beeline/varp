@@ -1,5 +1,5 @@
 name: Main
-run-name: ${{ github.actor }} is runing build at main branch 🚀
+run-name: ${{ github.actor }} is running build at main branch 🚀
 on:
   push:
     branches:
@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./extension          
+        working-directory: ./extension
     steps:
       - uses: actions/checkout@v4
 

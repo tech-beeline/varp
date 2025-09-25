@@ -1,5 +1,5 @@
 name: Push
-run-name: ${{ github.actor }} is runing build on push event🚀
+run-name: ${{ github.actor }} is running build on push event🚀
 on:
   push:
     branches:
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./extension          
+        working-directory: ./extension
     steps:
       - uses: actions/checkout@v4
 

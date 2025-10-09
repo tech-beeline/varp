@@ -2,7 +2,7 @@
   "name": "c4-varp",
   "displayName": "C4 Architecture As A Code",
   "description": "Extension for working with Architecture As A Code in the C4 model. Includes syntax highlighting, diagram preview, and tools for working with IaaC.",
-  "publisher": "vcomit",
+  "publisher": "vimpelcom",
   "repository": {
     "type": "git",
     "url": "https://github.com/tech-beeline/varp"
@@ -63,6 +63,14 @@
         "shortTitle": "Add",
         "when": "view == architectureCatalogue && viewItem == leaf",
         "icon": "$(add)"
+      },
+      {
+        "command": "c4.diagram.export.svg",
+        "title": "Export to .svg"
+      },
+      {
+        "command": "c4.diagram.export.mx",
+        "title": "Export to .drawio"
       }
     ],
     "menus": {
@@ -71,6 +79,18 @@
           "command": "c4.architectureCatalogue.add",
           "when": "view == architectureCatalogue && viewItem == leaf",
           "group": "inline@1"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "when": "activeWebviewPanelId == structurizrPreview",
+          "command": "c4.diagram.export.svg",
+          "group": "navigation"
+        },
+        {
+          "when": "activeWebviewPanelId == structurizrPreview",
+          "command": "c4.diagram.export.mx",
+          "group": "navigation"
         }
       ]
     },
@@ -96,11 +116,15 @@
     "configuration": {
       "title": "",
       "properties": {
-        "c4.diagram.structurizr.autolayout.url": {
+        "c4.diagram.render": {
           "type": "string",
-          "default": "https://structurizr.com",
+          "enum": [
+            "embedded",
+            "https://structurizr.com"
+          ],
+          "default": "embedded",
           "scope": "application",
-          "description": "Server for diagram preview rendering"
+          "description": "Diagram preview render service"
         },
         "c4.decorations.enabled": {
           "type": "string",
@@ -186,6 +210,7 @@
   ],
   "main": "./dist/extension",
   "devDependencies": {
+    "@hpcc-js/wasm-graphviz": "^1.10.0",
     "@secretlint/secretlint-formatter-sarif": "^10.1.1",
     "@secretlint/secretlint-rule-no-dotenv": "^10.1.1",
     "@secretlint/secretlint-rule-preset-recommend": "^10.1.1",
@@ -220,5 +245,5 @@
     "dependencies": false,
     "yarn": true
   },
-  "packageManager": "yarn@4.9.3"
+  "packageManager": "yarn@4.9.4"
 }

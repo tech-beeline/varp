@@ -14,14 +14,26 @@
     limitations under the License.
 */
 
-package ru.beeatlas.c4.dto;
+package ru.beeatlas.c4.utils;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+/**
+ * The various rank directions used by graphviz.
+ */
+public enum RankDirection {
 
-public record C4UpdateViewDto (String document, String viewKey, String renderer) {
-    private static final Gson GSON = new Gson();
-    public static C4UpdateViewDto fromJson(JsonObject jsonObject) {
-        return GSON.fromJson(jsonObject, C4UpdateViewDto.class);
+    TopBottom("TB"),
+    BottomTop("BT"),
+    LeftRight("LR"),
+    RightLeft("RL");
+
+    private String code;
+
+    RankDirection(String code) {
+        this.code = code;
     }
+
+    public String getCode() {
+        return code;
+    }
+
 }

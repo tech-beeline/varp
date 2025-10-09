@@ -32,6 +32,7 @@ import com.google.inject.AbstractModule;
 import com.google.inject.Guice;
 import com.google.inject.Module;
 
+import ru.beeatlas.c4.dto.CodeLensCommandArgs;
 import ru.beeatlas.c4.helper.C4TestHelper;
 import ru.beeatlas.c4.intercept.InterceptParserAspect;
 import ru.beeatlas.c4.intercept.StructurizrDslParserListener;
@@ -93,7 +94,8 @@ public class C4CodeLenseProviderTest {
 
             assertNotNull(codeLenses.get(0).getCommand().getArguments().get(0));
 
-            assertEquals("AmazonWebServicesDeployment",codeLenses.get(0).getCommand().getArguments().get(1));
+            CodeLensCommandArgs args = (CodeLensCommandArgs)codeLenses.get(0).getCommand().getArguments().get(0);
+            assertEquals("AmazonWebServicesDeployment", args.diagramKey());
 
         } 
         catch (IOException | URISyntaxException e) {

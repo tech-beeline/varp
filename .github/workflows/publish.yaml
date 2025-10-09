@@ -1,11 +1,9 @@
-name: Push
-run-name: ${{ github.actor }} is running build on push event🚀
+name: Publish Extension to Marketpalce
+run-name: ${{ github.actor }} is running publish 🚀
 on:
-  push:
+  workflow_dispatch:
     branches:
-      - '*'
-      - '!main'
-      - '!release'
+      - release
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -37,3 +35,8 @@ jobs:
 
       - name: Build
         run: yarn package-github
+
+      - name: Publish extension package
+        env:
+          VSCODE_MARKETPLACE_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_TOKEN }}
+        run: npm run vsce -- publish -p $VSCODE_MARKETPLACE_TOKEN

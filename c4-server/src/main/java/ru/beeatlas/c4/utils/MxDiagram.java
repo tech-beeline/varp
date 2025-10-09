@@ -14,10 +14,18 @@
     limitations under the License.
 */
 
-type RefreshOptions = {
-  viewKey: string;
-  document: string;
-  svg: string | undefined;
-};
+package ru.beeatlas.c4.utils;
 
-export { RefreshOptions };
+import com.structurizr.export.Diagram;
+import com.structurizr.view.ModelView;
+
+public class MxDiagram  extends Diagram {
+    public MxDiagram(ModelView view, String definition) {
+        super(view, definition);
+    }
+
+    @Override
+    public String getFileExtension() {
+        return "drawio";
+    }    
+}

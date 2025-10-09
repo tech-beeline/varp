@@ -388,6 +388,22 @@ public class Custom {
         return INSTANCE;
     }
 
+    public String loadFrom(String themeLocation, int timeoutInMilliseconds) {
+        try {
+            HttpsURLConnection conn = (HttpsURLConnection) new URL(themeLocation).openConnection();
+            conn.setRequestMethod("GET");
+            if (noTLS) {
+                conn.setHostnameVerifier(allTrustingHostnameVerifier);
+                conn.setSSLSocketFactory(allTrustingTrustManager);
+            }
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
+                return in.lines().collect(Collectors.joining());
+            }
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
     public void processWorkspace(Workspace workspace) {
         String cmdb = workspace.getModel().getProperties().get("workspace_cmdb");
         if(cmdb != null) {

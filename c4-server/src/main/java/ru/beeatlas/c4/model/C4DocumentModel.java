@@ -62,6 +62,7 @@ import com.structurizr.view.SystemContextView;
 import com.structurizr.view.View;
 
 import ru.beeatlas.c4.custom.Custom;
+import ru.beeatlas.c4.dto.CodeLensCommandArgs;
 import ru.beeatlas.c4.generator.C4Generator;
 import ru.beeatlas.c4.provider.C4SemanticTokenProvider;
 import ru.beeatlas.c4.utils.LineToken;
@@ -311,18 +312,6 @@ public class C4DocumentModel {
 				.toList();
 	}
 
-    // private C4SemanticToken createToken(String referenceId, int line) {
-	// 	List<Entry<Integer, C4ObjectWithContext<Element>>> elements = findElementsById(referenceId);
-    //     if(elements.size() == 1) {
-    //         String identifier = elements.get(0).getValue().getIdentifier();
-    //         if(identifier != null) {
-    //             final int startPos = C4Utils.getStartPosition(getLineAt(line), identifier);
-    //             return new C4SemanticToken(line, startPos, identifier.length(), C4SemanticTokenProvider.MODEL_ELEMENT, 0);
-    //         }
-    //     }
-    //     return null;
-    // }
-
     private Optional<C4SemanticToken> createToken(String referenceId, int line) {
 		List<Entry<Integer, C4ObjectWithContext<Element>>> elements = findElementsById(referenceId);
         if(elements.size() == 1) {
@@ -371,15 +360,15 @@ public class C4DocumentModel {
 		elementsById.computeIfAbsent(c4ObjectWithContext.getObject().getId(), k -> new ArrayList<>()).add(c4ObjectWithContext);
 	}
 
-    public void addView(int lineNumber, C4ObjectWithContext<View> view) {
+	public void addView(int lineNumber, C4ObjectWithContext<View> view) {
 		view.getDecorations().forEach(decorations::add);
 		createToken(getIdentifierOfView(view.getObject()), lineNumber - 1).ifPresent(t -> tokens.add(t));
 		viewToLineNumber.put(lineNumber, view);
-		Command commandStructurizr = new Command("$(link-external) Show as Structurizr Diagram",
-				"c4.show.diagram");
-		commandStructurizr.setArguments(Arrays.asList(view.getObject().getKey()));
-		codeLenses.add(new CodeLens(view.getCodeLensRange(), commandStructurizr, null));
-    }
+		Command command = new Command("$(link-external) Show as Structurizr Diagram", "c4.show.diagram");
+		CodeLensCommandArgs args = new CodeLensCommandArgs(null, view.getObject().getKey(), null);
+		command.setArguments(Arrays.asList(args));
+		codeLenses.add(new CodeLens(view.getCodeLensRange(), command, null));
+	}
 
     public void addColor(int lineNumber, String line) {
 		int startPos = line.indexOf(COLOR_START_TOKEN);
@@ -411,69 +400,33 @@ public class C4DocumentModel {
 	}
 
 	public List<CodeLens> calcCodeLenses() {
+		Workspace workspace = getWorkspace();
 
-		if (!isValid() || getWorkspace() == null) {
+		if (!isValid() || workspace == null) {
 			return Collections.emptyList();
 		}
 
+		if(!encodedWorkspace.isEmpty()) {
+			return codeLenses;			
+		}
+
 		try {
-
-			if(encodedWorkspace.isEmpty()) {
-				encodedWorkspace = C4Generator.generateEncodedWorkspace(getWorkspace());
-				codeLenses.forEach(cl -> {
-					Command command = cl.getCommand();
-					List<Object> arguments = command.getArguments();
-					command.setArguments(Stream.concat(Stream.of(encodedWorkspace), arguments.stream()).toList());
-				});
-			}
-
-			return codeLenses;
-
-
-/*			
-			Stream<CodeLens> s0 = scopes
-			.stream()
-			.filter(s -> s.name().equals("DeploymentEnvironmentDslContext"))
-			.map(s -> {
-				int lineNumber = s.start();
-				String line = getLineAt(lineNumber - 1);
-				LineTokenizer tokenizer = new LineTokenizer();
-				List<LineToken> tokens = tokenizer.tokenize(line);
-				if(tokens.size() == 3) {
-					Command commandStructurizr = new Command("$(link-external) Export Environment", "c4.export.deployment");
-					String name = C4Utils.trimStringByString(tokens.get(1).token(), "\"");
-					commandStructurizr.setArguments(Arrays.asList(workspace, name));
-					int pos = C4Utils.findFirstNonWhitespace(line, 0, true);
-        			Range range = new Range(new Position(lineNumber - 1, pos), new Position(lineNumber - 1, pos));
-					return new CodeLens(range, commandStructurizr, null);
-				} else {
-					return null;
+			encodedWorkspace = C4Generator.generateEncodedWorkspace(workspace);
+			codeLenses.forEach(cl -> {
+				Command command = cl.getCommand();
+				CodeLensCommandArgs args = (CodeLensCommandArgs)command.getArguments().get(0);
+				String dot = args.diagramAsDot();
+				if(dot == null) {
+					View view = workspace.getViews().getViewWithKey(args.diagramKey());
+					if (view != null && view instanceof ModelView) {
+						ModelView modelView = (ModelView) view;
+						dot = C4Utils.export2Dot(modelView);
+					}
 				}
-			}).filter(Objects::nonNull);
-
-			//return s0.toList();
-
-			Stream<CodeLens> s1 = viewToLineNumber.entrySet().stream().map(e -> {
-				Command commandStructurizr = new Command("$(link-external) Show as Structurizr Diagram",
-						"c4.show.diagram");
-				commandStructurizr.setArguments(Arrays.asList(workspace, e.getValue().getObject().getKey()));
-				CodeLens cl0 = new CodeLens(e.getValue().getCodeLensRange(), commandStructurizr, null);
-				return Arrays.asList(cl0);
-				//CodeLens cl1 = (custom == null) ? null : custom.getSequenceCodeLens(e.getValue());
-				//return (cl1 != null) ? Arrays.asList(cl0, cl1) : Arrays.asList(cl0);
-			}).flatMap(Collection::stream);
-
-			return Stream.concat(s0, s1).toList();
-
-
-			// return viewToLineNumber.entrySet().parallelStream().map(e -> {
-			// 	Command commandStructurizr = new Command("$(link-external) Show as Structurizr Diagram", "c4.show.diagram");
-			// 	commandStructurizr.setArguments(Arrays.asList(workspace, e.getValue().getObject().getKey()));
-			// 	CodeLens cl0 = new CodeLens(e.getValue().getCodeLensRange(), commandStructurizr, null);
-			// 	CodeLens cl1 = (custom == null) ? null : custom.getSequenceCodeLens(e.getValue());
-			// 	return (cl1 != null) ? Arrays.asList(cl0, cl1) : Arrays.asList(cl0);
-			// }).flatMap(Collection::stream).toList();
-*/			
+				args = new CodeLensCommandArgs(encodedWorkspace, args.diagramKey(), dot);
+				command.setArguments(Arrays.asList(args));
+			});
+			return codeLenses;
 		} catch (Exception e) {
 			return Collections.emptyList();
 		}

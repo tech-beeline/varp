@@ -50,6 +50,9 @@ import com.structurizr.model.SoftwareSystem;
 import com.structurizr.model.SoftwareSystemInstance;
 import com.structurizr.view.RelationshipView;
 import com.structurizr.view.SystemContextView;
+
+import ru.beeatlas.c4.custom.Custom;
+
 import com.structurizr.view.ComponentView;
 import com.structurizr.view.ContainerView;
 import com.structurizr.view.DeploymentView;
@@ -306,6 +309,18 @@ public class InterceptParserAspect {
             getPath(joinPoint.getArgs()[1]).ifPresent(path -> parserListener.onInclude(referencedFile, path));
         });
     }
+
+    @Around("execution(* com.structurizr.view.ThemeUtils.loadFrom(..))")
+    public Object interceptloadFromAround(ProceedingJoinPoint joinPoint) {
+        Object[] args = joinPoint.getArgs();        
+        try {
+            return (String) joinPoint.proceed(args);
+        } catch (Throwable e) {
+            String themeLocation = (String)args[0];
+            int timeoutInMilliseconds = (int)args[1];
+            return Custom.getInstance().loadFrom(themeLocation, timeoutInMilliseconds);
+        }
+    }    
 
     private Optional<File> getFile(Object contextObj) {
         try {

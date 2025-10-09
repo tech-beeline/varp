@@ -56,11 +56,12 @@ class StructurizrPreviewService {
     if (this.currentDiagram && this.currentDocument === savedDoc) {
       const refreshOptions: RefreshOptions = {
         viewKey: this.currentDiagram,
-        document: savedDoc.uri.path
+        document: savedDoc.uri.path,
+        svg: undefined
       };
       commands.executeCommand("c4.refresh", refreshOptions).then((callback) => {
         const result = callback as CommandResultCode;
-        this.updateWebView(result.message);
+        this.updateWebView(Buffer.from(result.message, 'utf8').toString('base64'));
       });
     }
   }

@@ -42,4 +42,4 @@ jobs:
       - name: Publish extension package
         env:
           VSCODE_MARKETPLACE_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_TOKEN }}
-        run: vsce publish --yarn -p $VSCODE_MARKETPLACE_TOKEN
+        run: yarn vsce publish --pat $VSCODE_MARKETPLACE_TOKEN

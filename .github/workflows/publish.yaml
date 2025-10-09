@@ -2,9 +2,6 @@ name: Publish Extension to Marketpalce
 run-name: ${{ github.actor }} is running publish 🚀
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - release
 jobs:
   build:
     runs-on: ubuntu-latest

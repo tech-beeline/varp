@@ -1,5 +1,5 @@
 # C4 DSL Model Extension for Visual Studio Code
-[![Main](https://github.com/tech-beeline/varp/actions/workflows/main.yaml/badge.svg)](https://github.com/tech-beeline/varp/actions/workflows/main.yaml)[![Publish Extension to Marketpalce](https://github.com/tech-beeline/varp/actions/workflows/publish.yaml/badge.svg)](https://github.com/tech-beeline/varp/actions/workflows/publish.yaml)
+[![Main](https://github.com/tech-beeline/varp/actions/workflows/main.yaml/badge.svg)](https://github.com/tech-beeline/varp/actions/workflows/main.yaml)
 ## Overview
 
 This Visual Studio Code extension enables software architecture modeling using the [Structurizr DSL](https://github.com/structurizr/dsl). The Structurizr DSL implements the "diagrams as code" approach ([learn more](https://docs.structurizr.com/)) and provides a textual representation of the [C4 model](https://c4model.com/).

@@ -2,8 +2,6 @@ name: Publish Extension to Marketpalce
 run-name: ${{ github.actor }} is running publish 🚀
 on:
   workflow_dispatch:
-    branches:
-      - release
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -36,7 +34,10 @@ jobs:
       - name: Build
         run: yarn package-github
 
+      - name: Install vsce
+        run: yarn dlx @yarnpkg/sdks vscode
+
       - name: Publish extension package
         env:
           VSCODE_MARKETPLACE_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_TOKEN }}
-        run: npm run vsce -- publish -p $VSCODE_MARKETPLACE_TOKEN
+        run: yarn vsce publish --pat $VSCODE_MARKETPLACE_TOKEN

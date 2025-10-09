@@ -1,11 +1,9 @@
-name: Push
-run-name: ${{ github.actor }} is running build on push event🚀
+name: Main
+run-name: ${{ github.actor }} is running build at main branch 🚀
 on:
   push:
     branches:
-      - '*'
-      - '!main'
-      - '!release'
+      - main
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -37,3 +35,9 @@ jobs:
 
       - name: Build
         run: yarn package-github
+
+      - uses: actions/upload-artifact@v4
+        with:
+          compression-level: 0
+          path: ${{ github.workspace }}/extension/*.vsix
+          name: extension

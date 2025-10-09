@@ -61,6 +61,7 @@ import com.google.gson.JsonObject;
 import com.google.inject.AbstractModule;
 import com.google.inject.Guice;
 import com.google.inject.Module;
+import com.structurizr.Workspace;
 import com.structurizr.model.Element;
 
 import ru.beeatlas.c4.custom.Custom;
@@ -72,8 +73,6 @@ import ru.beeatlas.c4.provider.C4CompletionProvider;
 import ru.beeatlas.c4.provider.C4DefinitionProvider;
 import ru.beeatlas.c4.provider.C4FormatterProvider;
 import ru.beeatlas.c4.provider.C4HoverProvider;
-import ru.beeatlas.c4.dto.C4UpdateViewDto;
-import ru.beeatlas.c4.generator.C4Generator;
 import ru.beeatlas.c4.intercept.InterceptParserAspect;
 import ru.beeatlas.c4.model.C4DocumentManager;
 
@@ -320,15 +319,15 @@ public class C4TextDocumentService implements TextDocumentService {
 		}
 	}
 
-	public String getUpdatedView(C4UpdateViewDto updateViewParams) {
+	public Workspace getWorkspace(String document) {
 		try {
-			TextDocumentIdentifier documentId = new TextDocumentIdentifier(new File(updateViewParams.document()).toURI().toURL().toString());
+			TextDocumentIdentifier documentId = new TextDocumentIdentifier(new File(document).toURI().toURL().toString());
 			C4DocumentModel model = getDocument(documentId);
-			return model.isValid() ? C4Generator.generateEncodedWorkspace(model.getWorkspace()) : null;
+			return model.isValid() ? model.getWorkspace() : null;
 		} catch (Exception e) {
 			return null;
 		}
-	}
+	}	
 
 	@Override
 	public void didOpen(DidOpenTextDocumentParams params) {

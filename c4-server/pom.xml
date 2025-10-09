@@ -47,7 +47,13 @@
         <groupId>com.structurizr</groupId>
         <artifactId>structurizr-dsl</artifactId>
         <version>3.2.1</version>
-    </dependency>  
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/com.structurizr/structurizr-export -->
+    <dependency>
+        <groupId>com.structurizr</groupId>
+        <artifactId>structurizr-export</artifactId>
+        <version>3.2.1</version>
+    </dependency>
     <!-- https://mvnrepository.com/artifact/org.aspectj/aspectjrt -->
     <dependency>
         <groupId>org.aspectj</groupId>
@@ -130,6 +136,10 @@
                 <groupId>com.structurizr</groupId>
                 <artifactId>structurizr-dsl</artifactId>
               </weaveDependency>
+              <weaveDependency>
+                <groupId>com.structurizr</groupId>
+                <artifactId>structurizr-client</artifactId>
+              </weaveDependency>           
             </weaveDependencies>                    
           </configuration>
           <executions>

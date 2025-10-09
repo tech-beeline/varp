@@ -16,16 +16,23 @@
 
 package ru.beeatlas.c4.utils;
 
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import com.structurizr.export.Diagram;
+import com.structurizr.view.AutomaticLayout;
 import com.structurizr.view.ComponentView;
 import com.structurizr.view.ContainerView;
 import com.structurizr.view.DeploymentView;
@@ -129,6 +136,34 @@ public class C4Utils {
         }
     
         return text.substring(beginIndex, endIndex);
-    }      
+    }
+
+    public static String export2Dot(ModelView modelView) {
+        AutomaticLayout automaticLayout = modelView.getAutomaticLayout();
+        DOTExporter exporter = (automaticLayout == null)
+                ? new DOTExporter(RankDirection.TopBottom, 300, 300)
+                : new DOTExporter(
+                        RankDirection.valueOf(automaticLayout.getRankDirection().name()),
+                        automaticLayout.getRankSeparation(),
+                        automaticLayout.getNodeSeparation());
+        exporter.setLocale(Locale.US);
+        Diagram diagram = exporter.export(modelView);
+        return diagram.getDefinition();
+    }
+
+    public static String export2Mx(ModelView modelView) {
+        MxExporter exporter = new MxExporter();
+        Diagram diagram = exporter.export(modelView);
+        return diagram.getDefinition();
+    }
+
+    public static int getFontHeight(String fontName, int fontSize) {
+        BufferedImage bufferedImage = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = bufferedImage.createGraphics();
+        Font font = new Font(fontName, Font.PLAIN, fontSize);
+        graphics.setFont(font);
+        FontMetrics metrics = graphics.getFontMetrics();
+        return metrics.getHeight();
+    }
 
 }

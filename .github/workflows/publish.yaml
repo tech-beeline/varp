@@ -36,7 +36,10 @@ jobs:
       - name: Build
         run: yarn package-github
 
+      - name: Install vsce
+        run: yarn global add vsce
+
       - name: Publish extension package
         env:
           VSCODE_MARKETPLACE_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_TOKEN }}
-        run: npm run vsce -- publish -p $VSCODE_MARKETPLACE_TOKEN
+        run: vsce publish --yarn -p $VSCODE_MARKETPLACE_TOKEN

@@ -37,7 +37,7 @@ jobs:
         run: yarn package-github
 
       - name: Install vsce
-        run: yarn global add vsce
+        run: yarn dlx @yarnpkg/sdks vscode
 
       - name: Publish extension package
         env:

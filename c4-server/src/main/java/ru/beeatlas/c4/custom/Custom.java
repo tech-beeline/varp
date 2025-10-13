@@ -927,7 +927,6 @@ public class Custom {
                 Command commandStructurizr = new Command("$(link-external) Insert SLA", "c4.insert.sla");
                 CodeLensCommandArgs args = new CodeLensCommandArgs(null, null, null, null, apiUrl, lastLine, startLine);
                 commandStructurizr.setArguments(Arrays.asList(args));
-                //commandStructurizr.setArguments(Arrays.asList(apiUrl, lastLine, startLine));
                 String line = model.getLineAt(lineNumber - 1);
                 int pos = C4Utils.findFirstNonWhitespace(line, 0, true);
 

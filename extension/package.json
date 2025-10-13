@@ -1,5 +1,5 @@
 {
-  "name": "c4-varp",
+  "name": "varp",
   "displayName": "C4 Architecture As A Code",
   "description": "Extension for working with Architecture As A Code in the C4 model. Includes syntax highlighting, diagram preview, and tools for working with IaaC.",
   "publisher": "vimpelcom",

@@ -31,7 +31,7 @@ export class PatternProvider implements vscode.TreeDataProvider<Pattern> {
 	constructor(context: vscode.ExtensionContext) {
 		const view = vscode.window.createTreeView('ArchitectureAsACodeView', { treeDataProvider: this, showCollapseAll: true, canSelectMany: true });
 		context.subscriptions.push(view);
-		this.uri = Uri.file(context.asAbsolutePath('patterns.json'));
+		this.uri = Uri.file(context.asAbsolutePath('snippets.json'));
 	}
 
 	getTreeItem(element: Pattern): vscode.TreeItem {

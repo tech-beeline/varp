@@ -28,6 +28,7 @@ import { HttpClient } from 'typed-rest-client/HttpClient';
 import { IRequestOptions } from "typed-rest-client/Interfaces";
 import { BEELINE_API_URL, NOTLS } from "../config";
 import { generateHmac } from "./hmac";
+import { CodeLensCommandArgs } from "../types/CodeLensCommandArgs";
 
 const CONF_VEGA_TOKEN = "c4.vega.token";
 
@@ -41,7 +42,7 @@ class Detail {
 
 export function c4ExportDeployment() {
 
-    commands.registerCommand("c4.export.deployment", async (...args: string[]) => {
+    commands.registerCommand("c4.export.deployment", async (args : CodeLensCommandArgs) => {
 
     const vegaToken = workspace.getConfiguration().get(CONF_VEGA_TOKEN) as string;
 
@@ -59,10 +60,9 @@ export function c4ExportDeployment() {
 
       const beelineApiUrl = workspace.getConfiguration().get(BEELINE_API_URL) as string;
       const path = '/structurizr-backend/api/v1/workspace/terraform/generate';
-      const encodedWorkspaceJson = args[0];
-      const name = '?environment=' + args[1];
+      const name = '?environment=' + args.deploymentEnvironment;
       progress.report({ message: "Распаковка модели данных..." });
-      const content = Buffer.from(encodedWorkspaceJson, 'base64').toString('utf8');
+      const content = Buffer.from(args.encodedWorkspace, 'base64').toString('utf8');
       const contentType = 'text/plain';
       const headers = generateHmac('POST', path, content, contentType);
       headers['Content-Type'] = contentType;
@@ -86,16 +86,20 @@ export function c4ExportDeployment() {
               const detial = JSON.parse(body) as Detail;
               try {
                 const errors = JSON.parse(detial.detail) as ErrorMsg[];
-                errors.forEach(e => {
-                  writeFile(filepath, e.error_msg, function (error) { });
-                });
+                var os = require('os');                
+                const message = errors.map(obj => obj.error_msg).join(os.EOL) + os.EOL;
+                window.showErrorMessage(message);
               } catch (e) {
                 writeFile(filepath, detial.detail, function (error) { });
+                workspace.openTextDocument(filepath).then((doc) => { window.showTextDocument(doc, ViewColumn.Beside); });                
               }
             } catch (e) {
-              writeFile(filepath, body, function (error) { });
+              if (e instanceof Error) {
+                window.showErrorMessage(body);
+              } else {
+                window.showErrorMessage("An unknown error occurred: " + e);
+              }
             }
-            workspace.openTextDocument(filepath).then((doc) => { window.showTextDocument(doc, ViewColumn.Beside); });
           }
         }).catch((error) => {
           window.showErrorMessage(error.message);

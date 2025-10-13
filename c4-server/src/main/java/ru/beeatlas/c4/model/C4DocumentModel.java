@@ -365,7 +365,7 @@ public class C4DocumentModel {
 		createToken(getIdentifierOfView(view.getObject()), lineNumber - 1).ifPresent(t -> tokens.add(t));
 		viewToLineNumber.put(lineNumber, view);
 		Command command = new Command("$(link-external) Show as Structurizr Diagram", "c4.show.diagram");
-		CodeLensCommandArgs args = new CodeLensCommandArgs(null, view.getObject().getKey(), null);
+		CodeLensCommandArgs args = new CodeLensCommandArgs(null, view.getObject().getKey(), null, null, null, null, null);
 		command.setArguments(Arrays.asList(args));
 		codeLenses.add(new CodeLens(view.getCodeLensRange(), command, null));
 	}
@@ -415,16 +415,22 @@ public class C4DocumentModel {
 			codeLenses.forEach(cl -> {
 				Command command = cl.getCommand();
 				CodeLensCommandArgs args = (CodeLensCommandArgs)command.getArguments().get(0);
-				String dot = args.diagramAsDot();
-				if(dot == null) {
-					View view = workspace.getViews().getViewWithKey(args.diagramKey());
-					if (view != null && view instanceof ModelView) {
-						ModelView modelView = (ModelView) view;
-						dot = C4Utils.export2Dot(modelView);
+				if(command.getCommand().equals("c4.show.diagram")) {
+					String dot = args.diagramAsDot();
+					if(dot == null) {
+						View view = workspace.getViews().getViewWithKey(args.diagramKey());
+						if (view != null && view instanceof ModelView) {
+							ModelView modelView = (ModelView) view;
+							dot = C4Utils.export2Dot(modelView);
+						}
 					}
+					args = new CodeLensCommandArgs(encodedWorkspace, args.diagramKey(), dot, null, null,null,null);
+					command.setArguments(Arrays.asList(args));
+				} else if(command.getCommand().equals("c4.export.deployment")) {
+					String deploymentEnvironment = args.deploymentEnvironment();
+					args = new CodeLensCommandArgs(encodedWorkspace, null, null, deploymentEnvironment, null,null,null);
+					command.setArguments(Arrays.asList(args));
 				}
-				args = new CodeLensCommandArgs(encodedWorkspace, args.diagramKey(), dot);
-				command.setArguments(Arrays.asList(args));
 			});
 			return codeLenses;
 		} catch (Exception e) {

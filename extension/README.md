@@ -2,7 +2,7 @@
 
 ## Overview
 
-This Visual Studio Code extension enables software architecture modeling using the [Structurizr DSL](https://github.com/structurizr/dsl). The Structurizr DSL implements the "diagram as text" approach ([learn more](https://structurizr.com/help/text)) and provides a textual representation of the [C4 model](https://c4model.com/).
+This Visual Studio Code extension enables software architecture modeling using the [Structurizr DSL](https://github.com/structurizr/dsl). The Structurizr DSL implements the "diagrams as code" approach ([learn more](https://docs.structurizr.com/)) and provides a textual representation of the [C4 model](https://c4model.com/).
 
 The extension includes:
 - A language server built on the official Structurizr DSL parser

@@ -14,7 +14,7 @@
                 "label": "Default Workspace",
                 "langId": "c4",
                 "snippetName": "Microservice",
-                "hover": ["Пример простой архитектуры в нотации Structurizr DSL"],
+                "hover": ["Пример простой архитектуры сервиса с доступом в Интренет"],
                 "childrens": []
                 },
                 {
@@ -23,7 +23,7 @@
                     "snippetName": "Capability",
                     "hover": [
                         "#### Публикация technical capability продукта\n",
-                        "Шаблон для описания технической возможности продукта [инструкция](https://docs.bw.vimpelcom.ru/workflow/ptr/2%20Определение%20перечня%20ТС/)"
+                        "Шаблон для описания технической возможности продукта"
                     ],
                     "childrens": []
                 },
@@ -33,7 +33,7 @@
                     "snippetName": "Integration",
                     "hover": [
                         "#### Публикация спецификации API продукта\n",
-                        "Шаблон для описания спецификации API продукта [инструкция](https://docs.bw.vimpelcom.ru/workflow/ptr/3.7%20API/)"
+                        "Шаблон для описания спецификации API продукта"
                     ],
                     "childrens": []
                 },              
@@ -75,7 +75,7 @@
                             "label": "VM",
                             "langId": "c4",
                             "snippetName": "VM",
-                            "hover": ["Виртуальная машина в Vega Cloud"],
+                            "hover": ["Виртуальная машина"],
                             "childrens": []
                         }
                     ]

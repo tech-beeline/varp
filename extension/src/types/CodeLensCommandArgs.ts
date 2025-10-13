@@ -14,10 +14,16 @@
     limitations under the License.
 */
 
+import { integer } from "vscode-languageclient";
+
 type CodeLensCommandArgs = {
     encodedWorkspace: string;
     diagramKey: string;
     diagramAsDot: string;
+    deploymentEnvironment: string;
+    apiUrl: string;
+    lastLine: integer;
+    padding: integer;
 };
 
 export { CodeLensCommandArgs };

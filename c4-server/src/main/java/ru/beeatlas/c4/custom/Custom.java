@@ -74,6 +74,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.FileAppender;
 import ch.qos.logback.core.encoder.LayoutWrappingEncoder;
 import ru.beeatlas.c4.utils.C4Utils;
+import ru.beeatlas.c4.dto.CodeLensCommandArgs;
 import ru.beeatlas.c4.model.C4DocumentModel;
 import ru.beeatlas.c4.model.C4ObjectWithContext;
 import ru.beeatlas.c4.model.C4DocumentModel.C4CompletionScope;
@@ -882,8 +883,9 @@ public class Custom {
             List<LineToken> tokens = LineTokenizer.tokenize(line);
             if (tokens.size() == 3) {
                 Command commandStructurizr = new Command("$(link-external) Export Environment", "c4.export.deployment");
-                String name = C4Utils.trimStringByString(tokens.get(1).token(), "\"");
-                commandStructurizr.setArguments(Arrays.asList(name));
+                String deploymentEnvironment = C4Utils.trimStringByString(tokens.get(1).token(), "\"");
+                CodeLensCommandArgs args = new CodeLensCommandArgs(null, null, null, deploymentEnvironment, null,null,null);
+                commandStructurizr.setArguments(Arrays.asList(args));
                 int pos = C4Utils.findFirstNonWhitespace(line, 0, true);
                 Range range = new Range(new Position(scope.start() - 1, pos), new Position(scope.start() - 1, pos));
                 model.addCodeLens(new CodeLens(range, commandStructurizr, null));
@@ -923,7 +925,9 @@ public class Custom {
                 int lastLine = scope.end() - i;
                 int startLine = tokens.get(0).start();
                 Command commandStructurizr = new Command("$(link-external) Insert SLA", "c4.insert.sla");
-                commandStructurizr.setArguments(Arrays.asList(apiUrl, lastLine, startLine));
+                CodeLensCommandArgs args = new CodeLensCommandArgs(null, null, null, null, apiUrl, lastLine, startLine);
+                commandStructurizr.setArguments(Arrays.asList(args));
+                //commandStructurizr.setArguments(Arrays.asList(apiUrl, lastLine, startLine));
                 String line = model.getLineAt(lineNumber - 1);
                 int pos = C4Utils.findFirstNonWhitespace(line, 0, true);
 

@@ -19,7 +19,7 @@ package ru.beeatlas.c4.dto;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
-public record CodeLensCommandArgs(String encodedWorkspace, String diagramKey, String diagramAsDot) {
+public record CodeLensCommandArgs(String encodedWorkspace, String diagramKey, String diagramAsDot, String deploymentEnvironment, String apiUrl, Integer lastLine, Integer padding) {
     private static final Gson GSON = new Gson();
     public static CodeLensCommandArgs fromJson(JsonObject jsonObject) {
         return GSON.fromJson(jsonObject, CodeLensCommandArgs.class);

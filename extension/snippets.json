@@ -1,5 +1,5 @@
 {
-    "label": "Каталог паттернов",
+    "label": "Каталог шаблонов",
     "langId": "",
     "snippetName": "",
     "hover": [],
@@ -14,7 +14,7 @@
                 "label": "Default Workspace",
                 "langId": "c4",
                 "snippetName": "Microservice",
-                "hover": ["Пример простой архитектуры в нотации Structurizr DSL"],
+                "hover": ["Пример простой архитектуры сервиса с доступом в Интренет"],
                 "childrens": []
                 },
                 {
@@ -23,7 +23,7 @@
                     "snippetName": "Capability",
                     "hover": [
                         "#### Публикация technical capability продукта\n",
-                        "Шаблон для описания технической возможности продукта [инструкция](https://docs.bw.vimpelcom.ru/workflow/ptr/2%20Определение%20перечня%20ТС/)"
+                        "Шаблон для описания технической возможности продукта"
                     ],
                     "childrens": []
                 },
@@ -33,12 +33,12 @@
                     "snippetName": "Integration",
                     "hover": [
                         "#### Публикация спецификации API продукта\n",
-                        "Шаблон для описания спецификации API продукта [инструкция](https://docs.bw.vimpelcom.ru/workflow/ptr/3.7%20API/)"
+                        "Шаблон для описания спецификации API продукта"
                     ],
                     "childrens": []
                 },              
                 {
-                    "label": "Beeline Cloud",
+                    "label": "Deployment Nodes",
                     "langId": "c4",
                     "snippetName": "",
                     "hover": [],
@@ -75,114 +75,7 @@
                             "label": "VM",
                             "langId": "c4",
                             "snippetName": "VM",
-                            "hover": ["Виртуальная машина в Vega Cloud"],
-                            "childrens": []
-                        }
-                    ]
-                },
-                {
-                    "label": "DataFort Cloud",
-                    "langId": "c4",
-                    "snippetName": "",
-                    "hover": [],
-                    "childrens": [
-                        {
-                            "label": "Usergate",
-                            "langId": "c4",
-                            "snippetName": "Usergate",
-                            "hover": [
-                                "#### Usergate в облаке DataFort"
-                            ],
-                            "childrens": []
-                        },
-                        {
-                            "label": "Sterra",
-                            "langId": "c4",
-                            "snippetName": "Sterra",
-                            "hover": [
-                                "#### Sterra в облаке DataFort"
-                            ],
-                            "childrens": []
-                        },
-                        {
-                            "label": "Sangfor NGAF",
-                            "langId": "c4",
-                            "snippetName": "Sangfor NGAF",
-                            "hover": [
-                                "#### Cloud NGFW Pro в облаке DataFort"
-                            ],
-                            "childrens": []
-                        },
-                        {
-                            "label": "Cloud LAN network",
-                            "langId": "c4",
-                            "snippetName": "Cloud LAN network",
-                            "hover": [
-                                "#### Cloud LAN network в облаке DataFort"
-                            ],
-                            "childrens": []
-                        },
-                        {
-                            "label": "VDI Horizon",
-                            "langId": "c4",
-                            "snippetName": "VDI Horizon",
-                            "hover": [
-                                "#### VDI Horizon в облаке DataFort"
-                            ],
-                            "childrens": []
-                        },
-                        {
-                            "label": "Intracloud_Vlan",
-                            "langId": "c4",
-                            "snippetName": "Intracloud_Vlan",
-                            "hover": [
-                                "#### Cloud Interconnect услуга DataFort"
-                            ],
-                            "childrens": []
-                        },
-                        {
-                            "label": "Kaspesky EPP Multitenant",
-                            "langId": "c4",
-                            "snippetName": "Kaspesky EPP Multitenant",
-                            "hover": [
-                                "#### Cloud Endpoint Protection Platform (EPP) в облаке DataFort"
-                            ],
-                            "childrens": []
-                        },
-                        {
-                            "label": "Kaspesky EPP Dedicated",
-                            "langId": "c4",
-                            "snippetName": "Kaspesky EPP Dedicated",
-                            "hover": [
-                                "#### Cloud Endpoint Protection Platform (EPP) в облаке DataFort"
-                            ],
-                            "childrens": []
-                        },
-                        {
-                            "label": "NSC T0",
-                            "langId": "c4",
-                            "snippetName": "NSC T0",
-                            "hover": [
-                                "#### NSX EDGE в облаке DataFort"
-                            ],
-                            "childrens": []
-                        },
-                        {
-                            "label": "NSC T1",
-                            "langId": "c4",
-                            "snippetName": "NSC T1",
-                            "hover": [
-                                "#### NSX EDGE в облаке DataFort"
-                            ],
-                            "childrens": []
-                        },
-                        {
-                            "label": "Cloud Compute",
-                            "langId": "c4",
-                            "snippetName": "Cloud Compute",
-                            "hover": [
-                                "#### Cloud Compute pool в облаке DataFort"
-                            ],
+                            "hover": ["Виртуальная машина"],
                             "childrens": []
                         }
                     ]

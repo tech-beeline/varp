@@ -63,11 +63,17 @@ Generate Terraform scripts for environments with a single click.
 
 ![Terraform Integration](images/terraform.gif)
 
+### Export diagram
+
+Export diagram to **drawio** and **svg** formats
+
+![Export diagram](images/export.png)
+
 ## Configuration
 
 | Option | Values | Default | Description |
 |--------|--------|---------|-------------|
-| `c4.diagram.structurizr.autolayout.url` | URL | `https://structurizr.com` | Diagram rendering server (Cloud or On-Premises) |
+| `c4.diagram.render` | String | `embedded` | Diagram rendering method (embedded or structurizr.com cloud) |
 | `c4.editor.autoformat.indent` | Number | `4` | Spaces per indentation level |
 | `c4.languageserver.logs.enabled` | `true`/`false` | `false` | Enable language server logging to `c4-language-server.log` |
 | `c4.decorations.enabled` | `off`, `onChange`, `onSave` | `onChange` | Text decoration timing |

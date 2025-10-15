@@ -87,18 +87,14 @@ export function c4ExportDeployment() {
               try {
                 const errors = JSON.parse(detial.detail) as ErrorMsg[];
                 var os = require('os');                
-                const message = errors.map(obj => obj.error_msg).join(os.EOL) + os.EOL;
+                const message = errors.map(obj => obj.error_msg).join(os.EOL) + os.EOL;                
                 window.showErrorMessage(message);
               } catch (e) {
-                writeFile(filepath, detial.detail, function (error) { });
-                workspace.openTextDocument(filepath).then((doc) => { window.showTextDocument(doc, ViewColumn.Beside); });                
+                window.showErrorMessage(detial.detail);
               }
             } catch (e) {
-              if (e instanceof Error) {
-                window.showErrorMessage(body);
-              } else {
-                window.showErrorMessage("An unknown error occurred: " + e);
-              }
+              writeFile(filepath, body, function (error) { });
+              workspace.openTextDocument(filepath).then((doc) => { window.showTextDocument(doc, ViewColumn.Beside); });
             }
           }
         }).catch((error) => {

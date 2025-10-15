@@ -28,6 +28,7 @@ import { IRequestOptions } from "typed-rest-client/Interfaces";
 import { BEELINE_API_URL, NOTLS } from "../config";
 import { generateHmac } from "./hmac";
 import { CodeLensCommandArgs } from "../types/CodeLensCommandArgs";
+import { dirname, join } from 'path';
 
 export function c4InsertSla() {
   commands.registerCommand("c4.insert.sla", async (args : CodeLensCommandArgs) => {
@@ -90,14 +91,26 @@ export function c4InsertSla() {
             resolve();
           });
         } else {
-          fs.readFile(args.apiUrl, 'utf8', (error, data) => {
-            if (error) {
-              window.showErrorMessage(error.message);
+          const editor = window.activeTextEditor;
+          const document = editor?.document;
+          const fileName = document?.fileName;
+          if(fileName !== undefined) {
+            const directoryPath = dirname(fileName);
+            const fullPath = join(directoryPath, args.apiUrl);
+            if(fs.existsSync(fullPath)) {
+              fs.readFile(fullPath, 'utf8', (error, data) => {
+                if (error) {
+                  window.showErrorMessage(error.message);
+                } else {
+                  insertSla(data);
+                }
+                resolve();
+              });
             } else {
-              insertSla(data);
+              window.showErrorMessage('File ' + fullPath + ' does not exist.');
+              resolve();
             }
-            resolve();
-          });
+          }
         }
       });
     });

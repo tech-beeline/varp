@@ -9,7 +9,7 @@
   },
   "license": "Apache-2.0",
   "icon": "images/logo.png",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "engines": {
     "vscode": "^1.73.0"
   },
@@ -43,12 +43,14 @@
     "views": {
       "explorer": [
         {
-          "id": "ArchitectureAsACodeView",
-          "name": "Architecture As A Code"
+          "id": "architectureAsACodeView",
+          "name": "Architecture As A Code",
+          "icon": "$(book)"
         },
         {
-          "id": "ArchitectureCatalogueView",
-          "name": "Architecture Catalogue"
+          "id": "architectureCatalogueView",
+          "name": "Architecture Catalogue",
+          "icon": "$(book)"
         }
       ]
     },
@@ -61,8 +63,13 @@
         "command": "c4.architectureCatalogue.add",
         "title": "Add pattern to workspace",
         "shortTitle": "Add",
-        "when": "view == architectureCatalogue && viewItem == leaf",
         "icon": "$(add)"
+      },      
+      {
+        "command": "c4.architectureCatalogue.refresh",
+        "title": "Refresh architecture catalogue",
+        "shortTitle": "Refresh",
+        "icon": "$(refresh)"
       },
       {
         "command": "c4.diagram.export.svg",
@@ -74,11 +81,18 @@
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "c4.architectureCatalogue.refresh",
+          "when": "view == architectureCatalogueView",
+          "group": "navigation"
+        }
+      ],      
       "view/item/context": [
         {
           "command": "c4.architectureCatalogue.add",
-          "when": "view == architectureCatalogue && viewItem == leaf",
-          "group": "inline@1"
+          "when": "view == architectureCatalogueView && viewItem == leaf",
+          "group": "inline"
         }
       ],
       "editor/title/context": [

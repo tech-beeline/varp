@@ -52,11 +52,12 @@
            "    containerInstance ${2:имя контейнера}",
            "    properties {",
            "        \"vega_project\"          \"${3:имя проекта}\"",
-           "        \"name\"                  \"${4:наименование базы данных}\"",
+           "        \"name\"                  \"${4:имя базы данных}\"",
            "        \"flavor\"                \"${5:cpu2ram16}\"",
            "        \"volume_size\"           \"${6:50}\"",
            "        \"backup_strategies\"     \"${7:backup-off}\"",
-           "        \"type\"                  \"mongodb\"",
+           "        \"volume_type\"           \"${8:nvme}\"",
+           "        \"type\"                  \"vega_mongodb\"",
            "    }",
            "}"
         ]

@@ -113,6 +113,7 @@ function initExtension(context: ExtensionContext) {
         updateServerConfigurationIndent();
         updateServerConfiguration();
         initDecoractionService();
+        commands.executeCommand('setContext', 'extension:c4', true);
         break;
       case State.Stopped:
         statusBarItem.text = "C4 Language Server has stopped";

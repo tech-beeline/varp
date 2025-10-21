@@ -45,11 +45,13 @@
         {
           "id": "architectureAsACodeView",
           "name": "Architecture As A Code",
+          "when": "extension:c4",
           "icon": "$(book)"
         },
         {
           "id": "architectureCatalogueView",
           "name": "Architecture Catalogue",
+          "when": "extension:c4",
           "icon": "$(book)"
         }
       ]

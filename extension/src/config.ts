@@ -26,3 +26,4 @@ export const BEELINE_API_URL = "c4.beeline.api.url";
 export const BEELINE_API_SECRET = "c4.beeline.api.secret";
 export const BEELINE_API_KEY = "c4.beeline.api.key";
 export const BEELINE_GLOSSARIES = "c4.beeline.glossaries";
+export const BEELINE_NO_TELEMETRY = "c4.beeline.telemetry.disabled";

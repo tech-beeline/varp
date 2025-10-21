@@ -22,6 +22,7 @@ type ConfigurationOptions = {
   beelineCloudUrl?: string;
   beelineCloudToken?: string;
   beelineGlossaries?: string;
+  beelineNoTelemetry?: boolean;
   noTLS?: boolean;
   serverLogsEnabled?: boolean;
 };

@@ -95,6 +95,7 @@ public class Custom {
     private SSLSocketFactory allTrustingTrustManager = null;
     private boolean noTLS = false;
     private boolean serverLogsEnabled = false;
+    private boolean beelineNoTelemetry = false;
     private boolean started = false;
 
     private String lastHover = "";
@@ -105,7 +106,7 @@ public class Custom {
     private String beelineCloudUrl = "";
     private String beelineCloudToken = "";
     private String glossaries = "";
-    private String ver = "1.0.0";
+    private String ver = "1.0.4";
     private String cmdb = "";
 
     private AtomicReference<Map<String, Capability>> capabilities = new AtomicReference<>(Collections.emptyMap());
@@ -121,6 +122,17 @@ public class Custom {
     private Map<String, String> adrs = new HashMap<>();
 
     private static final Custom INSTANCE = new Custom();    
+
+    public void setBeelineNoTelemetry(boolean beelineNoTelemetry) {
+        if (this.beelineNoTelemetry != beelineNoTelemetry) {
+            this.beelineNoTelemetry = beelineNoTelemetry;
+            if (this.beelineNoTelemetry == true) {
+                logger.debug("Stop ArchOps Telemetry collection");
+            } else {
+                logger.debug("Start ArchOps Telemetry collection");
+            }
+        }
+    }
 
     public void setBeelineApiSecret(String beelineApiSecret) {
         this.beelineApiSecret = beelineApiSecret;
@@ -964,6 +976,9 @@ public class Custom {
     }
 
     private boolean sendTelemetry(String message) {
+        if(beelineNoTelemetry == true) {
+            return false;
+        }
         try {
             String path = "/dashboard/api/v1/telemetry/c4plugin/start";
             HttpsURLConnection conn = beelineApiConnection("POST", path, message, "application/json");

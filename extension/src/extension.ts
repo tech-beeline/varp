@@ -241,6 +241,7 @@ export function updateServerConfiguration() {
     beelineCloudUrl : workspace.getConfiguration().get(config.BEELINE_CLOUD_URL) as string,
     beelineCloudToken : workspace.getConfiguration().get(config.BEELINE_CLOUD_TOKEN) as string,
     beelineGlossaries : workspace.getConfiguration().get(config.BEELINE_GLOSSARIES) as string,
+    beelineNoTelemetry : workspace.getConfiguration().get(config.BEELINE_NO_TELEMETRY) as boolean,
     noTLS : workspace.getConfiguration().get(config.NOTLS) as boolean,
     serverLogsEnabled : workspace.getConfiguration().get(config.LOGS_ENABLED) as boolean
   };

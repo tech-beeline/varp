@@ -195,6 +195,11 @@
           "type": "string",
           "default": "Product,Service,Customer",
           "description": "Data dictionary names for data flow markup on architecture"
+        },
+        "c4.beeline.telemetry.disabled": {
+          "type": "boolean",
+          "default": "false",
+          "description": "Disable ArchOPS telemetry collection"
         }
       }
     }

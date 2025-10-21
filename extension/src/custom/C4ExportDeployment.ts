@@ -29,6 +29,7 @@ import { IRequestOptions } from "typed-rest-client/Interfaces";
 import { BEELINE_API_URL, NOTLS } from "../config";
 import { generateHmac } from "./hmac";
 import { CodeLensCommandArgs } from "../types/CodeLensCommandArgs";
+import { C4Utils } from "../utils";
 
 const CONF_VEGA_TOKEN = "c4.vega.token";
 
@@ -58,7 +59,7 @@ export function c4ExportDeployment() {
 
       token.onCancellationRequested(() => { console.log("User canceled the long running operation"); });
 
-      const beelineApiUrl = workspace.getConfiguration().get(BEELINE_API_URL) as string;
+      const beelineApiUrl = C4Utils.removeTrailingSlash(workspace.getConfiguration().get(BEELINE_API_URL) as string);
       const path = '/structurizr-backend/api/v1/workspace/terraform/generate';
       const name = '?environment=' + args.deploymentEnvironment;
       progress.report({ message: "Распаковка модели данных..." });

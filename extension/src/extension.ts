@@ -236,10 +236,10 @@ function updateServerConfigurationIndent() {
 
 export function updateServerConfiguration() {
   const configOptions: ConfigurationOptions = {
-    beelineApiUrl : workspace.getConfiguration().get(config.BEELINE_API_URL) as string,
+    beelineApiUrl : C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_API_URL) as string),
     beelineApiSecret : workspace.getConfiguration().get(config.BEELINE_API_SECRET) as string,
     beelineApiKey : workspace.getConfiguration().get(config.BEELINE_API_KEY) as string,    
-    beelineCloudUrl : workspace.getConfiguration().get(config.BEELINE_CLOUD_URL) as string,
+    beelineCloudUrl : C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_CLOUD_URL) as string),
     beelineCloudToken : workspace.getConfiguration().get(config.BEELINE_CLOUD_TOKEN) as string,
     beelineGlossaries : workspace.getConfiguration().get(config.BEELINE_GLOSSARIES) as string,
     beelineNoTelemetry : workspace.getConfiguration().get(config.BEELINE_NO_TELEMETRY) as boolean,

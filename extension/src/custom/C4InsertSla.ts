@@ -29,6 +29,7 @@ import { BEELINE_API_URL, NOTLS } from "../config";
 import { generateHmac } from "./hmac";
 import { CodeLensCommandArgs } from "../types/CodeLensCommandArgs";
 import { dirname, join } from 'path';
+import { C4Utils } from "../utils/c4-utils";
 
 export function c4InsertSla() {
   commands.registerCommand("c4.insert.sla", async (args : CodeLensCommandArgs) => {
@@ -45,7 +46,7 @@ export function c4InsertSla() {
       return new Promise<void>(resolve => {
         const insertSla = (content: string) => {
 
-          const beelineApiUrl = workspace.getConfiguration().get(BEELINE_API_URL) as string;
+          const beelineApiUrl = C4Utils.removeTrailingSlash(workspace.getConfiguration().get(BEELINE_API_URL) as string);
           const path = '/structurizr-backend/api/v1/integration/sla'
           const contentType = 'text/plain';
           const headers = generateHmac('POST', path, content, contentType);

@@ -22,6 +22,7 @@ import * as config from '../config';
 import { workspace } from 'vscode';
 import { generateHmac } from './hmac';
 import { IRequestOptions } from 'typed-rest-client/Interfaces';
+import { C4Utils } from '../utils/c4-utils';
 
 class Chapter extends vscode.TreeItem {
     title: string;
@@ -50,7 +51,7 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
     context.subscriptions.push(view);
     const options: IRequestOptions = <IRequestOptions>{};
     options.ignoreSslError = workspace.getConfiguration().get(config.NOTLS) as boolean;
-    const beelineApiUrl = workspace.getConfiguration().get(config.BEELINE_API_URL) as string;
+    const beelineApiUrl = C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_API_URL) as string);
     const httpc = new httpm.HttpClient('vscode-c4-dsl-plugin', [], options);
 
     this.initChapter = (chapters: Chapter[]) : Chapter[] => {

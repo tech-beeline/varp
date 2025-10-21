@@ -93,8 +93,13 @@ export function c4ExportDeployment() {
                 window.showErrorMessage(detial.detail);
               }
             } catch (e) {
-              writeFile(filepath, body, function (error) { });
-              workspace.openTextDocument(filepath).then((doc) => { window.showTextDocument(doc, ViewColumn.Beside); });
+              writeFile(filepath, body, function (error) {
+                if (error) {
+                  window.showErrorMessage(error.message);
+                  return;
+                }
+                workspace.openTextDocument(filepath).then((doc) => { window.showTextDocument(doc, ViewColumn.Beside); });
+              });
             }
           }
         }).catch((error) => {

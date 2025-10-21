@@ -37,7 +37,6 @@ import {
   ConfigurationOptions,
   TextDocumentChangeConfig,
 } from "./types";
-import { DecorationService, PreviewService } from "./services";
 import { C4Utils } from "./utils";
 import { PatternProvider } from "./custom/ArchitectureAsACodeView";
 import { ArchitectureCatalogueProvider } from "./custom/ArchitectureCatalogueView";
@@ -47,6 +46,8 @@ import { c4ExportDeployment } from "./custom/C4ExportDeployment";
 import * as config from "./config";
 import { StructurizrPreviewService } from "./services/StructurizrPreviewService";
 import { CodeLensCommandArgs } from "./types/CodeLensCommandArgs";
+import { PreviewService } from "./services/PreviewService";
+import { DecorationService } from "./services/DecorationService";
 
 var proc: cp.ChildProcess;
 
@@ -70,7 +71,7 @@ export function activate(context: ExtensionContext) {
   });
 
   new PatternProvider(context);
-  let architectureCatalogueProvider : ArchitectureCatalogueProvider = new ArchitectureCatalogueProvider(context);
+  const architectureCatalogueProvider : ArchitectureCatalogueProvider = new ArchitectureCatalogueProvider(context);
   architectureCatalogueProvider.refresh();
 
 }

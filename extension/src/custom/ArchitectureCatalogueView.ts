@@ -45,13 +45,13 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
 
   constructor(context: vscode.ExtensionContext) {
 
-    const view = vscode.window.createTreeView('ArchitectureCatalogueView', { treeDataProvider: this, showCollapseAll: true, canSelectMany: true });
+    const view = vscode.window.createTreeView('architectureCatalogueView', { treeDataProvider: this, showCollapseAll: true, canSelectMany: true });
 
     context.subscriptions.push(view);
-    let options: IRequestOptions = <IRequestOptions>{};
+    const options: IRequestOptions = <IRequestOptions>{};
     options.ignoreSslError = workspace.getConfiguration().get(config.NOTLS) as boolean;
     const beelineApiUrl = workspace.getConfiguration().get(config.BEELINE_API_URL) as string;
-    let httpc = new httpm.HttpClient('vscode-c4-dsl-plugin', [], options);
+    const httpc = new httpm.HttpClient('vscode-c4-dsl-plugin', [], options);
 
     this.initChapter = (chapters: Chapter[]) : Chapter[] => {
       chapters.forEach(chapter => {
@@ -86,7 +86,7 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
         }
 
         if (chapter.childrens.length === 0) {
-          let basename = path.basename(chapter.dsl);
+          const basename = path.basename(chapter.dsl);
           chapter.contextValue = (basename.length > 0) ? 'leaf' : 'chapter';
         } else {
           chapter.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
@@ -101,29 +101,33 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
     };
 
     this.initRoot = async () : Promise<Chapter[]> =>  {
-        const headers = generateHmac('GET', this.PATH + this.INDEX_ID);
-        return Promise.resolve(httpc.get(beelineApiUrl + this.PATH + this.INDEX_ID, headers).
-        then((res) => { return res.readBody(); }).
-        then((body) => { return JSON.parse(body) as Chapter; }).
-        then((root) => {
-          context.workspaceState.update(this.INDEX_ID, root); 
-          return this.initChapter((Array.isArray(root)) ? root : [root]);
-        }).
-        catch((error) => {
-          let root : Chapter | undefined = (context.workspaceState.get(this.INDEX_ID));
-          return (root !== undefined) ? this.initChapter((Array.isArray(root)) ? root : [root]) : [];
-        })).
-        finally(() => { });
+      const headers = generateHmac('GET', this.PATH + this.INDEX_ID);
+      return Promise.resolve(httpc.get(beelineApiUrl + this.PATH + this.INDEX_ID, headers).
+      then((res) => { return res.readBody(); }).
+      then((body) => { return JSON.parse(body) as Chapter; }).
+      then((root) => {
+        context.workspaceState.update(this.INDEX_ID, root); 
+        return this.initChapter((Array.isArray(root)) ? root : [root]);
+      }).
+      catch((error) => {
+        const root : Chapter | undefined = (context.workspaceState.get(this.INDEX_ID));
+        return (root !== undefined) ? this.initChapter((Array.isArray(root)) ? root : [root]) : [];
+      })).
+      finally(() => { });
     };
+
+    vscode.commands.registerCommand('c4.architectureCatalogue.refresh', async (...args: string[]) => {
+      this.refresh();
+    });
 
     vscode.commands.registerCommand('c4.architectureCatalogue.add', async (element: Chapter) => {
 
-      let createFile = (id: string, body: string) => {
-        let basename = path.basename(id);
+      const createFile = (id: string, body: string) => {
+        const basename = path.basename(id);
         if (basename.length > 0) {
-          let paths = vscode.workspace.workspaceFolders;
+          const paths = vscode.workspace.workspaceFolders;
           if (paths !== undefined && paths.length > 0) {
-            let filepath = path.join(paths[0].uri.fsPath, basename);
+            const filepath = path.join(paths[0].uri.fsPath, basename);
             fs.writeFile(filepath, body, function (error) { });
             vscode.workspace.openTextDocument(filepath).then((doc) => { vscode.window.showTextDocument(doc); });
           }
@@ -136,7 +140,7 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
         createFile(id, body);
         context.workspaceState.update(id, body);
       }).catch((error) => {
-        let body: string | undefined = context.workspaceState.get(id);
+        const body: string | undefined = context.workspaceState.get(id);
         if (body !== undefined) {
           createFile(id, body);
         }
@@ -182,19 +186,6 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
         this.currentPanel = undefined;
         this.lastDocs = undefined;
       }, null, context.subscriptions);
-
-      // Handle messages from the webview
-      this.currentPanel.webview.onDidReceiveMessage(
-        message => {
-          switch (message.command) {
-            case 'alert':
-              vscode.window.showErrorMessage(message.text);
-              return;
-          }
-        },
-        undefined,
-        context.subscriptions
-      );
     });
 
   }

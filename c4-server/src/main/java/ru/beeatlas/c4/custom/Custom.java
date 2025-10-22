@@ -106,7 +106,7 @@ public class Custom {
     private String beelineCloudUrl = "";
     private String beelineCloudToken = "";
     private String glossaries = "";
-    private String ver = "1.0.4";
+    private String version = "";
     private String cmdb = "";
 
     private AtomicReference<Map<String, Capability>> capabilities = new AtomicReference<>(Collections.emptyMap());
@@ -122,6 +122,10 @@ public class Custom {
     private Map<String, String> adrs = new HashMap<>();
 
     private static final Custom INSTANCE = new Custom();    
+
+    public void setVersion(String version) {
+        this.version = version;
+    }
 
     public void setBeelineNoTelemetry(boolean beelineNoTelemetry) {
         if (this.beelineNoTelemetry != beelineNoTelemetry) {
@@ -949,28 +953,28 @@ public class Custom {
     }
 
 	public void snippetTelemetry(String templateId) {
-        String message = MessageFormat.format("'{'\"version\": \"{0}\", \"action\": \"template\", \"template_id\": \"{1}\", \"user\": \"{2}\", \"cmdb\": \"{3}\"'}'", ver, templateId, username, cmdb);
+        String message = MessageFormat.format("'{'\"version\": \"{0}\", \"action\": \"template\", \"template_id\": \"{1}\", \"user\": \"{2}\", \"cmdb\": \"{3}\"'}'", version, templateId, username, cmdb);
         CompletableFuture.runAsync(() -> sendTelemetry(message));
 	}
 
 	public void deploymentTelemetry() {
-        String message = MessageFormat.format("'{'\"version\": \"{0}\", \"action\": \"deployment\", \"user\": \"{1}\", \"cmdb\": \"{2}\"'}'", ver, username, cmdb);
+        String message = MessageFormat.format("'{'\"version\": \"{0}\", \"action\": \"deployment\", \"user\": \"{1}\", \"cmdb\": \"{2}\"'}'", version, username, cmdb);
         CompletableFuture.runAsync(() -> sendTelemetry(message));
 	}    
 
     public void completionTelemety() {
-        String message = MessageFormat.format("'{'\"version\": \"{0}\", \"action\": \"autocomplite\", \"user\": \"{1}\", \"cmdb\": \"{2}\"'}'", ver, username, cmdb);
+        String message = MessageFormat.format("'{'\"version\": \"{0}\", \"action\": \"autocomplite\", \"user\": \"{1}\", \"cmdb\": \"{2}\"'}'", version, username, cmdb);
         CompletableFuture.runAsync(() -> sendTelemetry(message));
     }
 
     public boolean startTelemetry() {
-       String message = MessageFormat.format("'{'\"version\": \"{0}\", \"action\": \"start\", \"user\": \"{1}\", \"cmdb\": \"{2}\"'}'", ver, username, cmdb);
+       String message = MessageFormat.format("'{'\"version\": \"{0}\", \"action\": \"start\", \"user\": \"{1}\", \"cmdb\": \"{2}\"'}'", version, username, cmdb);
        return sendTelemetry(message);
     }
 
     public void hoverTelemetry() {
         String message = MessageFormat.format(
-                "'{'\"version\": \"{0}\", \"action\": \"hover\", \"user\": \"{1}\", \"cmdb\": \"{2}\"'}'", ver,
+                "'{'\"version\": \"{0}\", \"action\": \"hover\", \"user\": \"{1}\", \"cmdb\": \"{2}\"'}'", version,
                 username, cmdb);
         CompletableFuture.runAsync(() -> sendTelemetry(message));
     }

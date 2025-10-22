@@ -111,7 +111,7 @@ function initExtension(context: ExtensionContext) {
         statusBarItem.text = "C4 DSL Language Server is ready";
         statusBarItem.color = "white";
         updateServerConfigurationIndent();
-        updateServerConfiguration();
+        updateServerConfiguration(context);
         initDecoractionService();
         commands.executeCommand('setContext', 'extension:c4', true);
         break;
@@ -200,7 +200,7 @@ function initExtension(context: ExtensionContext) {
     if (event.affectsConfiguration(config.AUTO_FORMAT_INDENT)) {
       updateServerConfigurationIndent()
     }
-    updateServerConfiguration();
+    updateServerConfiguration(context);
   });
 }
 
@@ -234,7 +234,7 @@ function updateServerConfigurationIndent() {
   commands.executeCommand("c4-server.autoformat.indent", { indent: spaces } )
 }
 
-export function updateServerConfiguration() {
+export function updateServerConfiguration(context: ExtensionContext) {
   const configOptions: ConfigurationOptions = {
     beelineApiUrl : C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_API_URL) as string),
     beelineApiSecret : workspace.getConfiguration().get(config.BEELINE_API_SECRET) as string,
@@ -244,7 +244,8 @@ export function updateServerConfiguration() {
     beelineGlossaries : workspace.getConfiguration().get(config.BEELINE_GLOSSARIES) as string,
     beelineNoTelemetry : workspace.getConfiguration().get(config.BEELINE_NO_TELEMETRY) as boolean,
     noTLS : workspace.getConfiguration().get(config.NOTLS) as boolean,
-    serverLogsEnabled : workspace.getConfiguration().get(config.LOGS_ENABLED) as boolean
+    serverLogsEnabled : workspace.getConfiguration().get(config.LOGS_ENABLED) as boolean,
+    version : context.extension.packageJSON.version
   };
   
   if(configOptions.noTLS) {

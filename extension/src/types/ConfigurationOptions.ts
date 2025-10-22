@@ -25,6 +25,7 @@ type ConfigurationOptions = {
   beelineNoTelemetry?: boolean;
   noTLS?: boolean;
   serverLogsEnabled?: boolean;
+  version?: string;
 };
 
 export { ConfigurationOptions };

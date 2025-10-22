@@ -92,7 +92,7 @@ Export diagram to **drawio** and **svg** formats
 
 **Requirements:**
 - Node.js 20+
-- Yarn
+- Yarn2
 - JDK 17+
 - Apache Maven
 

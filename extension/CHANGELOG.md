@@ -12,6 +12,9 @@
 - Show Architecture views on left side only when C4 workspace opened
 - Urls can be specified with or without slash at end
 - Fixed a bug where the generated terraform script would not open in a new tab
+- Added a parameter that allows you to specify the path to the JDK or JRE for executing c4 language server
+- Fixed a bug where "c4-server.configuration" command not registered right after run c4 language server
+- Updated links to Java downloading 
 
 ## 1.0.0
 

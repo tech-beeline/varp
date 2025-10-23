@@ -153,6 +153,11 @@
           "scope": "application",
           "description": "Determines when text decoration takes place"
         },
+        "c4.languageserver.java.path": {
+          "type": "string",
+          "default": "",
+          "description": "Java Path (JDK or JRE) for executing c4 language server. If set, this setting is prefered over OS path setting"
+        },        
         "c4.languageserver.logs.enabled": {
           "type": "boolean",
           "default": false,

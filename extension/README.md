@@ -12,7 +12,7 @@ The extension includes:
 
 ## Prerequisites
 
-- **Java 17+** ([download](https://java.com/en/download/)) - required for the language server
+- **Java 17+** ([download](https://dev.java/download)) - required for the language server
 - Workspace containing model files with `.dsl` extension
 - Support for multiple workspaces and `!include` files
 

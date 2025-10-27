@@ -14,45 +14,47 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>17</maven.compiler.release>    
-    <aspectj.version>1.9.8</aspectj.version>   
+    <aspectj.version>1.9.24</aspectj.version>
+    <structurizr.version>4.1.0</structurizr.version>
   </properties>
 
   <dependencies>
+    <!-- https://mvnrepository.com/artifact/ch.qos.logback/logback-classic -->
     <dependency>
         <groupId>ch.qos.logback</groupId>
         <artifactId>logback-classic</artifactId>
-        <version>1.2.6</version>
+        <version>1.5.20</version>
         <scope>compile</scope>
-    </dependency>                 
+    </dependency>
     <!-- https://mvnrepository.com/artifact/info.picocli/picocli -->
     <dependency>
         <groupId>info.picocli</groupId>
         <artifactId>picocli</artifactId>
         <version>4.7.7</version>
-    </dependency>  
+    </dependency>
     <!-- https://mvnrepository.com/artifact/com.google.inject/guice -->
     <dependency>
         <groupId>com.google.inject</groupId>
         <artifactId>guice</artifactId>
-        <version>5.1.0</version>
+        <version>7.0.0</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.eclipse.lsp4j/org.eclipse.lsp4j -->
     <dependency>
         <groupId>org.eclipse.lsp4j</groupId>
         <artifactId>org.eclipse.lsp4j</artifactId>
         <version>0.24.0</version>
-    </dependency>  
+    </dependency>
     <!-- https://mvnrepository.com/artifact/com.structurizr/structurizr-dsl -->
     <dependency>
         <groupId>com.structurizr</groupId>
         <artifactId>structurizr-dsl</artifactId>
-        <version>3.2.1</version>
+        <version>${structurizr.version}</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/com.structurizr/structurizr-export -->
     <dependency>
         <groupId>com.structurizr</groupId>
         <artifactId>structurizr-export</artifactId>
-        <version>3.2.1</version>
+        <version>${structurizr.version}</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.aspectj/aspectjrt -->
     <dependency>
@@ -65,7 +67,7 @@
         <groupId>org.aspectj</groupId>
         <artifactId>aspectjweaver</artifactId>
         <version>${aspectj.version}</version>
-    </dependency>  
+    </dependency>
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
@@ -78,7 +80,7 @@
         <artifactId>mockito-core</artifactId>
         <version>5.18.0</version>
         <scope>test</scope>
-    </dependency>    
+    </dependency>
     <!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter -->
     <dependency>
         <groupId>org.junit.jupiter</groupId>
@@ -92,7 +94,7 @@
         <artifactId>assertj-core</artifactId>
         <version>3.27.3</version>
         <scope>test</scope>
-    </dependency>     
+    </dependency>
   </dependencies>
 
   <build>
@@ -100,7 +102,7 @@
     <plugins>
       <plugin>
         <artifactId>maven-jar-plugin</artifactId>
-        <version>3.0.2</version>
+        <version>3.4.2</version>
         <configuration>
             <!-- Configures the created archive -->
             <archive>
@@ -139,8 +141,8 @@
               <weaveDependency>
                 <groupId>com.structurizr</groupId>
                 <artifactId>structurizr-client</artifactId>
-              </weaveDependency>           
-            </weaveDependencies>                    
+              </weaveDependency>
+            </weaveDependencies>
           </configuration>
           <executions>
             <execution>
@@ -168,8 +170,8 @@
               <goal>single</goal>
             </goals>
           </execution>
-        </executions>        
-      </plugin>        
+        </executions>
+      </plugin>
     </plugins>
   </build>
 </project>

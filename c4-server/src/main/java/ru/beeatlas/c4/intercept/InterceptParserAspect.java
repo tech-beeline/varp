@@ -192,7 +192,7 @@ public class InterceptParserAspect {
         parserListener.onParsedModelElement(infrastructureNode);
     }
 
-    @AfterReturning(pointcut = "within(com.structurizr.dsl.DeploymentNodeParser) && execution(com.structurizr.model.DeploymentNode parse(..))", returning = "result")
+    @AfterReturning(pointcut = "within(com.structurizr.dsl.DeploymentNodeParser) && execution(com.structurizr.model.DeploymentNode parse(com.structurizr.dsl.DeploymentEnvironmentDslContext, com.structurizr.dsl.DeploymentNodeDslContext, ..))", returning = "result")
     public void interceptDeploymentNodeParser(JoinPoint joinPoint, Object result) {
         DeploymentNode deploymentNode = (DeploymentNode)result;
         parserListener.onParsedModelElement(deploymentNode);

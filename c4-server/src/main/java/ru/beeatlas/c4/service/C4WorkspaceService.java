@@ -81,11 +81,15 @@ public class C4WorkspaceService implements WorkspaceService {
 					String beelineCloudToken = ((JsonObject) params.getArguments().get(0)).get("beelineCloudToken").getAsJsonPrimitive().getAsString();
 					boolean noTLS = ((JsonObject) params.getArguments().get(0)).get("noTLS").getAsJsonPrimitive().getAsBoolean();
 					boolean serverLogsEnabled = ((JsonObject) params.getArguments().get(0)).get("serverLogsEnabled").getAsJsonPrimitive().getAsBoolean();
+					boolean beelineNoTelemetry = ((JsonObject) params.getArguments().get(0)).get("beelineNoTelemetry").getAsJsonPrimitive().getAsBoolean();
+					String version = ((JsonObject) params.getArguments().get(0)).get("version").getAsJsonPrimitive().getAsString();
+					Custom.getInstance().setServerLogsEnabled(serverLogsEnabled);					
 					Custom.getInstance().setNoTLS(noTLS);
+					Custom.getInstance().setVersion(version);
+					Custom.getInstance().setBeelineNoTelemetry(beelineNoTelemetry);
 					Custom.getInstance().setBeelineApiUrl(beelineApiUrl);
 					Custom.getInstance().setBeelineCloudUrl(beelineCloudUrl);
 					Custom.getInstance().setBeelineCloudToken(beelineCloudToken);
-					Custom.getInstance().setServerLogsEnabled(serverLogsEnabled);
 					Custom.getInstance().setBeelineApiSecret(beelineApiSecret);
 					Custom.getInstance().setBeelineApiKey(beelineApiKey);
 					Custom.getInstance().reinit();

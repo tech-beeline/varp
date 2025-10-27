@@ -40,6 +40,11 @@ class C4Utils {
     };
     return serverDebugOptions;
   }
+
+  static removeTrailingSlash(str: string): string {
+    return str.replace(/\/+$/, '');
+  }  
+
 }
 
 export { C4Utils };

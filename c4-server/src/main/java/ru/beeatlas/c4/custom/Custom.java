@@ -300,6 +300,7 @@ public class Custom {
             updateTech();
             updateTerms();
         }
+        startTelemetry();
     }
 
     public void setBeelineCloudUrl(String beelineCloudUrl) {
@@ -395,9 +396,6 @@ public class Custom {
     public void setBeelineApiUrl(String beelineApiUrl) {
         if(beelineApiUrl != null && !this.beelineApiUrl.equals(beelineApiUrl) && isValidURL(beelineApiUrl)) {
             this.beelineApiUrl = beelineApiUrl;
-            if(started == false) {
-                started = startTelemetry();
-            }
         }
     }
 
@@ -967,9 +965,13 @@ public class Custom {
         CompletableFuture.runAsync(() -> sendTelemetry(message));
     }
 
-    public boolean startTelemetry() {
-       String message = MessageFormat.format("'{'\"version\": \"{0}\", \"action\": \"start\", \"user\": \"{1}\", \"cmdb\": \"{2}\"'}'", version, username, cmdb);
-       return sendTelemetry(message);
+    private void startTelemetry() {
+        String message = MessageFormat.format("'{'\"version\": \"{0}\", \"action\": \"start\", \"user\": \"{1}\", \"cmdb\": \"{2}\"'}'", version, username, cmdb);
+        CompletableFuture.runAsync(() -> {
+            if(started == false) {
+                started = sendTelemetry(message);
+            }
+        });
     }
 
     public void hoverTelemetry() {

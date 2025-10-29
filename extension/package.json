@@ -157,7 +157,7 @@
           "type": "string",
           "default": "",
           "description": "Java Path (JDK or JRE) for executing c4 language server. If set, this setting is prefered over OS path setting"
-        },        
+        },
         "c4.languageserver.logs.enabled": {
           "type": "boolean",
           "default": false,
@@ -237,6 +237,9 @@
   "main": "./dist/extension",
   "devDependencies": {
     "@hpcc-js/wasm-graphviz": "^1.10.0",
+    "@secretlint/secretlint-formatter-sarif": "^10.1.1",
+    "@secretlint/secretlint-rule-no-dotenv": "^10.1.1",
+    "@secretlint/secretlint-rule-preset-recommend": "^10.1.1",
     "@types/node": "^20.8.4",
     "@types/vscode": "^1.73.0",
     "@vscode/vsce": "^3.2.1",

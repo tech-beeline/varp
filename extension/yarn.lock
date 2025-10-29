@@ -121,29 +121,29 @@ __metadata:
   linkType: hard
 
 "@azure/msal-browser@npm:^4.2.0":
-  version: 4.25.1
-  resolution: "@azure/msal-browser@npm:4.25.1"
+  version: 4.26.0
+  resolution: "@azure/msal-browser@npm:4.26.0"
   dependencies:
-    "@azure/msal-common": "npm:15.13.0"
-  checksum: 10c0/3702b2bac470bf946086d6199527125818f91b3e25e03c2b1ca6d547d96135d99adb2b3ce2cc1bb0744e3843a5d1aaf06d2ad8594883c9c74b45e825f1f17606
+    "@azure/msal-common": "npm:15.13.1"
+  checksum: 10c0/995291b0fe04b0209afbf4adfe1a8171e94b439d2a593c5c15e4c4307cc8f069c7f32b88b26596c49b7dddea57eca4371933f30d3286d25d000405d50ba3ab31
   languageName: node
   linkType: hard
 
-"@azure/msal-common@npm:15.13.0":
-  version: 15.13.0
-  resolution: "@azure/msal-common@npm:15.13.0"
-  checksum: 10c0/19cd545779bd2f9d50e6f3c899fcb313b56a541493d85dfe65305c22a0d12f6a672ebfbcff05a539b8908b1466b7e48f1067fb4d4a9c85928a0fd115070cd203
+"@azure/msal-common@npm:15.13.1":
+  version: 15.13.1
+  resolution: "@azure/msal-common@npm:15.13.1"
+  checksum: 10c0/e411c482ab8e329ceaa0bd5ccaedb0d1c70a6ee428bb01bc0d617624939babb8655e98fad287db9bad48fbd350427a1d743138699696964745bcfd1f84d42307
   languageName: node
   linkType: hard
 
 "@azure/msal-node@npm:^3.5.0":
-  version: 3.8.0
-  resolution: "@azure/msal-node@npm:3.8.0"
+  version: 3.8.1
+  resolution: "@azure/msal-node@npm:3.8.1"
   dependencies:
-    "@azure/msal-common": "npm:15.13.0"
+    "@azure/msal-common": "npm:15.13.1"
     jsonwebtoken: "npm:^9.0.0"
     uuid: "npm:^8.3.0"
-  checksum: 10c0/80dd7f535856d1e99b5344ce4d584eeb4631560ccfef3a66b9a8dfb590299f41628fbb8150c84613c69977f428575a2eab1bd76443e4084d406d7ebf9dd3b281
+  checksum: 10c0/deca00e13e06db462fa77374db053965f705d0c5fc52fb5890a53e2c9712d84de46ccd60ed8ba8ea3fef74b07a6e5c14659083043ba0d46f04b134fbe025761c
   languageName: node
   linkType: hard
 
@@ -159,9 +159,9 @@ __metadata:
   linkType: hard
 
 "@babel/helper-validator-identifier@npm:^7.27.1":
-  version: 7.27.1
-  resolution: "@babel/helper-validator-identifier@npm:7.27.1"
-  checksum: 10c0/c558f11c4871d526498e49d07a84752d1800bf72ac0d3dad100309a2eaba24efbf56ea59af5137ff15e3a00280ebe588560534b0e894a4750f8b1411d8f78b84
+  version: 7.28.5
+  resolution: "@babel/helper-validator-identifier@npm:7.28.5"
+  checksum: 10c0/42aaebed91f739a41f3d80b72752d1f95fd7c72394e8e4bd7cdd88817e0774d80a432451bcba17c2c642c257c483bf1d409dd4548883429ea9493a3bc4ab0847
   languageName: node
   linkType: hard
 
@@ -533,7 +533,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@secretlint/secretlint-formatter-sarif@npm:^10.1.2":
+"@secretlint/secretlint-formatter-sarif@npm:^10.1.1, @secretlint/secretlint-formatter-sarif@npm:^10.1.2":
   version: 10.2.2
   resolution: "@secretlint/secretlint-formatter-sarif@npm:10.2.2"
   dependencies:
@@ -542,7 +542,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@secretlint/secretlint-rule-no-dotenv@npm:^10.1.2":
+"@secretlint/secretlint-rule-no-dotenv@npm:^10.1.1, @secretlint/secretlint-rule-no-dotenv@npm:^10.1.2":
   version: 10.2.2
   resolution: "@secretlint/secretlint-rule-no-dotenv@npm:10.2.2"
   dependencies:
@@ -551,7 +551,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@secretlint/secretlint-rule-preset-recommend@npm:^10.1.2":
+"@secretlint/secretlint-rule-preset-recommend@npm:^10.1.1, @secretlint/secretlint-rule-preset-recommend@npm:^10.1.2":
   version: 10.2.2
   resolution: "@secretlint/secretlint-rule-preset-recommend@npm:10.2.2"
   checksum: 10c0/41f0e471bc906aade6c188d728cf18e64a70eb21cd0432299532111da4a9187e3fa6e70b1abb7f9845ef6aa7927e82e72f4bbc47306734c4911f2170a22e888e
@@ -635,11 +635,11 @@ __metadata:
   linkType: hard
 
 "@types/node@npm:^20.8.4":
-  version: 20.19.23
-  resolution: "@types/node@npm:20.19.23"
+  version: 20.19.24
+  resolution: "@types/node@npm:20.19.24"
   dependencies:
     undici-types: "npm:~6.21.0"
-  checksum: 10c0/a230f2ad8a5c10f3c5b2e31112e49b61f2cc9e7eacb95960b555ef133c0276c52b7f3841af744762ce355009fc03520ab7af5645cd877ab8699e45412bccf9b8
+  checksum: 10c0/c872ce80a1e832fe035a3c94a27acb2d6e45ffa1209c0241ac6e2d405db8d6f47eea7a2509b5c2dbedae6231dafb9dbed873dd5daaebbad1f11fdaa58726ce5e
   languageName: node
   linkType: hard
 
@@ -1050,6 +1050,9 @@ __metadata:
   resolution: "c4-varp@workspace:."
   dependencies:
     "@hpcc-js/wasm-graphviz": "npm:^1.10.0"
+    "@secretlint/secretlint-formatter-sarif": "npm:^10.1.1"
+    "@secretlint/secretlint-rule-no-dotenv": "npm:^10.1.1"
+    "@secretlint/secretlint-rule-preset-recommend": "npm:^10.1.1"
     "@types/node": "npm:^20.8.4"
     "@types/vscode": "npm:^1.73.0"
     "@vscode/vsce": "npm:^3.2.1"
@@ -2439,11 +2442,11 @@ __metadata:
   linkType: hard
 
 "minimatch@npm:^10.0.3":
-  version: 10.0.3
-  resolution: "minimatch@npm:10.0.3"
+  version: 10.1.1
+  resolution: "minimatch@npm:10.1.1"
   dependencies:
     "@isaacs/brace-expansion": "npm:^5.0.0"
-  checksum: 10c0/e43e4a905c5d70ac4cec8530ceaeccb9c544b1ba8ac45238e2a78121a01c17ff0c373346472d221872563204eabe929ad02669bb575cb1f0cc30facab369f70f
+  checksum: 10c0/c85d44821c71973d636091fddbfbffe62370f5ee3caf0241c5b60c18cd289e916200acb2361b7e987558cd06896d153e25d505db9fc1e43e6b4b6752e2702902
   languageName: node
   linkType: hard
 
@@ -2593,11 +2596,11 @@ __metadata:
   linkType: hard
 
 "node-abi@npm:^3.3.0":
-  version: 3.78.0
-  resolution: "node-abi@npm:3.78.0"
+  version: 3.79.0
+  resolution: "node-abi@npm:3.79.0"
   dependencies:
     semver: "npm:^7.3.5"
-  checksum: 10c0/aa5e2ac5283934b1175248a0cbe0106faeccebbc1d8e288c3b166f44da8d3665df661f0a63b232bcacab3e2d94c5c450a7f5c85bb70b6f54fbb4cc45cb62a9fb
+  checksum: 10c0/d7286c10a3db48ff3f98b699fb67ea69b3b880bca5bf8605039963360195b6e8ccad96e6d9ddd13e3a3d826d44fa35e8c91f2230de8f3591615791943ec609eb
   languageName: node
   linkType: hard
 

@@ -205,7 +205,7 @@
         },
         "c4.beeline.telemetry.disabled": {
           "type": "boolean",
-          "default": "false",
+          "default": false,
           "description": "Disable ArchOPS telemetry collection"
         }
       }

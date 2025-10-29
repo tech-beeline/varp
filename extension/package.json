@@ -9,7 +9,7 @@
   },
   "license": "Apache-2.0",
   "icon": "images/logo.png",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "engines": {
     "vscode": "^1.73.0"
   },
@@ -45,11 +45,13 @@
         {
           "id": "architectureAsACodeView",
           "name": "Architecture As A Code",
+          "when": "extension:c4",
           "icon": "$(book)"
         },
         {
           "id": "architectureCatalogueView",
           "name": "Architecture Catalogue",
+          "when": "extension:c4",
           "icon": "$(book)"
         }
       ]
@@ -64,7 +66,7 @@
         "title": "Add pattern to workspace",
         "shortTitle": "Add",
         "icon": "$(add)"
-      },      
+      },
       {
         "command": "c4.architectureCatalogue.refresh",
         "title": "Refresh architecture catalogue",
@@ -87,7 +89,7 @@
           "when": "view == architectureCatalogueView",
           "group": "navigation"
         }
-      ],      
+      ],
       "view/item/context": [
         {
           "command": "c4.architectureCatalogue.add",
@@ -151,6 +153,11 @@
           "scope": "application",
           "description": "Determines when text decoration takes place"
         },
+        "c4.languageserver.java.path": {
+          "type": "string",
+          "default": "",
+          "description": "Java Path (JDK or JRE) for executing c4 language server. If set, this setting is prefered over OS path setting"
+        },
         "c4.languageserver.logs.enabled": {
           "type": "boolean",
           "default": false,
@@ -195,6 +202,11 @@
           "type": "string",
           "default": "Product,Service,Customer",
           "description": "Data dictionary names for data flow markup on architecture"
+        },
+        "c4.beeline.telemetry.disabled": {
+          "type": "boolean",
+          "default": "false",
+          "description": "Disable ArchOPS telemetry collection"
         }
       }
     }

@@ -23,12 +23,14 @@ import {
 } from "vscode";
 
 import { writeFile, mkdirSync, existsSync } from 'fs';
-import { join, basename } from 'path';
+import { dirname, join, basename } from 'path';
 import { HttpClient } from 'typed-rest-client/HttpClient';
-import { IRequestOptions } from "typed-rest-client/Interfaces";
-import { BEELINE_API_URL, NOTLS } from "../config";
-import { generateHmac } from "./hmac";
-import { CodeLensCommandArgs } from "../types/CodeLensCommandArgs";
+import { IRequestOptions } from 'typed-rest-client/Interfaces';
+import { BEELINE_API_URL, NOTLS } from '../config';
+import { generateHmac } from './hmac';
+import { CodeLensCommandArgs } from '../types/CodeLensCommandArgs';
+import { C4Utils } from '../utils';
+import { EOL } from 'os';
 
 const CONF_VEGA_TOKEN = "c4.vega.token";
 
@@ -58,7 +60,7 @@ export function c4ExportDeployment() {
 
       token.onCancellationRequested(() => { console.log("User canceled the long running operation"); });
 
-      const beelineApiUrl = workspace.getConfiguration().get(BEELINE_API_URL) as string;
+      const beelineApiUrl = C4Utils.removeTrailingSlash(workspace.getConfiguration().get(BEELINE_API_URL) as string);
       const path = '/structurizr-backend/api/v1/workspace/terraform/generate';
       const name = '?environment=' + args.deploymentEnvironment;
       progress.report({ message: "Распаковка модели данных..." });
@@ -71,30 +73,41 @@ export function c4ExportDeployment() {
       const p = new Promise<void>(resolve => {
         progress.report({ message: "Отправка запроса..." });
         httpc.post(beelineApiUrl + path + name, content, headers).then((result) => { return result.readBody() }).then((body) => {
+          const editor = window.activeTextEditor;
+          const document = editor?.document;
+          const fileName = document?.fileName;
           const paths = workspace.workspaceFolders;
-          if (paths !== undefined && paths.length > 0) {
-            progress.report({ message: "Запись в файл..." });
-            const dirname = 'terraform';
-            const dirpath = join(paths[0].uri.fsPath, dirname);
+          if(fileName !== undefined && paths !== undefined && paths.length > 0) {
+            let directoryPath = dirname(fileName);
+            for (const path of paths) {
+              if(directoryPath.startsWith(path.uri.fsPath)) {
+                directoryPath = path.uri.fsPath;
+                break;
+              }
+            }
+            const dirpath = join(directoryPath, 'terraform');
             if (!existsSync(dirpath)) {
               mkdirSync(dirpath);
             }
             const bname = basename('main.tf');
-            const filepath = join(dirpath, bname);
-
+            const filepath = join(dirpath, bname);                      
             try {
               const detial = JSON.parse(body) as Detail;
               try {
                 const errors = JSON.parse(detial.detail) as ErrorMsg[];
-                var os = require('os');                
-                const message = errors.map(obj => obj.error_msg).join(os.EOL) + os.EOL;                
+                const message = errors.map(obj => obj.error_msg).join(EOL) + EOL;                
                 window.showErrorMessage(message);
               } catch (e) {
                 window.showErrorMessage(detial.detail);
               }
             } catch (e) {
-              writeFile(filepath, body, function (error) { });
-              workspace.openTextDocument(filepath).then((doc) => { window.showTextDocument(doc, ViewColumn.Beside); });
+              writeFile(filepath, body, function (error) {
+                if (error) {
+                  window.showErrorMessage(error.message);
+                } else {
+                  workspace.openTextDocument(filepath).then((doc) => window.showTextDocument(doc, ViewColumn.Beside));
+                }
+              });
             }
           }
         }).catch((error) => {

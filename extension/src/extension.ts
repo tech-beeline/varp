@@ -20,7 +20,9 @@ import {
   commands,
   window,
   StatusBarAlignment,
-  TextDocument
+  TextDocument,
+  env,
+  Uri
 } from "vscode";
 
 import * as path from "path";
@@ -53,20 +55,41 @@ var proc: cp.ChildProcess;
 
 export function activate(context: ExtensionContext) {
 
-  cp.exec("java -version", (err, stdOut, stdErr) => {
+  let envJava = process.env;
+  const javaPath = workspace.getConfiguration().get(config.JAVA_PATH) as string;
+  if(javaPath !== undefined && javaPath.length > 0) {
+    const javaBinPath = path.join(javaPath, "bin");
+    
+    let envPath = process.env.PATH;
+    if(envPath !== undefined) {
+      const pathParts = envPath.split(path.delimiter);
+      const filteredPathParts = pathParts.filter(part => !part.toLowerCase().includes('jdk-') && !part.toLowerCase().includes('jre-'));
+      envPath = filteredPathParts.join(path.delimiter);
+    }
+
+    envJava = {
+      ...process.env,
+      PATH: `${javaBinPath}${path.delimiter}${envPath}`
+    };
+  }
+
+  cp.exec("java -version", { env: envJava }, (err, stdOut, stdErr) => {
     if (
       err?.message.includes("'java' is not recognized") ||
-      err?.message.includes("'java' not found")
+      err?.message.includes("'java' not found") ||
+      C4Utils.getJavaVersion(stdErr) < 17
     ) {
-      window.showErrorMessage(
-        "Java is needed to run the Language server. Please install java"
-      );
-    } else if (C4Utils.getJavaVersion(stdErr) < 17) {
-      window.showErrorMessage(
-        "Java 17 or higher is needed to run the Language server. Please upgrade your java version"
-      );
+        window.showErrorMessage(
+          'Java 17 or higher is needed. Please visit https://dev.java/download/ for download.',
+          'Download'
+        ).then(selection => {
+          if (selection === 'Download') {
+            const uri = Uri.parse('https://dev.java/download');
+            env.openExternal(uri);
+          }
+        });
     } else {
-      initExtension(context);
+      initExtension(context, envJava);
     }
   });
 
@@ -76,7 +99,7 @@ export function activate(context: ExtensionContext) {
 
 }
 
-function initExtension(context: ExtensionContext) {
+function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
 
   const logger = window.createOutputChannel("C4 DSL Extension");
 
@@ -110,9 +133,6 @@ function initExtension(context: ExtensionContext) {
       case State.Running:
         statusBarItem.text = "C4 DSL Language Server is ready";
         statusBarItem.color = "white";
-        updateServerConfigurationIndent();
-        updateServerConfiguration();
-        initDecoractionService();
         break;
       case State.Stopped:
         statusBarItem.text = "C4 Language Server has stopped";
@@ -131,7 +151,7 @@ function initExtension(context: ExtensionContext) {
   const jarPath = context.asAbsolutePath(jar);
 
   const args = ["-Dfile.encoding=UTF8", "-jar", jarPath, "-e=" + READY_ECHO];
-  const opts = (workspace.workspaceFolders) ? { cwd: workspace.workspaceFolders[0].uri.fsPath, shell: true } : { shell: true };
+  const opts = (workspace.workspaceFolders) ? { cwd: workspace.workspaceFolders[0].uri.fsPath, shell: true, env : env } : { shell: true, env : env };
   proc = cp.spawn("java", args, opts);
 
   if (proc.stdout) {
@@ -139,8 +159,62 @@ function initExtension(context: ExtensionContext) {
 
     const startListener = (line: string) => {
       if (line.endsWith(READY_ECHO)) {
-        languageClient.start();
-        reader.removeListener("line", startListener);
+        reader.removeListener("line", startListener);        
+        languageClient.start().then(() => {
+
+          updateServerConfigurationIndent();
+          updateServerConfiguration(context);
+          initDecoractionService();
+
+          commands.executeCommand('setContext', 'extension:c4', true);
+
+          const onpremisesPreviewService = new PreviewService(context);
+          const structurizrPreviewService = new StructurizrPreviewService(STRUCTURIZ_COM);
+          c4InsertSnippet();
+          c4InsertSla();
+          c4ExportDeployment();
+
+          commands.registerCommand("c4.diagram.export.svg", async () => {
+            onpremisesPreviewService.getSvg(context);
+          });
+
+          commands.registerCommand("c4.diagram.export.mx", async () => {
+            onpremisesPreviewService.getMx(context);
+          });
+
+          commands.registerCommand("c4.show.diagram", async (args : CodeLensCommandArgs) => {
+
+            const render = workspace.getConfiguration().get(config.DIAGRAM_RENDER) as string;
+
+            if(render === 'https://structurizr.com') {
+              structurizrPreviewService.currentDiagram = args.diagramKey;
+              structurizrPreviewService.currentDocument = window.activeTextEditor?.document as TextDocument;
+              await structurizrPreviewService.updateWebView(args.encodedWorkspace);
+            } else {
+              onpremisesPreviewService.currentDiagramAsDot = args.diagramAsDot;
+              onpremisesPreviewService.currentDiagram = args.diagramKey;
+              onpremisesPreviewService.currentDocument = window.activeTextEditor?.document as TextDocument;
+              await onpremisesPreviewService.updateWebView();
+            }
+          });
+
+          workspace.onDidSaveTextDocument((document: TextDocument) => {
+            const autolayoutUrl = workspace.getConfiguration().get(config.DIAGRAM_RENDER) as string;
+            if (autolayoutUrl === 'https://structurizr.com') {
+              structurizrPreviewService.triggerRefresh(document);
+            } else {
+              onpremisesPreviewService.triggerRefresh(document);
+            }
+          });
+
+          workspace.onDidChangeConfiguration(event => {
+            if (event.affectsConfiguration(config.AUTO_FORMAT_INDENT)) {
+              updateServerConfigurationIndent()
+            }
+            updateServerConfiguration(context);
+          });
+
+        });
       }
     };
 
@@ -150,57 +224,6 @@ function initExtension(context: ExtensionContext) {
     statusBarItem.text = "Connection to C4 DSL Socket Server could not be established";
     statusBarItem.color = "red";
   }
-
-  const onpremisesPreviewService = new PreviewService(context);
-
-  const structurizrPreviewService = new StructurizrPreviewService(STRUCTURIZ_COM);
-
-  c4InsertSnippet();
-
-  c4InsertSla();
-
-  c4ExportDeployment();
-
-  commands.registerCommand("c4.diagram.export.svg", async () => {
-    onpremisesPreviewService.getSvg(context);
-  });
-
-  commands.registerCommand("c4.diagram.export.mx", async () => {
-    onpremisesPreviewService.getMx(context);
-  });
-
-  commands.registerCommand("c4.show.diagram", async (args : CodeLensCommandArgs) => {
-
-    const render = workspace.getConfiguration().get(config.DIAGRAM_RENDER) as string;
-
-    if(render === 'https://structurizr.com') {
-      structurizrPreviewService.currentDiagram = args.diagramKey;
-      structurizrPreviewService.currentDocument = window.activeTextEditor?.document as TextDocument;
-      await structurizrPreviewService.updateWebView(args.encodedWorkspace);
-    }
-    else {
-      onpremisesPreviewService.currentDiagramAsDot = args.diagramAsDot;
-      onpremisesPreviewService.currentDiagram = args.diagramKey;
-      onpremisesPreviewService.currentDocument = window.activeTextEditor?.document as TextDocument;
-      await onpremisesPreviewService.updateWebView();
-    }
-  });
-
-  workspace.onDidSaveTextDocument((document: TextDocument) => {
-    const autolayoutUrl = workspace.getConfiguration().get(config.DIAGRAM_RENDER) as string;
-    if (autolayoutUrl === 'https://structurizr.com') {
-      structurizrPreviewService.triggerRefresh(document);
-    } else {
-      onpremisesPreviewService.triggerRefresh(document);
-    }
-  });
-
-  workspace.onDidChangeConfiguration(event => {
-    if (event.affectsConfiguration(config.AUTO_FORMAT_INDENT)) {
-      updateServerConfigurationIndent()
-    }
-    updateServerConfiguration();
-  });
 }
 
 function initDecoractionService() {
@@ -233,23 +256,22 @@ function updateServerConfigurationIndent() {
   commands.executeCommand("c4-server.autoformat.indent", { indent: spaces } )
 }
 
-export function updateServerConfiguration() {
+export function updateServerConfiguration(context: ExtensionContext) {
   const configOptions: ConfigurationOptions = {
-    beelineApiUrl : workspace.getConfiguration().get(config.BEELINE_API_URL) as string,
+    beelineApiUrl : C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_API_URL) as string),
     beelineApiSecret : workspace.getConfiguration().get(config.BEELINE_API_SECRET) as string,
     beelineApiKey : workspace.getConfiguration().get(config.BEELINE_API_KEY) as string,    
-    beelineCloudUrl : workspace.getConfiguration().get(config.BEELINE_CLOUD_URL) as string,
+    beelineCloudUrl : C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_CLOUD_URL) as string),
     beelineCloudToken : workspace.getConfiguration().get(config.BEELINE_CLOUD_TOKEN) as string,
     beelineGlossaries : workspace.getConfiguration().get(config.BEELINE_GLOSSARIES) as string,
+    beelineNoTelemetry : workspace.getConfiguration().get(config.BEELINE_NO_TELEMETRY) as boolean,
     noTLS : workspace.getConfiguration().get(config.NOTLS) as boolean,
-    serverLogsEnabled : workspace.getConfiguration().get(config.LOGS_ENABLED) as boolean
+    serverLogsEnabled : workspace.getConfiguration().get(config.LOGS_ENABLED) as boolean,
+    version : context.extension.packageJSON.version
   };
   
-  if(configOptions.noTLS) {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-  } else {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "1";
-  }
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = configOptions.noTLS ? "0" : "1";
+
   commands.executeCommand("c4-server.configuration", configOptions);
 }
 

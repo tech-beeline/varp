@@ -19,7 +19,7 @@
         "strict": true,
         "sourceMap": true,
         "strictPropertyInitialization": false,
-        "target": "es6"
+        "target": "ES2016"
     },
     "include": [
         "src"

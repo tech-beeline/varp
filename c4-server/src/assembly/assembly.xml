@@ -8,9 +8,11 @@
         <dependencySet>
             <excludes>
                 <exclude>javax.activation:*</exclude>
-                <exclude>javax.xml.bind:jaxb-api</exclude>                
-                <exclude>com.google.code.findbugs:jsr305</exclude>                                
-                <exclude>com.structurizr:structurizr-dsl</exclude>                                
+                <exclude>javax.xml.bind:jaxb-api</exclude>
+                <exclude>com.google.code.findbugs:jsr305</exclude>
+                <exclude>com.structurizr:structurizr-dsl</exclude>
+                <exclude>com.structurizr:structurizr-client</exclude>
+                <exclude>com.structurizr:structurizr-import</exclude>
             </excludes>        
             <useProjectArtifact>false</useProjectArtifact>
             <outputDirectory>lib</outputDirectory>

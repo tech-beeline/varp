@@ -12,7 +12,7 @@ The extension includes:
 
 ## Prerequisites
 
-- **Java 17+** ([download](https://java.com/en/download/)) - required for the language server
+- **Java 17+** ([download](https://dev.java/download)) - required for the language server
 - Workspace containing model files with `.dsl` extension
 - Support for multiple workspaces and `!include` files
 
@@ -78,6 +78,7 @@ Export diagram to **drawio** and **svg** formats
 | `c4.languageserver.logs.enabled` | `true`/`false` | `false` | Enable language server logging to `c4-language-server.log` |
 | `c4.decorations.enabled` | `off`, `onChange`, `onSave` | `onChange` | Text decoration timing |
 | `c4.SSL\TLS.disabled` | `true`/`false` | `false` | Disable SSL/TLS verification |
+| `c4.beeline.telemetry.disabled` | `true`/`false` | `false` | Disable ArchOPS telemetry collection |
 | `c4.beeline.api.url` | URL | | ArchOPS server URL |
 | `c4.beeline.api.key` | String | | ArchOPS API key |
 | `c4.beeline.api.secret` | String | | ArchOPS API secret |
@@ -91,7 +92,7 @@ Export diagram to **drawio** and **svg** formats
 
 **Requirements:**
 - Node.js 20+
-- Yarn
+- Yarn2
 - JDK 17+
 - Apache Maven
 

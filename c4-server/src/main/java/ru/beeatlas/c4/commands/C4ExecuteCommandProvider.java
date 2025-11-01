@@ -32,6 +32,7 @@ public class C4ExecuteCommandProvider {
     public static final String REFRESH_PREVIEW = "c4.refresh";
     public static final String SEND_SNIPPET_TELEMETRY = "c4-server.send-snippet-telemetry";
     public static final String SEND_DEPLOYMENT_TELEMETRY = "c4-server.send-deployment-telemetry";
+    public static final String SEND_PATTERN_TELEMETRY = "c4-server.send-pattern-telemetry";
     public static final String SVG_LAYOUT = "c4-server.svg-layout";
     public static final String WORKSPACE_2_DOT = "c4-server.workspace-2-dot";
     public static final String VIEW_2_MX = "c4-server.view-2-mx";
@@ -39,7 +40,7 @@ public class C4ExecuteCommandProvider {
     private static final Logger logger = LoggerFactory.getLogger(C4ExecuteCommandProvider.class);
 
     public static final List<String> SERVER_COMMANDS = Arrays.asList(UPDATE_CONFIGURATION, 
-        CALCULATE_TEXT_DECORATIONS, AUTO_FORMAT_INDENT, REFRESH_PREVIEW, SEND_SNIPPET_TELEMETRY, SEND_DEPLOYMENT_TELEMETRY, SVG_LAYOUT, WORKSPACE_2_DOT, VIEW_2_MX);
+        CALCULATE_TEXT_DECORATIONS, AUTO_FORMAT_INDENT, REFRESH_PREVIEW, SEND_SNIPPET_TELEMETRY, SEND_DEPLOYMENT_TELEMETRY, SVG_LAYOUT, WORKSPACE_2_DOT, VIEW_2_MX, SEND_PATTERN_TELEMETRY);
 
     public static C4ExecuteCommandResult execute(String command, List<Object> arguments, C4DocumentManager documentManager) {
 

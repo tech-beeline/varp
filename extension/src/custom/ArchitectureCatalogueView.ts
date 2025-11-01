@@ -35,7 +35,7 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
 
   private INDEX_ID: string = '/index';
   private CONTENT_ID: string = '/content/';
-  private PATH = '/architecture-center';  
+  private PATH = '/architecture-center';
 
   private currentPanel: vscode.WebviewPanel | undefined = undefined;
   private lastDocs: string | undefined = undefined;
@@ -129,8 +129,14 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
           const paths = vscode.workspace.workspaceFolders;
           if (paths !== undefined && paths.length > 0) {
             const filepath = path.join(paths[0].uri.fsPath, basename);
-            fs.writeFile(filepath, body, function (error) { });
-            vscode.workspace.openTextDocument(filepath).then((doc) => { vscode.window.showTextDocument(doc); });
+            fs.writeFile(filepath, body,  (error) => {
+              if (error) {
+                vscode.window.showErrorMessage(error.message);
+              } else {
+                vscode.workspace.openTextDocument(filepath).then((doc) => { vscode.window.showTextDocument(doc); });
+                vscode.commands.executeCommand('c4-server.send-pattern-telemetry', { patternId: id });
+              }
+            });
           }
         }
       };

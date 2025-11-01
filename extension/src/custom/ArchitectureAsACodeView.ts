@@ -37,7 +37,7 @@ export class PatternProvider implements vscode.TreeDataProvider<Pattern> {
 	getTreeItem(element: Pattern): vscode.TreeItem {
 		return element;
 	  }
-	
+
 	  initChapter(patterns: Pattern[]) : Pattern[] {
 		patterns.forEach(pattern => {
 			if (pattern.childrens.length === 0) {

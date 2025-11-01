@@ -30,7 +30,7 @@ export function generateHmac(method: string, path: string, body: string | undefi
         const message: string = parts.join('\n') + '\n';
         const hmac = createHmac('sha256', beelineApiSecret).update(message).digest('base64');
         headers['X-Authorization'] = beelineApiKey + ":" + hmac;
-        headers['Nonce'] = nonce;    
+        headers['Nonce'] = nonce;
     }
     return headers;
 }

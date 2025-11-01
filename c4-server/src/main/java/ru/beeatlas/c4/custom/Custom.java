@@ -974,6 +974,13 @@ public class Custom {
         });
     }
 
+    public void patternTelemetry(String patternId) {
+       String message = MessageFormat.format(
+               "'{'\"version\": \"{0}\", \"action\": \"pattern\", \"pattern_id\": \"{1}\", \"user\": \"{2}\", \"cmdb\": \"{3}\"'}'", version,
+               patternId, username, cmdb);
+        CompletableFuture.runAsync(() -> sendTelemetry(message));
+    }
+
     public void hoverTelemetry() {
         String message = MessageFormat.format(
                 "'{'\"version\": \"{0}\", \"action\": \"hover\", \"user\": \"{1}\", \"cmdb\": \"{2}\"'}'", version,

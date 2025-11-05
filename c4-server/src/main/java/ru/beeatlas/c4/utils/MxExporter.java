@@ -53,6 +53,8 @@ public class MxExporter extends AbstractDiagramExporter {
     private static final String DEFAULT_FONT = "Helvetica";
     private static final int BOUNDARY_FONT_SIZE = 24;
     private static final int BOUNDARYMETA_FONT_SIZE = BOUNDARY_FONT_SIZE - 5;
+    private final String rootId = UUID.randomUUID().toString();
+    private final String parentId = UUID.randomUUID().toString();
 
     private class GroupBoundary {
         public GroupBoundary(String name, String fullName) {
@@ -81,7 +83,7 @@ public class MxExporter extends AbstractDiagramExporter {
         public int minX = Integer.MAX_VALUE;
         public int minY = Integer.MAX_VALUE;
         public int maxX = Integer.MIN_VALUE;
-        public int maxY = Integer.MIN_VALUE;        
+        public int maxY = Integer.MIN_VALUE;
         public DeploymentNode deploymentNode;
         public HashSet<GroupBoundary> groupBoundaries = new HashSet<>();
         public LinkedList<Element> elements = new LinkedList<>();
@@ -98,7 +100,7 @@ public class MxExporter extends AbstractDiagramExporter {
         public ContainerBoundary(Container container) {
             this.container = container;
         }
-    }    
+    }
 
     private HashMap<String, GroupBoundary> groupBoundaries = new HashMap<>();
     private LinkedList<SoftwareSystemBoundary> softwareSystemBoundaries = new LinkedList<>();
@@ -125,25 +127,28 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.append("\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);
-        //writer.writeLine("<diagram name=\"Страница — 1\" id=\"NeoCpV-NzOcwAlcAnlzz\">");
         writer.indent();
 
         sb.append("<mxGraphModel dx=\"0\" dy=\"0\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"").append(view.getPaperSize().getWidth());
         sb.append("\" pageHeight=\"").append(view.getPaperSize().getHeight());
         sb.append("\" math=\"0\" shadow=\"0\">");
         writer.writeLine(sb.toString());
+        sb.setLength(0);
         writer.indent();
         writer.writeLine("<root>");
         writer.indent();
-        writer.writeLine("<mxCell id=\"0\" />");
-        writer.writeLine("<mxCell id=\"1\" parent=\"0\" />");
+        sb.append("<mxCell id=\"").append(rootId).append("\" />");
+        writer.writeLine(sb.toString());
+        sb.setLength(0);
+        sb.append("<mxCell id=\"").append(parentId).append("\" parent=\"").append(rootId).append("\" />");
+        writer.writeLine(sb.toString());
     }
 
     private void updateGroupBoundary(GroupBoundary groupBoundary, ModelView view) {
         for(GroupBoundary gb : groupBoundary.groupBoundaries.values()) {
             updateGroupBoundary(gb, view);
         }
-        for(GroupBoundary gb : groupBoundary.groupBoundaries.values()) {            
+        for(GroupBoundary gb : groupBoundary.groupBoundaries.values()) {
             groupBoundary.minX = Math.min(groupBoundary.minX, gb.minX);
             groupBoundary.minY = Math.min(groupBoundary.minY, gb.minY);
             groupBoundary.maxX = Math.max(groupBoundary.maxX, gb.maxX);
@@ -224,9 +229,9 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.append(";whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=").append(stroke);
         sb.append(";fontColor=").append(color);
         sb.append(";strokeWidth=").append(strokeWidth);
-        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=1 2;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=1 2;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
         writer.writeLine(sb.toString());
-        sb.setLength(0);        
+        sb.setLength(0);
         writer.indent();
         sb.append("<mxGeometry x=\"").append(group.minX);
         sb.append("\" y=\"").append(group.minY);
@@ -298,7 +303,7 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.append(";whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=").append(stroke);
         sb.append(";fontColor=").append(stroke);
         sb.append(";strokeWidth=").append(strokeWidth);
-        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 8;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 8;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);
         writer.indent();
@@ -378,7 +383,7 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.append(";whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=").append(stroke);
         sb.append(";fontColor=").append(color);
         sb.append(";strokeWidth=").append(strokeWidth);
-        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 8;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 8;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);
         writer.indent();
@@ -572,7 +577,7 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.append(";whiteSpace=wrap;html=1;arcSize=20;fillColor=none;strokeColor=").append(strokeColor);
         sb.append(";fontColor=").append(color);
         sb.append(";strokeWidth=").append(strokeWidth);
-        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);        
         writer.indent();
@@ -725,7 +730,7 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.append(";dashed=0;whiteSpace=wrap;fillColor=").append(background);
         sb.append(";strokeColor=").append(stroke);
         sb.append(";fontColor=").append(color);
-        sb.append(";shape=mxgraph.c4.person2;align=center;metaEdit=1;points=[[0.5,0,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0]];resizable=0;\" vertex=\"1\" parent=\"1\">");
+        sb.append(";shape=mxgraph.c4.person2;align=center;metaEdit=1;points=[[0.5,0,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0]];resizable=0;\" vertex=\"1\" parent=\"").append(parentId).append("\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);
         writer.indent();
@@ -765,7 +770,7 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.append(";labelBackgroundColor=none;fillColor=").append(background);
         sb.append(";fontColor=").append(color);
         sb.append(";align=center;arcSize=10;strokeColor=").append(stroke);
-        sb.append(";metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        sb.append(";metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);
         writer.indent();
@@ -805,7 +810,7 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.append(";labelBackgroundColor=none;fillColor=").append(background);
         sb.append(";fontColor=").append(color);
         sb.append(";align=center;arcSize=10;strokeColor=").append(stroke);
-        sb.append(";metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        sb.append(";metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);
         writer.indent();
@@ -845,7 +850,7 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.append(";labelBackgroundColor=none;fillColor=").append(background);
         sb.append(";fontColor=").append(color);
         sb.append(";align=center;arcSize=10;strokeColor=").append(stroke);
-        sb.append(";metaEdit=1;resizable=0;points=[[0.5,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.5,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        sb.append(";metaEdit=1;resizable=0;points=[[0.5,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.5,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);
         writer.indent();
@@ -886,7 +891,7 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.append(";labelBackgroundColor=none;fillColor=").append(background);
         sb.append(";fontColor=").append(color);
         sb.append(";align=center;arcSize=10;strokeColor=").append(stroke);
-        sb.append(";metaEdit=1;resizable=0;points=[[0.5,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.5,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        sb.append(";metaEdit=1;resizable=0;points=[[0.5,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.5,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);
         writer.indent();
@@ -926,7 +931,7 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.append(";labelBackgroundColor=none;fillColor=").append(background);
         sb.append(";fontColor=").append(color);
         sb.append(";align=center;arcSize=10;strokeColor=").append(stroke);
-        sb.append(";metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        sb.append(";metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);
         writer.indent();
@@ -966,7 +971,7 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.append(";labelBackgroundColor=none;fillColor=").append(background);
         sb.append(";fontColor=").append(color);
         sb.append(";align=center;arcSize=10;strokeColor=").append(stroke);
-        sb.append(";metaEdit=1;resizable=0;points=[[0.5,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.5,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"1\">");
+        sb.append(";metaEdit=1;resizable=0;points=[[0.5,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.5,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);
         writer.indent();
@@ -1053,7 +1058,7 @@ public class MxExporter extends AbstractDiagramExporter {
             }
         }
         sb.append(";endFill=1;strokeColor=").append(color);
-        sb.append(";elbow=vertical;metaEdit=1;endSize=20;startSize=20;jumpStyle=arc;jumpSize=16;rounded=0;\" edge=\"1\" parent=\"1\" source=\"").append(source.getId());
+        sb.append(";elbow=vertical;metaEdit=1;endSize=20;startSize=20;jumpStyle=arc;jumpSize=16;rounded=0;\" edge=\"1\" parent=\"").append(parentId).append("\" source=\"").append(source.getId());
         sb.append("\" target=\"").append(destination.getId());
         sb.append("\">");
         writer.writeLine(sb.toString());

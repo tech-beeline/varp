@@ -20,7 +20,6 @@ import java.util.concurrent.CompletableFuture;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.structurizr.Workspace;
-import com.structurizr.export.Diagram;
 import com.structurizr.util.WorkspaceUtils;
 import com.structurizr.view.ModelView;
 import com.structurizr.view.ThemeUtils;
@@ -28,7 +27,6 @@ import com.structurizr.view.View;
 
 import ru.beeatlas.c4.dto.RefreshOptions;
 import ru.beeatlas.c4.utils.C4Utils;
-import ru.beeatlas.c4.utils.MxExporter;
 import ru.beeatlas.c4.utils.SVGReader;
 import ru.beeatlas.c4.commands.C4ExecuteCommandProvider;
 import ru.beeatlas.c4.commands.C4ExecuteCommandResult;
@@ -106,8 +104,9 @@ public class C4WorkspaceService implements WorkspaceService {
 						String jsonContent = WorkspaceUtils.toJson(workspace, false);
 						return C4ExecuteCommandResult.OK.setMessage(jsonContent).toJson();
 					} catch (Exception e) {
-						return C4ExecuteCommandResult.OK;
+						logger.error(e.getMessage());
 					}
+					return C4ExecuteCommandResult.OK;
 				}
 				case C4ExecuteCommandProvider.AUTO_FORMAT_INDENT:
 					var newIndent = ((JsonObject) params.getArguments().get(0)).get("indent").getAsJsonPrimitive()
@@ -149,8 +148,9 @@ public class C4WorkspaceService implements WorkspaceService {
 						String jsonContent = WorkspaceUtils.toJson(workspace, false);
 						return C4ExecuteCommandResult.OK.setMessage(jsonContent).toJson();
 					} catch (Exception e) {
-						return C4ExecuteCommandResult.OK;
+						logger.error(e.getMessage());
 					}
+					return C4ExecuteCommandResult.OK;
 				}
 				case C4ExecuteCommandProvider.VIEW_2_MX: {
 					RefreshOptions refreshOptions = RefreshOptions.fromJson((JsonObject) params.getArguments().get(0));
@@ -171,11 +171,17 @@ public class C4WorkspaceService implements WorkspaceService {
 							String content = C4Utils.export2Mx(modelView);
 							return C4ExecuteCommandResult.OK.setMessage(content).toJson();	
 						}
-						return C4ExecuteCommandResult.OK;
 					} catch (Exception e) {
-						return C4ExecuteCommandResult.OK;
+						logger.error(e.getMessage());
 					}
-				}				
+					return C4ExecuteCommandResult.OK;
+				}
+				case C4ExecuteCommandProvider.SEND_PATTERN_TELEMETRY: {
+					String patternId = ((JsonObject) params.getArguments().get(0)).get("patternId").getAsJsonPrimitive()
+							.getAsString();
+					Custom.getInstance().patternTelemetry(patternId);
+					return C4ExecuteCommandResult.OK;
+				}
 				default:
 					return C4ExecuteCommandProvider.execute(params.getCommand(), params.getArguments(), null).toJson();
 			}

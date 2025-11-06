@@ -1,5 +1,9 @@
 # Change Log
 
+## 1.0.6
+
+- Fix drawio export error
+
 ## 1.0.4
 
 - Bump lang server to Structurizr v4.1.0

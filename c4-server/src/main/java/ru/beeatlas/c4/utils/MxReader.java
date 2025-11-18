@@ -104,7 +104,8 @@ public class MxReader {
         }
 
         for (RelationshipView relationshipView : view.getRelationships()) {
-            String expression = String.format("/mxfile/diagram/mxGraphModel/root/object[@id=\"%s\"]/mxCell/mxGeometry/Array/mxPoint", relationshipView.getId());
+            String id = MxExporter.relationshipId(relationshipView);
+            String expression = String.format("/mxfile/diagram/mxGraphModel/root/object[@id=\"%s\"]/mxCell/mxGeometry/Array/mxPoint", id);
             NodeList nodeList = (NodeList) xPath.compile(expression).evaluate(xmlDocument, XPathConstants.NODESET);
             if (nodeList.getLength() == 0) {
                 continue;

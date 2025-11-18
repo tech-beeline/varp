@@ -50,6 +50,7 @@ import com.structurizr.model.SoftwareSystem;
 import com.structurizr.model.SoftwareSystemInstance;
 import com.structurizr.view.RelationshipView;
 import com.structurizr.view.SystemContextView;
+import com.structurizr.view.SystemLandscapeView;
 
 import ru.beeatlas.c4.custom.Custom;
 
@@ -160,7 +161,7 @@ public class InterceptParserAspect {
     public void interceptParseComponentViewAfterReturning(JoinPoint joinPoint, Object result) {
         ComponentView view = (ComponentView)result;
         parserListener.onParsedView(view);
-    }    
+    }
 
     @AfterReturning(pointcut = "within(com.structurizr.dsl.SystemContextViewParser) && execution(com.structurizr.view.SystemContextView parse(..))", returning = "result")
     public void interceptParseSystemContextViewAfterReturning(JoinPoint joinPoint, Object result) {
@@ -172,7 +173,13 @@ public class InterceptParserAspect {
     public void interceptFilteredViewViewAfterReturning(JoinPoint joinPoint, Object result) {
         FilteredView view = (FilteredView)result;
         parserListener.onParsedView(view);
-    }    
+    }
+
+    @AfterReturning(pointcut = "within(com.structurizr.dsl.SystemLandscapeViewParser) && execution(com.structurizr.view.SystemLandscapeView parse(..))", returning = "result")
+    public void interceptSystemLandscapeViewAfterReturning(JoinPoint joinPoint, Object result) {
+        SystemLandscapeView view = (SystemLandscapeView)result;
+        parserListener.onParsedView(view);
+    }
 
     @AfterReturning(pointcut = "within(com.structurizr.dsl.ContainerInstanceParser) && execution(com.structurizr.model.ContainerInstance parse(..))", returning = "result")
     public void interceptContainerInstanceAfterReturning(JoinPoint joinPoint, Object result) {

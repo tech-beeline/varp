@@ -150,6 +150,7 @@ public class C4WorkspaceService implements WorkspaceService {
 					if(workspace == null) {
 						return C4ExecuteCommandResult.OK;
 					}
+					String originalWorkspaceJson = "";
 					String viewKey = refreshOptions.viewKey();
 					if(viewKey != null) {
 						View view = workspace.getViews().getViewWithKey(refreshOptions.viewKey());
@@ -157,6 +158,8 @@ public class C4WorkspaceService implements WorkspaceService {
 							ModelView modelView = (ModelView) view;
 							try {
 								if(refreshOptions.svg() != null) {
+									// keep workspace as json before autolayout applying
+									originalWorkspaceJson = WorkspaceUtils.toJson(workspace, false);
 									svgReader.parseAndApplyLayout(modelView, refreshOptions.svg());
 								} else if(refreshOptions.mx() != null) {
 									mxReader.parseAndApplyLayout(modelView, refreshOptions.mx());
@@ -168,20 +171,17 @@ public class C4WorkspaceService implements WorkspaceService {
 					}
 					try {
 						String jsonContent = WorkspaceUtils.toJson(workspace, false);
+						// try to restore workspace to its original state (before applying autolayout)
+						try {
+							Workspace originalWorkspace = WorkspaceUtils.fromJson(originalWorkspaceJson);
+							workspace.getViews().copyLayoutInformationFrom(originalWorkspace.getViews());	
+						} catch (Exception e) {
+						}						
 						return C4ExecuteCommandResult.OK.setMessage(jsonContent).toJson();
 					} catch (Exception e) {
 					 	logger.error(e.getMessage());
 					}
 					return C4ExecuteCommandResult.OK;
-
-					// try {
-
-					// 	String jsonContent = WorkspaceUtils.toJson(workspace, false);
-					// 	return C4ExecuteCommandResult.OK.setMessage(jsonContent).toJson();
-					// } catch (Exception e) {
-					// 	logger.error(e.getMessage());
-					// }
-					// return C4ExecuteCommandResult.OK;
 				}
 				case C4ExecuteCommandProvider.VIEW_2_MX: {
 					RefreshOptions refreshOptions = RefreshOptions.fromJson((JsonObject) params.getArguments().get(0));

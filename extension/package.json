@@ -9,7 +9,7 @@
   },
   "license": "Apache-2.0",
   "icon": "images/logo.png",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "engines": {
     "vscode": "^1.73.0"
   },
@@ -80,6 +80,10 @@
       {
         "command": "c4.diagram.export.mx",
         "title": "Export to .drawio"
+      },
+      {
+        "command": "c4.diagram.import.layout.mx",
+        "title": "Import layout from .drawio"
       }
     ],
     "menus": {
@@ -106,6 +110,11 @@
         {
           "when": "activeWebviewPanelId == structurizrPreview",
           "command": "c4.diagram.export.mx",
+          "group": "navigation"
+        },
+        {
+          "when": "activeWebviewPanelId == structurizrPreview",
+          "command": "c4.diagram.import.layout.mx",
           "group": "navigation"
         }
       ]

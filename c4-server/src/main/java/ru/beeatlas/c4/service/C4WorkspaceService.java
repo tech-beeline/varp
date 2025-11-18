@@ -27,6 +27,7 @@ import com.structurizr.view.View;
 
 import ru.beeatlas.c4.dto.RefreshOptions;
 import ru.beeatlas.c4.utils.C4Utils;
+import ru.beeatlas.c4.utils.MxReader;
 import ru.beeatlas.c4.utils.SVGReader;
 import ru.beeatlas.c4.commands.C4ExecuteCommandProvider;
 import ru.beeatlas.c4.commands.C4ExecuteCommandResult;
@@ -45,6 +46,7 @@ public class C4WorkspaceService implements WorkspaceService {
 	private static final Logger logger = LoggerFactory.getLogger(C4WorkspaceService.class);
 	private C4TextDocumentService documentService;
 	private SVGReader svgReader = new SVGReader(400, true);
+	private MxReader mxReader = new MxReader(400, true);
 
 	public C4WorkspaceService(C4TextDocumentService documentService) {
 		this.documentService = documentService;
@@ -100,6 +102,9 @@ public class C4WorkspaceService implements WorkspaceService {
 				case C4ExecuteCommandProvider.REFRESH_PREVIEW: {
 					RefreshOptions refreshOptions = RefreshOptions.fromJson((JsonObject) params.getArguments().get(0));
 					Workspace workspace = documentService.getWorkspace(refreshOptions.document());
+					if(workspace == null) {
+						return C4ExecuteCommandResult.OK;
+					}
 					try {
 						String jsonContent = WorkspaceUtils.toJson(workspace, false);
 						return C4ExecuteCommandResult.OK.setMessage(jsonContent).toJson();
@@ -126,31 +131,57 @@ public class C4WorkspaceService implements WorkspaceService {
 				case C4ExecuteCommandProvider.WORKSPACE_2_DOT: {
 					RefreshOptions refreshOptions = RefreshOptions.fromJson((JsonObject) params.getArguments().get(0));
 					Workspace workspace = documentService.getWorkspace(refreshOptions.document());
+					if(workspace == null) {
+						return C4ExecuteCommandResult.OK;
+					}				
 					View view = workspace.getViews().getViewWithKey(refreshOptions.viewKey());
 					if (view != null && view instanceof ModelView) {
 						ModelView modelView = (ModelView) view;
-						String dot = C4Utils.export2Dot(modelView);
-						return C4ExecuteCommandResult.OK.setMessage(dot).toJson();
+						if(modelView.getAutomaticLayout() != null) {
+							String dot = C4Utils.export2Dot(modelView);
+							return C4ExecuteCommandResult.OK.setMessage(dot).toJson();
+						}
 					}
 					return C4ExecuteCommandResult.OK;
 				}
-				case C4ExecuteCommandProvider.SVG_LAYOUT: {
+				case C4ExecuteCommandProvider.GET_JSON: {
 					RefreshOptions refreshOptions = RefreshOptions.fromJson((JsonObject) params.getArguments().get(0));
 					Workspace workspace = documentService.getWorkspace(refreshOptions.document());
 					if(workspace == null) {
 						return C4ExecuteCommandResult.OK;
 					}
-					View view = workspace.getViews().getViewWithKey(refreshOptions.viewKey());
-					try {
+					String viewKey = refreshOptions.viewKey();
+					if(viewKey != null) {
+						View view = workspace.getViews().getViewWithKey(refreshOptions.viewKey());
 						if (view != null && view instanceof ModelView) {
-							svgReader.parseAndApplyLayout((ModelView) view, refreshOptions.svg());
-						}
+							ModelView modelView = (ModelView) view;
+							try {
+								if(refreshOptions.svg() != null) {
+									svgReader.parseAndApplyLayout(modelView, refreshOptions.svg());
+								} else if(refreshOptions.mx() != null) {
+									mxReader.parseAndApplyLayout(modelView, refreshOptions.mx());
+								}
+							} catch (Exception e) {
+								logger.error(e.getMessage());
+							}							
+						}				
+					}
+					try {
 						String jsonContent = WorkspaceUtils.toJson(workspace, false);
 						return C4ExecuteCommandResult.OK.setMessage(jsonContent).toJson();
 					} catch (Exception e) {
-						logger.error(e.getMessage());
+					 	logger.error(e.getMessage());
 					}
 					return C4ExecuteCommandResult.OK;
+
+					// try {
+
+					// 	String jsonContent = WorkspaceUtils.toJson(workspace, false);
+					// 	return C4ExecuteCommandResult.OK.setMessage(jsonContent).toJson();
+					// } catch (Exception e) {
+					// 	logger.error(e.getMessage());
+					// }
+					// return C4ExecuteCommandResult.OK;
 				}
 				case C4ExecuteCommandProvider.VIEW_2_MX: {
 					RefreshOptions refreshOptions = RefreshOptions.fromJson((JsonObject) params.getArguments().get(0));

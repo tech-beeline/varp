@@ -53,6 +53,7 @@ import com.structurizr.model.ContainerInstance;
 import com.structurizr.model.Element;
 import com.structurizr.model.Relationship;
 import com.structurizr.model.SoftwareSystemInstance;
+import com.structurizr.view.AutomaticLayout;
 import com.structurizr.view.ComponentView;
 import com.structurizr.view.ContainerView;
 import com.structurizr.view.DeploymentView;
@@ -421,7 +422,10 @@ public class C4DocumentModel {
 						View view = workspace.getViews().getViewWithKey(args.diagramKey());
 						if (view != null && view instanceof ModelView) {
 							ModelView modelView = (ModelView) view;
-							dot = C4Utils.export2Dot(modelView);
+							AutomaticLayout automaticLayout = modelView.getAutomaticLayout();
+							if(automaticLayout != null) {
+								dot = C4Utils.export2Dot(modelView);
+							}
 						}
 					}
 					args = new CodeLensCommandArgs(encodedWorkspace, args.diagramKey(), dot, null, null,null,null);

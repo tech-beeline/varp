@@ -1,5 +1,12 @@
 # Change Log
 
+## 1.0.7
+
+- Fixed an error exporting dynamic diagrams to the drawio format
+- Added rendering of systemLandscape diagrams
+- Implemented import of diagram layout from drawio files (only if the given drawio file was obtained by exporting this diagram before)
+- After diagram layout importing, a workspace.json file is automatically created
+
 ## 1.0.6
 
 - Fix drawio export error

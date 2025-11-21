@@ -27,6 +27,7 @@ import com.structurizr.view.View;
 
 import ru.beeatlas.c4.dto.RefreshOptions;
 import ru.beeatlas.c4.utils.C4Utils;
+import ru.beeatlas.c4.utils.MxReader;
 import ru.beeatlas.c4.utils.SVGReader;
 import ru.beeatlas.c4.commands.C4ExecuteCommandProvider;
 import ru.beeatlas.c4.commands.C4ExecuteCommandResult;
@@ -45,6 +46,7 @@ public class C4WorkspaceService implements WorkspaceService {
 	private static final Logger logger = LoggerFactory.getLogger(C4WorkspaceService.class);
 	private C4TextDocumentService documentService;
 	private SVGReader svgReader = new SVGReader(400, true);
+	private MxReader mxReader = new MxReader(400, true);
 
 	public C4WorkspaceService(C4TextDocumentService documentService) {
 		this.documentService = documentService;
@@ -100,6 +102,9 @@ public class C4WorkspaceService implements WorkspaceService {
 				case C4ExecuteCommandProvider.REFRESH_PREVIEW: {
 					RefreshOptions refreshOptions = RefreshOptions.fromJson((JsonObject) params.getArguments().get(0));
 					Workspace workspace = documentService.getWorkspace(refreshOptions.document());
+					if(workspace == null) {
+						return C4ExecuteCommandResult.OK;
+					}
 					try {
 						String jsonContent = WorkspaceUtils.toJson(workspace, false);
 						return C4ExecuteCommandResult.OK.setMessage(jsonContent).toJson();
@@ -126,31 +131,70 @@ public class C4WorkspaceService implements WorkspaceService {
 				case C4ExecuteCommandProvider.WORKSPACE_2_DOT: {
 					RefreshOptions refreshOptions = RefreshOptions.fromJson((JsonObject) params.getArguments().get(0));
 					Workspace workspace = documentService.getWorkspace(refreshOptions.document());
+					if(workspace == null) {
+						return C4ExecuteCommandResult.OK;
+					}				
 					View view = workspace.getViews().getViewWithKey(refreshOptions.viewKey());
 					if (view != null && view instanceof ModelView) {
 						ModelView modelView = (ModelView) view;
-						String dot = C4Utils.export2Dot(modelView);
-						return C4ExecuteCommandResult.OK.setMessage(dot).toJson();
+						if(modelView.getAutomaticLayout() != null) {
+							String dot = C4Utils.export2Dot(modelView);
+							return C4ExecuteCommandResult.OK.setMessage(dot).toJson();
+						}
 					}
 					return C4ExecuteCommandResult.OK;
 				}
-				case C4ExecuteCommandProvider.SVG_LAYOUT: {
+				case C4ExecuteCommandProvider.GET_JSON: {
 					RefreshOptions refreshOptions = RefreshOptions.fromJson((JsonObject) params.getArguments().get(0));
 					Workspace workspace = documentService.getWorkspace(refreshOptions.document());
 					if(workspace == null) {
 						return C4ExecuteCommandResult.OK;
 					}
-					View view = workspace.getViews().getViewWithKey(refreshOptions.viewKey());
+					String originalWorkspaceJson = "";
+					String renderedWorkspaceJson = "";
+					String viewKey = refreshOptions.viewKey();
 					try {
-						if (view != null && view instanceof ModelView) {
-							svgReader.parseAndApplyLayout((ModelView) view, refreshOptions.svg());
+						if (viewKey == null) {
+							// no view key - return workspace json as is
+							renderedWorkspaceJson = WorkspaceUtils.toJson(workspace, false);
+						} else {
+							View view = workspace.getViews().getViewWithKey(viewKey);
+							if (view == null && !(view instanceof ModelView)) {
+								// no view to render - return workspace json as is
+								renderedWorkspaceJson = WorkspaceUtils.toJson(workspace, false);
+							} else {
+								ModelView modelView = (ModelView) view;
+								if (refreshOptions.svg() != null) {
+									// autolayout from svg
+									// keep original workspace as json before applying
+									originalWorkspaceJson = WorkspaceUtils.toJson(workspace, false);
+									svgReader.parseAndApplyLayout(modelView, refreshOptions.svg());
+									renderedWorkspaceJson = WorkspaceUtils.toJson(workspace, false);
+								} else if (refreshOptions.mx() != null) {
+									// layout from drawio
+									// apply and return json
+									mxReader.parseAndApplyLayout(modelView, refreshOptions.mx());
+									renderedWorkspaceJson = WorkspaceUtils.toJson(workspace, false);
+								} else {
+									// no autolayout, no import layout from drawio
+									// return json
+									renderedWorkspaceJson = WorkspaceUtils.toJson(workspace, false);
+								}
+							}
 						}
-						String jsonContent = WorkspaceUtils.toJson(workspace, false);
-						return C4ExecuteCommandResult.OK.setMessage(jsonContent).toJson();
 					} catch (Exception e) {
 						logger.error(e.getMessage());
+						return C4ExecuteCommandResult.OK;
 					}
-					return C4ExecuteCommandResult.OK;
+					if(!originalWorkspaceJson.isEmpty()) {
+						try {
+							// try to restore workspace to its original state (before applying autolayout)
+							Workspace originalWorkspace = WorkspaceUtils.fromJson(originalWorkspaceJson);
+							workspace.getViews().copyLayoutInformationFrom(originalWorkspace.getViews());	
+						} catch (Exception e) {
+						}
+					}
+					return C4ExecuteCommandResult.OK.setMessage(renderedWorkspaceJson).toJson();
 				}
 				case C4ExecuteCommandProvider.VIEW_2_MX: {
 					RefreshOptions refreshOptions = RefreshOptions.fromJson((JsonObject) params.getArguments().get(0));

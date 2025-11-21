@@ -19,7 +19,7 @@ package ru.beeatlas.c4.dto;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
-public record RefreshOptions (String document, String viewKey, String svg) {
+public record RefreshOptions (String document, String viewKey, String svg, String mx) {
     private static final Gson GSON = new Gson();
     public static RefreshOptions fromJson(JsonObject jsonObject) {
         return GSON.fromJson(jsonObject, RefreshOptions.class);

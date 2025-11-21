@@ -987,6 +987,10 @@ public class MxExporter extends AbstractDiagramExporter {
         writer.writeLine("</object>");
     }
 
+    public static String relationshipId(RelationshipView relationshipView) {
+        return relationshipView.getId() + "-" + relationshipView.getOrder();
+    }
+
     @Override
     protected void writeRelationship(ModelView view, RelationshipView relationshipView, IndentingWriter writer) {
         Element source;
@@ -1042,7 +1046,8 @@ public class MxExporter extends AbstractDiagramExporter {
         StringBuilder sb = new StringBuilder();
         sb.append("<object placeholders=\"1\" c4Type=\"Relationship\" c4Technology=\"").append(technology);
         sb.append("\" c4Description=\"").append(description);
-        sb.append("\" label=\"&lt;div style=&quot;text-align: left&quot;&gt;&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;&lt;div style=&quot;text-align: center&quot;&gt;[%c4Technology%]&lt;/div&gt;&lt;/div&gt;\" id=\"").append(relationshipView.getId());
+        String id = relationshipId(relationshipView);
+        sb.append("\" label=\"&lt;div style=&quot;text-align: left&quot;&gt;&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;&lt;div style=&quot;text-align: center&quot;&gt;[%c4Technology%]&lt;/div&gt;&lt;/div&gt;\" id=\"").append(id);
         sb.append("\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);

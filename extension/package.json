@@ -9,7 +9,7 @@
   },
   "license": "Apache-2.0",
   "icon": "images/logo.png",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "engines": {
     "vscode": "^1.73.0"
   },
@@ -80,6 +80,10 @@
       {
         "command": "c4.diagram.export.mx",
         "title": "Export to .drawio"
+      },
+      {
+        "command": "c4.diagram.import.layout.mx",
+        "title": "Import layout from .drawio"
       }
     ],
     "menus": {
@@ -106,6 +110,11 @@
         {
           "when": "activeWebviewPanelId == structurizrPreview",
           "command": "c4.diagram.export.mx",
+          "group": "navigation"
+        },
+        {
+          "when": "activeWebviewPanelId == structurizrPreview",
+          "command": "c4.diagram.import.layout.mx",
           "group": "navigation"
         }
       ]
@@ -156,56 +165,67 @@
         "c4.languageserver.java.path": {
           "type": "string",
           "default": "",
+          "scope": "application",
           "description": "Java Path (JDK or JRE) for executing c4 language server. If set, this setting is prefered over OS path setting"
         },
         "c4.languageserver.logs.enabled": {
           "type": "boolean",
           "default": false,
+          "scope": "application",
           "description": "If enabled server logs are written into workspace folder."
         },
         "c4.editor.autoformat.indent": {
           "type": "integer",
           "default": 4,
+          "scope": "application",
           "description": "The number of spaces per indentation, when calling format document"
         },
         "c4.sSL\\TLS.disabled": {
           "type": "boolean",
           "default": false,
+          "scope": "application",
           "description": "Disable SSL\\TLS verification"
         },
         "c4.beeline.api.secret": {
           "type": "string",
           "default": "",
+          "scope": "application",
           "description": "Workspace API Secret"
         },
         "c4.beeline.api.key": {
           "type": "string",
           "default": "",
+          "scope": "application",
           "description": "Workspace API Key"
         },
         "c4.beeline.api.url": {
           "type": "string",
           "default": "",
+          "scope": "application",
           "description": "ArchOPS automation server URL"
         },
         "c4.beeline.cloud.token": {
           "type": "string",
           "default": "",
+          "scope": "application",
           "description": "Security token for cloud connect"
         },
         "c4.beeline.cloud.url": {
           "type": "string",
           "default": "https://cloud.beeline.ru",
+          "scope": "application",
           "description": "Public cloud for IaaC integration"
         },
         "c4.beeline.glossaries": {
           "type": "string",
           "default": "Product,Service,Customer",
+          "scope": "application",
           "description": "Data dictionary names for data flow markup on architecture"
         },
         "c4.beeline.telemetry.disabled": {
           "type": "boolean",
           "default": false,
+          "scope": "application",
           "description": "Disable ArchOPS telemetry collection"
         }
       }

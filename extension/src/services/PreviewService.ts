@@ -16,19 +16,21 @@
 
 import {
   ExtensionContext,
+  OpenDialogOptions,
+  ProgressLocation,
   SaveDialogOptions,
   TextDocument,
   Uri,
   ViewColumn,
   WebviewPanel,
   commands,
-  window,
+  window
 } from "vscode";
 
 import { CommandResultCode, RefreshOptions } from "../types";
 import { Graphviz } from "@hpcc-js/wasm-graphviz";
-import { writeFile } from 'fs';
-import { join } from 'path';
+import { readFile, writeFile } from 'fs';
+import { basename, dirname, join } from 'path';
 import { homedir } from 'os';
 
 class PreviewService {
@@ -96,7 +98,8 @@ class PreviewService {
       const refreshOptions: RefreshOptions = {
         viewKey: this._currentDiagram,
         document: savedDoc.uri.path,
-        svg: undefined
+        svg: undefined,
+        mx: undefined
       };
       commands.executeCommand("c4-server.workspace-2-dot", refreshOptions).then(async (callback) => {
         const result = callback as CommandResultCode;
@@ -112,11 +115,63 @@ class PreviewService {
     return documentsPath;
   }
 
+public async importLayoutMax(context: ExtensionContext) {
+    const options: OpenDialogOptions = {
+      defaultUri: Uri.file(join(this.getUserDocumentsPath(), this._currentDiagram)),
+      filters: {
+        'DrawIO Files': ['drawio'],
+        'All Files': ['*']
+      },
+      title: 'Import layout from .drawio file'
+    };
+    const uri = await window.showOpenDialog(options);
+    if (uri) {
+      window.withProgress({
+          location: ProgressLocation.Notification,
+          title: "Importing layout from drawio file",
+          cancellable: false
+      }, (progress, token) => {
+        return new Promise<void>(resolve => {
+          progress.report({ message: "Read drawio file..." });
+          readFile(uri[0].fsPath, (err, data) => {
+            const refreshOptions: RefreshOptions = {
+              viewKey: this._currentDiagram,
+              document: this._currentDocument.uri.path,
+              svg: undefined,
+              mx: data.toString()
+            };
+            progress.report({ message: "Apply layout..." });
+            commands.executeCommand("c4-server.get-json", refreshOptions).then(async (callback) => {
+              const result = callback as CommandResultCode;
+              if(result.message === undefined) {
+                  resolve();
+                  return;                  
+              }
+              progress.report({ message: "Refresh diagram..." });
+              this.panel ??= this.createPanel();
+              this.panel.webview.postMessage( { 'body' : result.message, 'view' : this._currentDiagram });
+              const directoryPath = dirname(this._currentDocument.uri.fsPath);
+              const bname = basename('workspace.json');
+              const filepath = join(directoryPath, bname);
+              writeFile(filepath, result.message, function (error) {
+                if (error) {
+                  window.showErrorMessage(error.message);
+                }
+                resolve();
+              });
+            });
+          });
+        });
+      });
+    }
+  }
+
   public async getMx(context: ExtensionContext) {
       const refreshOptions: RefreshOptions = {
         viewKey: this._currentDiagram,
         document: this._currentDocument.uri.path,
-        svg: undefined
+        svg: undefined,
+        mx: undefined
       };
       commands.executeCommand("c4-server.view-2-mx", refreshOptions).then(async (callback) => {
         const result = callback as CommandResultCode;
@@ -180,9 +235,10 @@ class PreviewService {
     const refreshOptions: RefreshOptions = {
       viewKey: this._currentDiagram,
       document: this._currentDocument.uri.path,
-      svg: this.graphviz.dot(this._currentDiagramAsDot)
+      svg: (this._currentDiagramAsDot !== undefined) ? this.graphviz.dot(this._currentDiagramAsDot) : undefined,
+      mx: undefined
     };
-    commands.executeCommand("c4-server.svg-layout", refreshOptions).then(async (callback) => {
+    commands.executeCommand("c4-server.get-json", refreshOptions).then(async (callback) => {
       const result = callback as CommandResultCode;
       if(result.message !== undefined) {
         this.panel ??= this.createPanel();

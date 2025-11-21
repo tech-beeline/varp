@@ -57,7 +57,8 @@ class StructurizrPreviewService {
       const refreshOptions: RefreshOptions = {
         viewKey: this.currentDiagram,
         document: savedDoc.uri.path,
-        svg: undefined
+        svg: undefined,
+        mx: undefined
       };
       commands.executeCommand("c4.refresh", refreshOptions).then((callback) => {
         const result = callback as CommandResultCode;

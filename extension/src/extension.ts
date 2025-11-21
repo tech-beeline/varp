@@ -168,18 +168,22 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
 
           commands.executeCommand('setContext', 'extension:c4', true);
 
-          const onpremisesPreviewService = new PreviewService(context);
+          const embeddedPreviewService = new PreviewService(context);
           const structurizrPreviewService = new StructurizrPreviewService(STRUCTURIZ_COM);
           c4InsertSnippet();
           c4InsertSla();
           c4ExportDeployment();
 
           commands.registerCommand("c4.diagram.export.svg", async () => {
-            onpremisesPreviewService.getSvg(context);
+            embeddedPreviewService.getSvg(context);
           });
 
           commands.registerCommand("c4.diagram.export.mx", async () => {
-            onpremisesPreviewService.getMx(context);
+            embeddedPreviewService.getMx(context);
+          });
+
+          commands.registerCommand("c4.diagram.import.layout.mx", async () => {
+            embeddedPreviewService.importLayoutMax(context);
           });
 
           commands.registerCommand("c4.show.diagram", async (args : CodeLensCommandArgs) => {
@@ -191,10 +195,10 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
               structurizrPreviewService.currentDocument = window.activeTextEditor?.document as TextDocument;
               await structurizrPreviewService.updateWebView(args.encodedWorkspace);
             } else {
-              onpremisesPreviewService.currentDiagramAsDot = args.diagramAsDot;
-              onpremisesPreviewService.currentDiagram = args.diagramKey;
-              onpremisesPreviewService.currentDocument = window.activeTextEditor?.document as TextDocument;
-              await onpremisesPreviewService.updateWebView();
+              embeddedPreviewService.currentDiagramAsDot = args.diagramAsDot;
+              embeddedPreviewService.currentDiagram = args.diagramKey;
+              embeddedPreviewService.currentDocument = window.activeTextEditor?.document as TextDocument;
+              await embeddedPreviewService.updateWebView();
             }
           });
 
@@ -203,7 +207,7 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
             if (autolayoutUrl === 'https://structurizr.com') {
               structurizrPreviewService.triggerRefresh(document);
             } else {
-              onpremisesPreviewService.triggerRefresh(document);
+              embeddedPreviewService.triggerRefresh(document);
             }
           });
 

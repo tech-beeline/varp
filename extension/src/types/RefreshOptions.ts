@@ -15,7 +15,7 @@
 */
 
 type RefreshOptions = {
-  viewKey: string;
+  viewKey: string | undefined;
   document: string;
   svg: string | undefined;
   mx: string | undefined;

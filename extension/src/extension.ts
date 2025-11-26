@@ -22,7 +22,8 @@ import {
   StatusBarAlignment,
   TextDocument,
   env,
-  Uri
+  Uri,
+  TextEditor
 } from "vscode";
 
 import * as path from "path";
@@ -36,7 +37,9 @@ import {
 } from "vscode-languageclient";
 import { LanguageClient } from "vscode-languageclient/node";
 import {
+  CommandResultCode,
   ConfigurationOptions,
+  RefreshOptions,
   TextDocumentChangeConfig,
 } from "./types";
 import { C4Utils } from "./utils";
@@ -50,6 +53,8 @@ import { StructurizrPreviewService } from "./services/StructurizrPreviewService"
 import { CodeLensCommandArgs } from "./types/CodeLensCommandArgs";
 import { PreviewService } from "./services/PreviewService";
 import { DecorationService } from "./services/DecorationService";
+import { basename, dirname, join } from "node:path";
+import { writeFile } from "node:fs";
 
 var proc: cp.ChildProcess;
 
@@ -164,7 +169,75 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
 
           updateServerConfigurationIndent();
           updateServerConfiguration(context);
-          initDecoractionService();
+
+          commands.registerCommand("c4.workspace.save.json", async () => {
+            const doc = window.activeTextEditor?.document as TextDocument;
+            const refreshOptions: RefreshOptions = {
+              viewKey: undefined,
+              document: doc.uri.fsPath,
+              svg: undefined,
+              mx: undefined
+            };
+            commands.executeCommand("c4-server.get-json", refreshOptions).then(async (callback) => {
+              const result = callback as CommandResultCode;
+              if (result.message !== undefined) {
+                const directoryPath = dirname(doc.uri.fsPath);
+                const bname = basename('workspace.json');
+                const filepath = join(directoryPath, bname);
+                writeFile(filepath, result.message, function (error) {
+                  if (error) {
+                    window.showErrorMessage(error.message);
+                  }
+                });
+              }
+            });
+          });
+
+          const statusBarJsonItem = window.createStatusBarItem(StatusBarAlignment.Left, 100);
+          statusBarJsonItem.command = "c4.workspace.save.json";
+          context.subscriptions.push(statusBarJsonItem);
+          statusBarJsonItem.text = "Write workspace.json";
+
+          const decType = window.createTextEditorDecorationType({});  
+          const textDecorations = workspace.getConfiguration().get(config.TEXT_DECORATIONS) as TextDocumentChangeConfig;
+
+          const switchJson = (editor: TextEditor | undefined) => {
+              if (editor && editor?.document && editor?.document.languageId === "c4" && editor?.document.fileName && editor?.document.fileName.toLowerCase().endsWith('workspace.dsl')) {
+                statusBarJsonItem.show();
+              } else {
+                statusBarJsonItem.hide();
+              }            
+          };
+
+          if (textDecorations !== "off") {
+            const decorationService = new DecorationService(decType);
+
+            if (textDecorations === "onSave") {
+              workspace.onDidSaveTextDocument((savedDocument) => {
+                decorationService.triggerDecorations(undefined, savedDocument);
+              });
+            } else if (textDecorations === "onChange") {
+              workspace.onDidChangeTextDocument((changed) => {
+                decorationService.triggerDecorations(undefined, changed.document);
+              });
+            }
+
+            window.onDidChangeActiveTextEditor((editor) => {
+              if (!editor) {
+                editor = window.activeTextEditor;
+              }
+              switchJson(editor);
+              decorationService.triggerDecorations(editor, undefined);
+            });
+            decorationService.triggerDecorations(window.activeTextEditor, undefined);
+          } else {
+            window.onDidChangeActiveTextEditor((editor) => {
+              if (!editor) {
+                editor = window.activeTextEditor;
+              }
+              switchJson(editor);
+            });
+          }
 
           commands.executeCommand('setContext', 'extension:c4', true);
 
@@ -217,7 +290,6 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
             }
             updateServerConfiguration(context);
           });
-
         });
       }
     };
@@ -227,31 +299,6 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
   } else {
     statusBarItem.text = "Connection to C4 DSL Socket Server could not be established";
     statusBarItem.color = "red";
-  }
-}
-
-function initDecoractionService() {
-  // Defined here and not in the decoration service, as the decorations were being appended multiple times
-  const decType = window.createTextEditorDecorationType({});  
-  const textDecorations = workspace.getConfiguration().get(config.TEXT_DECORATIONS) as TextDocumentChangeConfig;  
-  if (textDecorations !== "off") {
-    const decorationService = new DecorationService(decType);
-
-    if (textDecorations === "onSave") {
-      workspace.onDidSaveTextDocument((savedDocument) => {
-        decorationService.triggerDecorations(undefined, savedDocument);
-      });
-    } else if (textDecorations === "onChange") {
-      workspace.onDidChangeTextDocument((changed) => {
-        decorationService.triggerDecorations(undefined, changed.document);
-      });
-    }
-
-    window.onDidChangeActiveTextEditor((editor) => {
-      decorationService.triggerDecorations(editor, undefined);
-    });
-
-    decorationService.triggerDecorations(window.activeTextEditor, undefined);
   }
 }
 

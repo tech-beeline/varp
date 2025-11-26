@@ -129,8 +129,8 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.setLength(0);
         writer.indent();
 
-        sb.append("<mxGraphModel dx=\"0\" dy=\"0\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"").append(view.getPaperSize().getWidth());
-        sb.append("\" pageHeight=\"").append(view.getPaperSize().getHeight());
+        sb.append("<mxGraphModel dx=\"0\" dy=\"0\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"").append(view.getDimensions().getWidth());
+        sb.append("\" pageHeight=\"").append(view.getDimensions().getHeight());
         sb.append("\" math=\"0\" shadow=\"0\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);

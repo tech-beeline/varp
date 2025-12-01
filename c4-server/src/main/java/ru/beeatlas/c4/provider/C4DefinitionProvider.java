@@ -74,9 +74,8 @@ public class C4DefinitionProvider {
 			final int endPos = startPos + path.length();
 			if(params.getPosition().getCharacter() >= startPos && params.getPosition().getCharacter() <= endPos) {
 				C4DocumentModel ref = c4Model.getReferencedModelByPath(path);
-				//C4DocumentModel ref = c4Model.getReferencedModels().stream().filter( r -> r.getUri().endsWith(path)).findFirst().get();
 				final Location location = new Location();
-				location.setRange(new Range( new Position(0,0), new Position(0,0)));
+				location.setRange(new Range(new Position(0,0), new Position(0,0)));
 				location.setUri(ref.getUri());
 				locations.add(location);
 			}

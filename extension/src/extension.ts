@@ -55,6 +55,7 @@ import { PreviewService } from "./services/PreviewService";
 import { DecorationService } from "./services/DecorationService";
 import { basename, dirname, join } from "node:path";
 import { writeFile } from "node:fs";
+import { BEELINE_CERT_VERIFICATION } from "./config";
 
 var proc: cp.ChildProcess;
 
@@ -323,19 +324,10 @@ function updateServerConfigurationIndent() {
 
 export function updateServerConfiguration(context: ExtensionContext) {
   const configOptions: ConfigurationOptions = {
-    beelineApiUrl : C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_API_URL) as string),
-    beelineApiSecret : workspace.getConfiguration().get(config.BEELINE_API_SECRET) as string,
-    beelineApiKey : workspace.getConfiguration().get(config.BEELINE_API_KEY) as string,
-    beelineCloudUrl : C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_CLOUD_URL) as string),
-    beelineCloudToken : workspace.getConfiguration().get(config.BEELINE_CLOUD_TOKEN) as string,
-    beelineGlossaries : workspace.getConfiguration().get(config.BEELINE_GLOSSARIES) as string,
-    beelineNoTelemetry : workspace.getConfiguration().get(config.BEELINE_NO_TELEMETRY) as boolean,
-    noTLS : workspace.getConfiguration().get(config.NOTLS) as boolean,
-    serverLogsEnabled : workspace.getConfiguration().get(config.LOGS_ENABLED) as boolean,
     version : context.extension.packageJSON.version
   };
   
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = configOptions.noTLS ? "0" : "1";
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = (workspace.getConfiguration().get(BEELINE_CERT_VERIFICATION) as boolean) ? "1" : "0";
 
   commands.executeCommand("c4-server.configuration", configOptions);
 }

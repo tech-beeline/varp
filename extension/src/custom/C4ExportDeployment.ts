@@ -26,7 +26,7 @@ import { writeFile, mkdirSync, existsSync } from 'fs';
 import { dirname, join, basename } from 'path';
 import { HttpClient } from 'typed-rest-client/HttpClient';
 import { IRequestOptions } from 'typed-rest-client/Interfaces';
-import { BEELINE_API_URL, NOTLS } from '../config';
+import { BEELINE_API_URL, BEELINE_CERT_VERIFICATION } from '../config';
 import { generateHmac } from './hmac';
 import { CodeLensCommandArgs } from '../types/CodeLensCommandArgs';
 import { C4Utils } from '../utils';
@@ -49,7 +49,7 @@ export function c4ExportDeployment() {
     const vegaToken = workspace.getConfiguration().get(CONF_VEGA_TOKEN) as string;
 
     const options: IRequestOptions = <IRequestOptions>{};
-    options.ignoreSslError = workspace.getConfiguration().get(NOTLS) as boolean;
+    options.ignoreSslError = !(workspace.getConfiguration().get(BEELINE_CERT_VERIFICATION) as boolean);
     const httpc = new HttpClient('vscode-c4-dsl-plugin', [], options);
 
     window.withProgress({

@@ -55,15 +55,19 @@ import org.eclipse.lsp4j.Command;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionItemKind;
 import org.eclipse.lsp4j.CompletionItemLabelDetails;
+import org.eclipse.lsp4j.ConfigurationItem;
+import org.eclipse.lsp4j.ConfigurationParams;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.MarkupContent;
 import org.eclipse.lsp4j.MarkupKind;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.services.LanguageClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonPrimitive;
 import com.structurizr.Workspace;
 import com.structurizr.model.Container;
 import com.structurizr.model.Element;
@@ -121,6 +125,12 @@ public class Custom {
     private final static String TECH_PATTERN = "tech:";
     private Map<String, String> adrs = new HashMap<>();
 
+    LanguageClient client;
+
+    public void setClient(LanguageClient client) {
+        this.client = client;
+    }
+
     private static final Custom INSTANCE = new Custom();    
 
     public void setVersion(String version) {
@@ -156,6 +166,29 @@ public class Custom {
     }
 
     private HttpsURLConnection beelineApiConnection(String method, String path, String body, String contentType) throws IOException, InvalidKeyException, NoSuchAlgorithmException {
+        ConfigurationItem keyItem = new ConfigurationItem();
+        keyItem.setSection("c4.beeline.api.key");
+
+        ConfigurationItem secretItem = new ConfigurationItem();
+        secretItem.setSection("c4.beeline.api.secret");
+        
+        ConfigurationItem urlItem = new ConfigurationItem();
+        urlItem.setSection("c4.beeline.api.url");
+        
+        ConfigurationItem noTlsItem = new ConfigurationItem();
+        noTlsItem.setSection("c4.sSL\\TLS.disabled");               
+        ConfigurationParams configurationParams = new ConfigurationParams(Arrays.asList(keyItem, secretItem, urlItem, noTlsItem));
+        
+        try {
+            List<Object> values = client.configuration(configurationParams).get();
+            beelineApiKey = ((JsonPrimitive)values.get(0)).getAsString();
+            beelineApiSecret = ((JsonPrimitive)values.get(1)).getAsString();
+            beelineApiUrl = ((JsonPrimitive)values.get(2)).getAsString();
+            noTLS = ((JsonPrimitive)values.get(3)).getAsBoolean();
+        } catch (Exception e) {
+            logger.debug(e.getMessage());
+        }
+        
         HttpsURLConnection conn = (HttpsURLConnection) new URL(beelineApiUrl + path).openConnection();
         conn.setRequestMethod(method);
         if(contentType != null) {
@@ -167,6 +200,7 @@ public class Custom {
             conn.setHostnameVerifier(allTrustingHostnameVerifier);
             conn.setSSLSocketFactory(allTrustingTrustManager);
         }
+
         if(!beelineApiKey.isEmpty() && !beelineApiSecret.isEmpty()) {
             String bodyMD5 = (body == null) ? "d41d8cd98f00b204e9800998ecf8427e"
                     : HashBasedMessageAuthenticationCode.md5(body);
@@ -182,6 +216,23 @@ public class Custom {
     }
 
     private HttpsURLConnection beelineCloudConnection(String method, String path) throws IOException {
+        ConfigurationItem tokenItem = new ConfigurationItem();
+        tokenItem.setSection("c4.beeline.cloud.token");
+        ConfigurationItem urlItem = new ConfigurationItem();
+        urlItem.setSection("c4.beeline.cloud.url");
+        ConfigurationItem noTlsItem = new ConfigurationItem();
+        noTlsItem.setSection("c4.sSL\\TLS.disabled");               
+        ConfigurationParams configurationParams = new ConfigurationParams(Arrays.asList(tokenItem, urlItem, noTlsItem));
+
+        try {
+            List<Object> values = client.configuration(configurationParams).get();
+            beelineCloudToken = ((JsonPrimitive)values.get(0)).getAsString();
+            beelineCloudUrl = ((JsonPrimitive)values.get(1)).getAsString();
+            noTLS = ((JsonPrimitive)values.get(2)).getAsBoolean();
+        } catch (Exception e) {
+            logger.debug(e.getMessage());
+        }
+
         HttpsURLConnection conn = (HttpsURLConnection) new URL(beelineCloudUrl + path).openConnection();
         conn.setRequestMethod(method);
         if(noTLS) {
@@ -365,6 +416,16 @@ public class Custom {
     private void updateTerms() {
         CompletableFuture.runAsync(() -> {
             try {
+                ConfigurationItem glossariesItem = new ConfigurationItem();
+                glossariesItem.setSection("c4.beeline.glossaries");
+                ConfigurationParams configurationParams = new ConfigurationParams(Arrays.asList(glossariesItem));
+                try {
+                    List<Object> values = client.configuration(configurationParams).get();
+                    glossaries = ((JsonPrimitive)values.get(0)).getAsString();
+                } catch (Exception e) {
+                    logger.debug(e.getMessage());
+                }
+
                 List<String> glossariesAList = Arrays.asList(glossaries.split(",")).stream()
                         .map(String::toLowerCase).collect(Collectors.toList());
                 Map<String, Term> map = new HashMap<>();

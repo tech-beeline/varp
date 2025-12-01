@@ -33,6 +33,7 @@ import org.eclipse.lsp4j.services.LanguageClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import ru.beeatlas.c4.custom.Custom;
 import ru.beeatlas.c4.service.C4LanguageServer;
 import picocli.CommandLine;
 import picocli.CommandLine.Option;
@@ -68,6 +69,7 @@ public class C4LanguageServerLauncher implements Callable<Integer> {
                 LanguageClient client = launcher.getRemoteProxy();
                 // Set the client to language server
                 c4LanguageServer.connect(client);
+                Custom.getInstance().setClient(client);
                 // Start the listener for JsonRPC
                 Future<?> startListening = launcher.startListening();
                 // Get the computed result from LS.

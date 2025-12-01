@@ -290,6 +290,20 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
             }
             updateServerConfiguration(context);
           });
+
+         const beelineApiUrl = C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_API_URL) as string);
+         const beelineApiSecret = workspace.getConfiguration().get(config.BEELINE_API_SECRET) as string;
+         const beelineApiKey = workspace.getConfiguration().get(config.BEELINE_API_KEY) as string;        
+         if(beelineApiUrl.length === 0 || beelineApiSecret.length === 0 || beelineApiKey.length === 0) {
+            window.showInformationMessage(
+              'You haven\'t filled out all the extension settings yet. Complete the configuration to use all the features.',
+              'Open settings'
+            ).then(selection => {
+              if (selection === 'Open settings') {
+                commands.executeCommand( 'workbench.action.openSettings', '@ext:vimpelcom.c4-varp');
+              }
+            });
+          }
         });
       }
     };
@@ -311,7 +325,7 @@ export function updateServerConfiguration(context: ExtensionContext) {
   const configOptions: ConfigurationOptions = {
     beelineApiUrl : C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_API_URL) as string),
     beelineApiSecret : workspace.getConfiguration().get(config.BEELINE_API_SECRET) as string,
-    beelineApiKey : workspace.getConfiguration().get(config.BEELINE_API_KEY) as string,    
+    beelineApiKey : workspace.getConfiguration().get(config.BEELINE_API_KEY) as string,
     beelineCloudUrl : C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_CLOUD_URL) as string),
     beelineCloudToken : workspace.getConfiguration().get(config.BEELINE_CLOUD_TOKEN) as string,
     beelineGlossaries : workspace.getConfiguration().get(config.BEELINE_GLOSSARIES) as string,

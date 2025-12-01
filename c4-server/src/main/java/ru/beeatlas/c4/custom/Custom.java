@@ -310,7 +310,7 @@ public class Custom {
         LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory(); 
         ch.qos.logback.classic.Logger log = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME);             
         if(serverLogsEnabled) {
-            if(log.getLevel() == Level.OFF) {
+            if(!log.isAttached(fileAppender)) {
                 fileAppender.start();
                 log.setAdditive(false);
                 log.setLevel(Level.DEBUG);
@@ -318,7 +318,7 @@ public class Custom {
                 logger.info("Start logging...");
             }
         } else {
-            if(log.getLevel() != Level.OFF) {
+            if(log.isAttached(fileAppender)) {
                 logger.info("Stop logging...");
                 log.setLevel(Level.OFF);
                 log.detachAndStopAllAppenders();

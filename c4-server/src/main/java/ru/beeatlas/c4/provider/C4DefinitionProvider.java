@@ -96,7 +96,9 @@ public class C4DefinitionProvider {
 		List<Entry<Integer, C4ObjectWithContext<Element>>> refs = hostModel.findElementsById(id);
 		if(refs.isEmpty()) {
 			C4DocumentModel extendsBy = hostModel.getExtendsBy();
-			refs = extendsBy.findElementsById(id);
+			if(extendsBy != null) {
+				refs = extendsBy.findElementsById(id);
+			}
 		}
 		logger.info(id + " -> " + refs.size());
 		if(refs.size() == 1) {

@@ -181,6 +181,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	@Override
 	public void onInclude(File referencedFile, String path) {
 		if (context != null) {
+			getModel(referencedFile).setExtendsBy(context.model.getExtendsBy());
 			context.model.addReferencedModel(getModel(referencedFile), context.lineNumber, path);
 		} else {
 			logger.error("onInclude() - Context is null");

@@ -45,7 +45,7 @@ public class C4DefinitionProvider {
 
 	public Either<List<? extends Location>, List<? extends LocationLink>> calcDefinitions(C4DocumentModel c4Model, DefinitionParams params) {
 
-		int currentLineNumner = params.getPosition().getLine()+1;
+		int currentLineNumner = params.getPosition().getLine() + 1;
 
 		List<Location> locations = new ArrayList<>();
 		logger.debug("calcDefinitions for line {}", currentLineNumner);
@@ -60,13 +60,12 @@ public class C4DefinitionProvider {
 			findModelElementById(c4Model, r.getObject().getDestinationId(), params).ifPresent( loc -> locations.add(loc));
 		});
 
-		c4Model.getElementAtLineNumber(currentLineNumner).ifPresent( e -> {
-			if(e.getObject() instanceof ContainerInstance) {
-				findModelElementById(c4Model, ((ContainerInstance) e.getObject()).getContainerId(), params).ifPresent( loc -> locations.add(loc));
+		c4Model.getElementAtLineNumber(currentLineNumner).ifPresent(e -> {
+			if (e.getObject() instanceof ContainerInstance) {
+				findModelElementById(c4Model, ((ContainerInstance) e.getObject()).getContainerId(), params).ifPresent(loc -> locations.add(loc));
+			} else if (e.getObject() instanceof SoftwareSystemInstance) {
+				findModelElementById(c4Model, ((SoftwareSystemInstance) e.getObject()).getSoftwareSystemId(), params).ifPresent(loc -> locations.add(loc));
 			}
-			else if(e.getObject() instanceof SoftwareSystemInstance) {
-				findModelElementById(c4Model, ((SoftwareSystemInstance) e.getObject()).getSoftwareSystemId(), params).ifPresent( loc -> locations.add(loc));
-			}	
 		});
 
 		c4Model.getIncludeAtLineNumber(currentLineNumner).ifPresent( path -> {
@@ -118,7 +117,7 @@ public class C4DefinitionProvider {
 				}
 				else {
 					logger.debug("    Cursor {} out of range [{}, {}]", params.getPosition().getCharacter(), startPos, endPos);			
-				}	
+				}
 			}
 		}
 
@@ -138,5 +137,5 @@ public class C4DefinitionProvider {
 		return location;
 
 	}
-	
+
 }

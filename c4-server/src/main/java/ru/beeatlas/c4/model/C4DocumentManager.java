@@ -311,7 +311,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 					model.setWorkspace(lastParsedWorkspace);
 					if(errors.size() == 0) {
 						updateModel(model, layouts);
-					}					
+					}
 				} else {
 					errors.clear();
 					model.setValid(true);
@@ -353,7 +353,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 							model.setWorkspace(lastParsedWorkspace);
 							if(errors.size() == 0) {
 								updateModel(model, layouts);
-							}							
+							}
 						} else {
 							errors.clear();
 							model.setValid(true);
@@ -401,5 +401,5 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 
 		return diagnostic;
 	}
-    
+
 }

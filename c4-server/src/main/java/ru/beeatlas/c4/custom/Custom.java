@@ -76,9 +76,9 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.PatternLayout;
 import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.FileAppender;
 import ch.qos.logback.core.encoder.LayoutWrappingEncoder;
 import ru.beeatlas.c4.utils.C4Utils;
+import ru.beeatlas.c4.utils.ClientAppender;
 import ru.beeatlas.c4.dto.CodeLensCommandArgs;
 import ru.beeatlas.c4.model.C4DocumentModel;
 import ru.beeatlas.c4.model.C4ObjectWithContext;
@@ -94,7 +94,7 @@ public class Custom {
 
     private PatternLayout pattern = new PatternLayout();
     private LayoutWrappingEncoder<ILoggingEvent> encoder = new LayoutWrappingEncoder<ILoggingEvent>();
-    private FileAppender<ILoggingEvent> fileAppender = new FileAppender<ILoggingEvent>();    
+    private ClientAppender<ILoggingEvent> clientAppender = new ClientAppender<ILoggingEvent>();
 
     private HostnameVerifier allTrustingHostnameVerifier = null;
     private SSLSocketFactory allTrustingTrustManager = null;
@@ -280,17 +280,15 @@ public class Custom {
         
         LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
         pattern.setContext(loggerContext);
-        pattern.setPattern("%d{HH:mm:ss.SSS} [%thread] %-5level %logger{35} - %msg%n");
+        pattern.setPattern("%d{yyyy-MM-dd HH:mm:ss.SSS} [%-5level] %logger{0} - %msg");
         pattern.start();
 
         encoder.setContext(loggerContext);
         encoder.setCharset(Charset.forName("utf-8"));
         encoder.setLayout(pattern);
 
-        fileAppender.setFile("c4-language-server.log");
-        fileAppender.setEncoder(encoder);
-        fileAppender.setContext(loggerContext);
-        fileAppender.setAppend(false);        
+        clientAppender.setEncoder(encoder);
+        clientAppender.setContext(loggerContext);      
     }
 
     public void setServerLogsEnabled() {
@@ -310,20 +308,22 @@ public class Custom {
         LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory(); 
         ch.qos.logback.classic.Logger log = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME);             
         if(serverLogsEnabled) {
-            if(!log.isAttached(fileAppender)) {
-                fileAppender.start();
+            if(!log.isAttached(clientAppender)) {
+                clientAppender.setClient(client);                
+                clientAppender.start();
+
                 log.setAdditive(false);
                 log.setLevel(Level.DEBUG);
-                log.addAppender(fileAppender);
+                log.addAppender(clientAppender);
                 logger.info("Start logging...");
             }
         } else {
-            if(log.isAttached(fileAppender)) {
+            if(log.isAttached(clientAppender)) {
                 logger.info("Stop logging...");
                 log.setLevel(Level.OFF);
                 log.detachAndStopAllAppenders();
             }
-        }
+        } 
     }
 
     public void reinit() {

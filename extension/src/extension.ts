@@ -107,7 +107,7 @@ export function activate(context: ExtensionContext) {
 
 function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
 
-  const logger = window.createOutputChannel("C4 DSL Extension");
+  const logger = window.createOutputChannel("C4 Architecture As A Code");
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "c4" }, { scheme: "file", language: "markdown" }],

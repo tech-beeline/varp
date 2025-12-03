@@ -105,18 +105,42 @@ public class C4DefinitionProvider {
 			C4ObjectWithContext<Element> element = refModel.getElementAtLineNumber(refLineNumber).get();
 			logger.debug("Found referenced element in line {} for usage in line {}", refLineNumber, params.getPosition().getLine());
 			logger.debug("    Details: {}",element.getIdentifier());
-			final int startPos = C4Utils.getStartPosition(hostModel.getLineAt(params.getPosition().getLine()), element.getIdentifier());
+			int startPos = C4Utils.getStartPosition(hostModel.getLineAt(params.getPosition().getLine()), element.getIdentifier());
 			if(startPos == C4Utils.NOT_FOUND_WITHIN_STRING) {
 				logger.error("Identifier {} not found in line {} ", element.getIdentifier(), params.getPosition().getLine());
-			}
-			else {
-				final int endPos = startPos + element.getIdentifier().length();
+			} else {
+				int endPos = startPos + element.getIdentifier().length();
 				if(params.getPosition().getCharacter() >= startPos && params.getPosition().getCharacter() <= endPos) {
 					logger.debug("    Cursor {} within range [{}, {}]", params.getPosition().getCharacter(), startPos, endPos);
 					result = Optional.of(createLocation(refModel, refLineNumber-1, element.getIdentifier()));
-				}
-				else {
-					logger.debug("    Cursor {} out of range [{}, {}]", params.getPosition().getCharacter(), startPos, endPos);			
+				} else {
+					String fullIdentifier = element.getIdentifier();
+					Element parent = element.getObject().getParent();
+					while(parent != null) {
+						refs = hostModel.findElementsById(parent.getId());
+						if(refs.isEmpty()) {
+							C4DocumentModel extendsBy = hostModel.getExtendsBy();
+							if(extendsBy != null) {
+								refs = extendsBy.findElementsById(parent.getId());
+							}
+						}
+						if(refs.size() == 1) {
+							fullIdentifier = refs.get(0).getValue().getIdentifier() + "." + fullIdentifier;
+						}
+						parent = parent.getParent();
+					}
+					startPos = C4Utils.getStartPosition(hostModel.getLineAt(params.getPosition().getLine()), fullIdentifier);
+					if(startPos == C4Utils.NOT_FOUND_WITHIN_STRING) {
+						logger.error("Identifier {} not found in line {} ", element.getIdentifier(), params.getPosition().getLine());
+					} else {
+						endPos = startPos + fullIdentifier.length();
+						if(params.getPosition().getCharacter() >= startPos && params.getPosition().getCharacter() <= endPos) {
+							logger.debug("    Cursor {} within range [{}, {}]", params.getPosition().getCharacter(), startPos, endPos);
+							result = Optional.of(createLocation(refModel, refLineNumber - 1, element.getIdentifier()));
+						} else {
+							logger.debug("    Cursor {} out of range [{}, {}]", params.getPosition().getCharacter(), startPos, endPos);
+						}
+					}
 				}
 			}
 		}

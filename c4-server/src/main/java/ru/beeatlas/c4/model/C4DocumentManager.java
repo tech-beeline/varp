@@ -181,6 +181,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	@Override
 	public void onInclude(File referencedFile, String path) {
 		if (context != null) {
+			getModel(referencedFile).setExtendsBy(context.model.getExtendsBy());
 			context.model.addReferencedModel(getModel(referencedFile), context.lineNumber, path);
 		} else {
 			logger.error("onInclude() - Context is null");
@@ -310,7 +311,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 					model.setWorkspace(lastParsedWorkspace);
 					if(errors.size() == 0) {
 						updateModel(model, layouts);
-					}					
+					}
 				} else {
 					errors.clear();
 					model.setValid(true);
@@ -352,7 +353,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 							model.setWorkspace(lastParsedWorkspace);
 							if(errors.size() == 0) {
 								updateModel(model, layouts);
-							}							
+							}
 						} else {
 							errors.clear();
 							model.setValid(true);
@@ -400,5 +401,5 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 
 		return diagnostic;
 	}
-    
+
 }

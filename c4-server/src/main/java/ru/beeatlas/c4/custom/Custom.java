@@ -38,6 +38,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -55,15 +56,19 @@ import org.eclipse.lsp4j.Command;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionItemKind;
 import org.eclipse.lsp4j.CompletionItemLabelDetails;
+import org.eclipse.lsp4j.ConfigurationItem;
+import org.eclipse.lsp4j.ConfigurationParams;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.MarkupContent;
 import org.eclipse.lsp4j.MarkupKind;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.services.LanguageClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonPrimitive;
 import com.structurizr.Workspace;
 import com.structurizr.model.Container;
 import com.structurizr.model.Element;
@@ -71,9 +76,9 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.PatternLayout;
 import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.FileAppender;
 import ch.qos.logback.core.encoder.LayoutWrappingEncoder;
 import ru.beeatlas.c4.utils.C4Utils;
+import ru.beeatlas.c4.utils.ClientAppender;
 import ru.beeatlas.c4.dto.CodeLensCommandArgs;
 import ru.beeatlas.c4.model.C4DocumentModel;
 import ru.beeatlas.c4.model.C4ObjectWithContext;
@@ -89,23 +94,14 @@ public class Custom {
 
     private PatternLayout pattern = new PatternLayout();
     private LayoutWrappingEncoder<ILoggingEvent> encoder = new LayoutWrappingEncoder<ILoggingEvent>();
-    private FileAppender<ILoggingEvent> fileAppender = new FileAppender<ILoggingEvent>();    
+    private ClientAppender<ILoggingEvent> clientAppender = new ClientAppender<ILoggingEvent>();
 
     private HostnameVerifier allTrustingHostnameVerifier = null;
     private SSLSocketFactory allTrustingTrustManager = null;
-    private boolean noTLS = false;
-    private boolean serverLogsEnabled = false;
-    private boolean beelineNoTelemetry = false;
     private boolean started = false;
 
     private String lastHover = "";
     private String username = "unknown";
-    private String beelineApiUrl = "";
-    private String beelineApiSecret = "";
-    private String beelineApiKey = "";
-    private String beelineCloudUrl = "";
-    private String beelineCloudToken = "";
-    private String glossaries = "";
     private String version = "";
     private String cmdb = "";
 
@@ -121,29 +117,16 @@ public class Custom {
     private final static String TECH_PATTERN = "tech:";
     private Map<String, String> adrs = new HashMap<>();
 
+    LanguageClient client;
+
+    public void setClient(LanguageClient client) {
+        this.client = client;
+    }
+
     private static final Custom INSTANCE = new Custom();    
 
     public void setVersion(String version) {
         this.version = version;
-    }
-
-    public void setBeelineNoTelemetry(boolean beelineNoTelemetry) {
-        if (this.beelineNoTelemetry != beelineNoTelemetry) {
-            this.beelineNoTelemetry = beelineNoTelemetry;
-            if (this.beelineNoTelemetry == true) {
-                logger.debug("Stop ArchOps Telemetry collection");
-            } else {
-                logger.debug("Start ArchOps Telemetry collection");
-            }
-        }
-    }
-
-    public void setBeelineApiSecret(String beelineApiSecret) {
-        this.beelineApiSecret = beelineApiSecret;
-    }
-
-    public void setBeelineApiKey(String beelineApiKey) {
-        this.beelineApiKey = beelineApiKey;
     }
 
     private boolean isValidURL(String url) {
@@ -156,41 +139,88 @@ public class Custom {
     }
 
     private HttpsURLConnection beelineApiConnection(String method, String path, String body, String contentType) throws IOException, InvalidKeyException, NoSuchAlgorithmException {
-        HttpsURLConnection conn = (HttpsURLConnection) new URL(beelineApiUrl + path).openConnection();
+        ConfigurationItem keyItem = new ConfigurationItem();
+        keyItem.setSection("c4.beeline.api.key");
+
+        ConfigurationItem secretItem = new ConfigurationItem();
+        secretItem.setSection("c4.beeline.api.secret");
+        
+        ConfigurationItem urlItem = new ConfigurationItem();
+        urlItem.setSection("c4.beeline.api.url");
+        
+        ConfigurationItem certVerificationItem = new ConfigurationItem();
+        certVerificationItem.setSection("c4.beeline.cert.verification.enabled");
+        ConfigurationParams configurationParams = new ConfigurationParams(Arrays.asList(keyItem, secretItem, urlItem, certVerificationItem));
+        
+        String apiKey = "";
+        String apiSecret = "";
+        String apiUrl = "";
+        boolean certVerification = false;
+
+        try {
+            List<Object> values = client.configuration(configurationParams).get();
+            apiKey = ((JsonPrimitive)values.get(0)).getAsString();
+            apiSecret = ((JsonPrimitive)values.get(1)).getAsString();
+            apiUrl = ((JsonPrimitive)values.get(2)).getAsString();
+            certVerification = ((JsonPrimitive)values.get(3)).getAsBoolean();
+        } catch (Exception e) {
+            logger.debug(e.getMessage());
+        }
+        
+        HttpsURLConnection conn = (HttpsURLConnection) new URL(apiUrl + path).openConnection();
         conn.setRequestMethod(method);
         if(contentType != null) {
             conn.setRequestProperty("Content-Type", contentType);
         } else {
             contentType = ""; 
         }
-        if(noTLS) {
+
+        if(certVerification == false) {
             conn.setHostnameVerifier(allTrustingHostnameVerifier);
             conn.setSSLSocketFactory(allTrustingTrustManager);
         }
-        if(!beelineApiKey.isEmpty() && !beelineApiSecret.isEmpty()) {
+
+        if(!apiKey.isEmpty() && !apiSecret.isEmpty()) {
             String bodyMD5 = (body == null) ? "d41d8cd98f00b204e9800998ecf8427e"
                     : HashBasedMessageAuthenticationCode.md5(body);
             String nonce = Long.toString(System.currentTimeMillis());
-            HashBasedMessageAuthenticationCode code = new HashBasedMessageAuthenticationCode(beelineApiSecret);
+            HashBasedMessageAuthenticationCode code = new HashBasedMessageAuthenticationCode(apiSecret);
             HmacContent hmacContent = new HmacContent(method, path, bodyMD5, contentType, nonce);
             String generatedHmac = code.generate(hmacContent.toString());
-            String xauth = beelineApiKey + ":" + generatedHmac;
+            String xauth = apiKey + ":" + generatedHmac;
             conn.setRequestProperty("X-Authorization", xauth);
             conn.setRequestProperty("Nonce", nonce);
         }
         return conn;
     }
 
-    private HttpsURLConnection beelineCloudConnection(String method, String path) throws IOException {
-        HttpsURLConnection conn = (HttpsURLConnection) new URL(beelineCloudUrl + path).openConnection();
+    private HttpsURLConnection beelineCloudConnection(String method, String path) throws IOException, InterruptedException, ExecutionException {
+        ConfigurationItem tokenItem = new ConfigurationItem();
+        tokenItem.setSection("c4.beeline.cloud.token");
+        ConfigurationItem urlItem = new ConfigurationItem();
+        urlItem.setSection("c4.beeline.cloud.url");
+        ConfigurationItem certVerificationItem = new ConfigurationItem();
+        certVerificationItem.setSection("c4.beeline.cert.verification.enabled");
+        ConfigurationParams configurationParams = new ConfigurationParams(Arrays.asList(tokenItem, urlItem, certVerificationItem));
+
+        String cloudToken = "";
+        String cloudUrl = "";
+        boolean certVerification = false;
+
+        List<Object> values = client.configuration(configurationParams).get();
+        cloudToken = ((JsonPrimitive)values.get(0)).getAsString();
+        cloudUrl = ((JsonPrimitive)values.get(1)).getAsString();
+        certVerification = ((JsonPrimitive)values.get(2)).getAsBoolean();
+
+        HttpsURLConnection conn = (HttpsURLConnection) new URL(cloudUrl + path).openConnection();
         conn.setRequestMethod(method);
-        if(noTLS) {
+        if(certVerification == false) {
             conn.setHostnameVerifier(allTrustingHostnameVerifier);
             conn.setSSLSocketFactory(allTrustingTrustManager);
         }
         conn.setRequestProperty("accept", "application/json");
-        if(!beelineCloudToken.isEmpty()) {
-            conn.setRequestProperty("Authorization", beelineCloudToken);
+        if(!cloudToken.isEmpty()) {
+            conn.setRequestProperty("Authorization", cloudToken);
         }
         return conn;
     }
@@ -250,65 +280,58 @@ public class Custom {
         
         LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
         pattern.setContext(loggerContext);
-        pattern.setPattern("%d{HH:mm:ss.SSS} [%thread] %-5level %logger{35} - %msg%n");
+        pattern.setPattern("%d{yyyy-MM-dd HH:mm:ss.SSS} [%-5level] %logger{0} - %msg");
         pattern.start();
 
         encoder.setContext(loggerContext);
         encoder.setCharset(Charset.forName("utf-8"));
         encoder.setLayout(pattern);
 
-        fileAppender.setFile("c4-language-server.log");
-        fileAppender.setEncoder(encoder);
-        fileAppender.setContext(loggerContext);
-        fileAppender.setAppend(false);        
+        clientAppender.setEncoder(encoder);
+        clientAppender.setContext(loggerContext);      
     }
 
-    public void setGlossaries(String glossaries) {
-        if(this.glossaries != glossaries) {
-            this.glossaries = glossaries;
-            updateTerms();
-        }        
-    }
+    public void setServerLogsEnabled() {
 
-    public void setServerLogsEnabled(boolean serverLogsEnabled) {
-        if(this.serverLogsEnabled != serverLogsEnabled) {
-            this.serverLogsEnabled = serverLogsEnabled;
-            LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory(); 
-            ch.qos.logback.classic.Logger log = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME);             
-            if(serverLogsEnabled) {
-                fileAppender.start();
+        ConfigurationItem serverLogsEnabledItem = new ConfigurationItem();
+        serverLogsEnabledItem.setSection("c4.languageserver.logs.enabled");
+        ConfigurationParams configurationParams = new ConfigurationParams(Arrays.asList(serverLogsEnabledItem));
+
+        boolean serverLogsEnabled = false;
+
+        try {
+            List<Object> values = client.configuration(configurationParams).get();
+            serverLogsEnabled = ((JsonPrimitive)values.get(0)).getAsBoolean();
+        } catch (Exception e) {
+            logger.debug(e.getMessage());
+        }
+        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory(); 
+        ch.qos.logback.classic.Logger log = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME);             
+        if(serverLogsEnabled) {
+            if(!log.isAttached(clientAppender)) {
+                clientAppender.setClient(client);                
+                clientAppender.start();
+
                 log.setAdditive(false);
                 log.setLevel(Level.DEBUG);
-                log.addAppender(fileAppender);
+                log.addAppender(clientAppender);
                 logger.info("Start logging...");
-            } else {
+            }
+        } else {
+            if(log.isAttached(clientAppender)) {
                 logger.info("Stop logging...");
                 log.setLevel(Level.OFF);
                 log.detachAndStopAllAppenders();
             }
-        }
-    }
-
-    public void setNoTLS(boolean noTLS) {
-        this.noTLS = noTLS;
+        } 
     }
 
     public void reinit() {
-        if (isValidURL(beelineApiUrl)) {
-            updateTechCapabilities();
-            updateCapabilities();
-            updateTech();
-            updateTerms();
-        }
+        updateTechCapabilities();
+        updateCapabilities();
+        updateTech();
+        updateTerms();
         startTelemetry();
-    }
-
-    public void setBeelineCloudUrl(String beelineCloudUrl) {
-        this.beelineCloudUrl = (beelineCloudUrl == null) ? "" : beelineCloudUrl;
-    }
-
-    public void setBeelineCloudToken(String beelineCloudToken) {
-        this.beelineCloudToken = (beelineCloudToken == null) ? "" : beelineCloudToken;
     }
 
     private void updateTechCapabilities() {
@@ -365,6 +388,17 @@ public class Custom {
     private void updateTerms() {
         CompletableFuture.runAsync(() -> {
             try {
+                ConfigurationItem glossariesItem = new ConfigurationItem();
+                glossariesItem.setSection("c4.beeline.glossaries");
+                ConfigurationParams configurationParams = new ConfigurationParams(Arrays.asList(glossariesItem));
+                String glossaries = "";
+                try {
+                    List<Object> values = client.configuration(configurationParams).get();
+                    glossaries = ((JsonPrimitive)values.get(0)).getAsString();
+                } catch (Exception e) {
+                    logger.debug(e.getMessage());
+                }
+
                 List<String> glossariesAList = Arrays.asList(glossaries.split(",")).stream()
                         .map(String::toLowerCase).collect(Collectors.toList());
                 Map<String, Term> map = new HashMap<>();
@@ -393,21 +427,29 @@ public class Custom {
         });
     }
 
-    public void setBeelineApiUrl(String beelineApiUrl) {
-        if(beelineApiUrl != null && !this.beelineApiUrl.equals(beelineApiUrl) && isValidURL(beelineApiUrl)) {
-            this.beelineApiUrl = beelineApiUrl;
-        }
-    }
-
     public static Custom getInstance() {
         return INSTANCE;
     }
 
     public String loadFrom(String themeLocation, int timeoutInMilliseconds) {
+
+        ConfigurationItem certVerificationItem = new ConfigurationItem();
+        certVerificationItem.setSection("c4.beeline.cert.verification.enabled");
+        ConfigurationParams configurationParams = new ConfigurationParams(Arrays.asList(certVerificationItem));
+        
+        boolean certVerification = false;
+
+        try {
+            List<Object> values = client.configuration(configurationParams).get();
+            certVerification = ((JsonPrimitive)values.get(0)).getAsBoolean();
+        } catch (Exception e) {
+            logger.debug(e.getMessage());
+        }
+
         try {
             HttpsURLConnection conn = (HttpsURLConnection) new URL(themeLocation).openConnection();
             conn.setRequestMethod("GET");
-            if (noTLS) {
+            if (certVerification == false) {
                 conn.setHostnameVerifier(allTrustingHostnameVerifier);
                 conn.setSSLSocketFactory(allTrustingTrustManager);
             }
@@ -506,9 +548,6 @@ public class Custom {
     }
 
     public List<CompletionItem> beelineCloudImagesCompletion(String vegaProject) {
-        if(beelineCloudUrl.isEmpty() || beelineCloudToken.isEmpty()) {
-            return Collections.emptyList();
-        }
         List<CompletionItem> completionItems = beelineCloudImages.getOrDefault(vegaProject, Collections.emptyList());
         if(completionItems.isEmpty()) {
             try {
@@ -530,7 +569,7 @@ public class Custom {
                     }).toList();
                 }
                 conn.disconnect();
-            } catch (IOException e) {
+            } catch (IOException | InterruptedException | ExecutionException e) {
             } finally {
                 if(!completionItems.isEmpty()) {
                     beelineCloudImages.put(vegaProject, completionItems);
@@ -541,9 +580,6 @@ public class Custom {
     }
 
     public List<CompletionItem> beelineCloudFlavorsCompletion(String vegaProject) {
-        if(beelineCloudToken == null || beelineCloudToken.isEmpty()) {
-            return Collections.emptyList();
-        }
         List<CompletionItem> completionItems = beelineCloudFlavors.getOrDefault(vegaProject, Collections.emptyList());
         if(completionItems.isEmpty()) {
             try {
@@ -558,7 +594,7 @@ public class Custom {
                     }).toList();
                 }
                 conn.disconnect();
-            } catch (IOException e) {
+            } catch (IOException | InterruptedException | ExecutionException e) {
             } finally {
                 if(!completionItems.isEmpty()) {
                     beelineCloudFlavors.put(vegaProject, completionItems);
@@ -621,9 +657,6 @@ public class Custom {
     }
 
     public List<CompletionItem> beelineCloudRegionsCompletion(String vegaProject) {
-        if (beelineCloudToken == null || beelineCloudToken.isEmpty()) {
-            return Collections.emptyList();
-        }
         List<CompletionItem> completionItems = beelineCloudRegions.getOrDefault(vegaProject, Collections.emptyList());
         if (completionItems.isEmpty()) {
             try {
@@ -644,7 +677,7 @@ public class Custom {
                     }).toList();
                 }
                 conn.disconnect();
-            } catch (IOException e) {
+            } catch (IOException | InterruptedException | ExecutionException e) {
             } finally {
                 if (!completionItems.isEmpty()) {
                     beelineCloudRegions.put(vegaProject, completionItems);
@@ -885,67 +918,95 @@ public class Custom {
         }
         return Collections.emptyList();
     }
-    
+
+    boolean isApiConfigured() {
+        ConfigurationItem keyItem = new ConfigurationItem();
+        keyItem.setSection("c4.beeline.api.key");
+
+        ConfigurationItem secretItem = new ConfigurationItem();
+        secretItem.setSection("c4.beeline.api.secret");
+        
+        ConfigurationItem urlItem = new ConfigurationItem();
+        urlItem.setSection("c4.beeline.api.url");
+        
+        ConfigurationParams configurationParams = new ConfigurationParams(Arrays.asList(keyItem, secretItem, urlItem));
+        
+        String apiKey = "";
+        String apiSecret = "";
+        String apiUrl = "";
+
+        try {
+            List<Object> values = client.configuration(configurationParams).get();
+            apiKey = ((JsonPrimitive)values.get(0)).getAsString();
+            apiSecret = ((JsonPrimitive)values.get(1)).getAsString();
+            apiUrl = ((JsonPrimitive)values.get(2)).getAsString();
+        } catch (Exception e) {
+            logger.debug(e.getMessage());
+        }
+            
+        return isValidURL(apiUrl) && !apiKey.isEmpty() && !apiSecret.isEmpty();
+    }
+
     public void closeScope(C4CompletionScope scope, C4DocumentModel model) {
 
-        if(!isValidURL(beelineApiUrl) || beelineApiKey.isEmpty() || beelineApiSecret.isEmpty()) {
-            return;
-        }
-
         if (scope.name().equals("DeploymentEnvironmentDslContext")) {
-            String line = model.getLineAt(scope.start() - 1);
-            List<LineToken> tokens = LineTokenizer.tokenize(line);
-            if (tokens.size() == 3) {
-                Command commandStructurizr = new Command("$(link-external) Export Environment", "c4.export.deployment");
-                String deploymentEnvironment = C4Utils.trimStringByString(tokens.get(1).token(), "\"");
-                CodeLensCommandArgs args = new CodeLensCommandArgs(null, null, null, deploymentEnvironment, null,null,null);
-                commandStructurizr.setArguments(Arrays.asList(args));
-                int pos = C4Utils.findFirstNonWhitespace(line, 0, true);
-                Range range = new Range(new Position(scope.start() - 1, pos), new Position(scope.start() - 1, pos));
-                model.addCodeLens(new CodeLens(range, commandStructurizr, null));
-            }
-        } else if(scope.name().equals("PropertiesDslContext")) {
-            int lineNumber = scope.start();
-            boolean isApi = false;
-            boolean isSlaPresent = false;
-            String apiUrl = "";
-
-            for(int i = lineNumber;i < scope.end();i++) {
-                String line = model.getLineAt(i - 1);
+            if(isApiConfigured()) {
+                String line = model.getLineAt(scope.start() - 1);
                 List<LineToken> tokens = LineTokenizer.tokenize(line);
-                if(tokens.size() == 2) {
-                    String name = C4Utils.trimStringByString(tokens.get(0).token(), "\"").toLowerCase();
-                    String value = C4Utils.trimStringByString(tokens.get(1).token(), "\"").toLowerCase();
-                    if(name.equals("type") && value.equals("api")) {
-                        isApi = true;
-                    }
-                    if(name.equals("api_url")) {
-                        apiUrl = value;
-                    }
-                    if(value.contains("rps") && value.contains("latency") && value.contains("error_rate")) {
-                        isSlaPresent = true;
-                    }
+                if (tokens.size() == 3) {
+                    Command commandStructurizr = new Command("$(link-external) Export Environment", "c4.export.deployment");
+                    String deploymentEnvironment = C4Utils.trimStringByString(tokens.get(1).token(), "\"");
+                    CodeLensCommandArgs args = new CodeLensCommandArgs(null, null, null, deploymentEnvironment, null,null,null);
+                    commandStructurizr.setArguments(Arrays.asList(args));
+                    int pos = C4Utils.findFirstNonWhitespace(line, 0, true);
+                    Range range = new Range(new Position(scope.start() - 1, pos), new Position(scope.start() - 1, pos));
+                    model.addCodeLens(new CodeLens(range, commandStructurizr, null));
                 }
             }
-            if(isApi == true && isSlaPresent == false && apiUrl.isBlank() == false) {
-                List<LineToken> tokens;
-                int i = 0;
-                do {
-                    i++;
-                    String tokensAtlastLine = model.getLineAt(scope.end() - (i + 1));
-                    tokens = LineTokenizer.tokenize(tokensAtlastLine);
-                } while(tokens.size() != 2);
+        } else if(scope.name().equals("PropertiesDslContext")) {
+            if(isApiConfigured()) {
+                int lineNumber = scope.start();
+                boolean isApi = false;
+                boolean isSlaPresent = false;
+                String apiUrl = "";
 
-                int lastLine = scope.end() - i;
-                int startLine = tokens.get(0).start();
-                Command commandStructurizr = new Command("$(link-external) Insert SLA", "c4.insert.sla");
-                CodeLensCommandArgs args = new CodeLensCommandArgs(null, null, null, null, apiUrl, lastLine, startLine);
-                commandStructurizr.setArguments(Arrays.asList(args));
-                String line = model.getLineAt(lineNumber - 1);
-                int pos = C4Utils.findFirstNonWhitespace(line, 0, true);
+                for(int i = lineNumber;i < scope.end();i++) {
+                    String line = model.getLineAt(i - 1);
+                    List<LineToken> tokens = LineTokenizer.tokenize(line);
+                    if(tokens.size() == 2) {
+                        String name = C4Utils.trimStringByString(tokens.get(0).token(), "\"").toLowerCase();
+                        String value = C4Utils.trimStringByString(tokens.get(1).token(), "\"").toLowerCase();
+                        if(name.equals("type") && value.equals("api")) {
+                            isApi = true;
+                        }
+                        if(name.equals("api_url")) {
+                            apiUrl = value;
+                        }
+                        if(value.contains("rps") && value.contains("latency") && value.contains("error_rate")) {
+                            isSlaPresent = true;
+                        }
+                    }
+                }
+                if(isApi == true && isSlaPresent == false && apiUrl.isBlank() == false) {
+                    List<LineToken> tokens;
+                    int i = 0;
+                    do {
+                        i++;
+                        String tokensAtlastLine = model.getLineAt(scope.end() - (i + 1));
+                        tokens = LineTokenizer.tokenize(tokensAtlastLine);
+                    } while(tokens.size() != 2);
 
-                Range range = new Range(new Position(lineNumber - 1, pos), new Position(lineNumber - 1, pos));
-                model.addCodeLens(new CodeLens(range, commandStructurizr, null));
+                    int lastLine = scope.end() - i;
+                    int startLine = tokens.get(0).start();
+                    Command commandStructurizr = new Command("$(link-external) Insert SLA", "c4.insert.sla");
+                    CodeLensCommandArgs args = new CodeLensCommandArgs(null, null, null, null, apiUrl, lastLine, startLine);
+                    commandStructurizr.setArguments(Arrays.asList(args));
+                    String line = model.getLineAt(lineNumber - 1);
+                    int pos = C4Utils.findFirstNonWhitespace(line, 0, true);
+
+                    Range range = new Range(new Position(lineNumber - 1, pos), new Position(lineNumber - 1, pos));
+                    model.addCodeLens(new CodeLens(range, commandStructurizr, null));
+                }
             }
         }
     }
@@ -989,7 +1050,21 @@ public class Custom {
     }
 
     private boolean sendTelemetry(String message) {
-        if(beelineNoTelemetry == true) {
+
+        ConfigurationItem telemetryEnabledItem = new ConfigurationItem();
+        telemetryEnabledItem.setSection("c4.beeline.telemetry.enabled");
+        ConfigurationParams configurationParams = new ConfigurationParams(Arrays.asList(telemetryEnabledItem));
+
+        boolean telemetryEnabled = false;
+
+        try {
+            List<Object> values = client.configuration(configurationParams).get();
+            telemetryEnabled = ((JsonPrimitive)values.get(0)).getAsBoolean();
+        } catch (Exception e) {
+            logger.debug(e.getMessage());
+        }
+
+        if(telemetryEnabled == false) {
             return false;
         }
         try {

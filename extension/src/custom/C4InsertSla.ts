@@ -25,7 +25,7 @@ import {
 import * as fs from 'fs';
 import * as httpm from 'typed-rest-client/HttpClient';
 import { IRequestOptions } from "typed-rest-client/Interfaces";
-import { BEELINE_API_URL, NOTLS } from "../config";
+import { BEELINE_API_URL, BEELINE_CERT_VERIFICATION } from "../config";
 import { generateHmac } from "./hmac";
 import { CodeLensCommandArgs } from "../types/CodeLensCommandArgs";
 import { dirname, join } from 'path';
@@ -34,7 +34,7 @@ import { C4Utils } from "../utils/c4-utils";
 export function c4InsertSla() {
   commands.registerCommand("c4.insert.sla", async (args : CodeLensCommandArgs) => {
     const options: IRequestOptions = <IRequestOptions>{};
-    options.ignoreSslError = workspace.getConfiguration().get(NOTLS) as boolean;
+    options.ignoreSslError = !(workspace.getConfiguration().get(BEELINE_CERT_VERIFICATION) as boolean);
     const httpc = new httpm.HttpClient('vscode-c4-dsl-plugin', [], options);
 
     window.withProgress({

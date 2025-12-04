@@ -159,7 +159,7 @@ public class C4TextDocumentService implements TextDocumentService {
 			try {
 				return Either.forLeft(completionProvider.calcCompletions(model, params.getPosition(), getElements()));
 			} finally {
-			}			
+			}
 		});
 
 	}
@@ -230,7 +230,7 @@ public class C4TextDocumentService implements TextDocumentService {
 			try {
 				return Collections.singletonList(new ColorPresentation(colorToHex(params.getColor())));
 			} finally {
-			}			
+			}
 		});
 	}
 
@@ -358,7 +358,7 @@ public class C4TextDocumentService implements TextDocumentService {
 			currentFuture = CompletableFuture.runAsync(() -> {
 				getDiagnostics(uri, params.getContentChanges().get(0).getText())
 						.forEach(d -> ls.getClient().publishDiagnostics(d));
-			}, diagnosticService);			
+			}, diagnosticService);
 		} else {
 			Custom.getInstance().didChange(uri, params.getContentChanges().get(0).getText());
 		}

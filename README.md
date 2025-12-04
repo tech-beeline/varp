@@ -5,16 +5,21 @@
 This Visual Studio Code extension enables software architecture modeling using the [Structurizr DSL](https://github.com/structurizr/dsl). The Structurizr DSL implements the "diagrams as code" approach ([learn more](https://docs.structurizr.com/)) and provides a textual representation of the [C4 model](https://c4model.com/).
 
 The extension includes:
-- A language server built on the official Structurizr DSL parser
+- A language server built on the official [Structurizr DSL](https://github.com/structurizr/java/tree/master/structurizr-dsl) parser
 - Advanced capabilities for architectural description automation
-- Diagram visualization
-- DSL conversion to other formats
+- Syntax highlighting and validation
+- Text decorations
+- Go to Definition
+- Diagram visualization (embedded or structurizr.com cloud)
+- Graphviz based diagram auto layouting
+- Workspace.json based diagram manual layouting
+- Diagram exporing to .svg and .drawio, back imprting layout from .drawio
+- Support for workspace extends and `!include` files
 
 ## Prerequisites
 
 - **Java 17+** ([download](https://dev.java/download)) - required for the language server
 - Workspace containing model files with `.dsl` extension
-- Support for multiple workspaces and `!include` files
 
 ## Features
 
@@ -75,10 +80,10 @@ Export diagram to **drawio** and **svg** formats
 |--------|--------|---------|-------------|
 | `c4.diagram.render` | String | `embedded` | Diagram rendering method (embedded or structurizr.com cloud) |
 | `c4.editor.autoformat.indent` | Number | `4` | Spaces per indentation level |
-| `c4.languageserver.logs.enabled` | `true`/`false` | `false` | Enable language server logging to `c4-language-server.log` |
+| `c4.languageserver.logs.enabled` | `true`/`false` | `false` | Enable language server logging |
 | `c4.decorations.enabled` | `off`, `onChange`, `onSave` | `onChange` | Text decoration timing |
-| `c4.SSL\TLS.disabled` | `true`/`false` | `false` | Disable SSL/TLS verification |
-| `c4.beeline.telemetry.disabled` | `true`/`false` | `false` | Disable ArchOPS telemetry collection |
+| `c4.beeline.cert.verification.enabled` | `true`/`false` | `false` | Enable SSL-certificate verification when interacting with the ArchOPS server |
+| `c4.beeline.telemetry.enabled` | `true`/`false` | `true` | Enable telemetry collection when interacting with the ArchOPS server |
 | `c4.beeline.api.url` | URL | | ArchOPS server URL |
 | `c4.beeline.api.key` | String | | ArchOPS API key |
 | `c4.beeline.api.secret` | String | | ArchOPS API secret |

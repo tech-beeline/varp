@@ -17,6 +17,7 @@
 package ru.beeatlas.c4.utils;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -40,6 +41,8 @@ import com.structurizr.view.RelationshipStyle;
 import com.structurizr.view.RelationshipView;
 import com.structurizr.view.Shape;
 import com.structurizr.view.Vertex;
+
+import static org.apache.commons.text.StringEscapeUtils.escapeHtml4;
 
 /**
  * Exports Structurizr views to .drawio mxfile format.
@@ -129,8 +132,8 @@ public class MxExporter extends AbstractDiagramExporter {
         sb.setLength(0);
         writer.indent();
 
-        sb.append("<mxGraphModel dx=\"0\" dy=\"0\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"").append(view.getPaperSize().getWidth());
-        sb.append("\" pageHeight=\"").append(view.getPaperSize().getHeight());
+        sb.append("<mxGraphModel dx=\"0\" dy=\"0\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"").append(view.getDimensions().getWidth());
+        sb.append("\" pageHeight=\"").append(view.getDimensions().getHeight());
         sb.append("\" math=\"0\" shadow=\"0\">");
         writer.writeLine(sb.toString());
         sb.setLength(0);
@@ -440,8 +443,8 @@ public class MxExporter extends AbstractDiagramExporter {
 
     @Override
     protected void startGroupBoundary(ModelView view, String group, IndentingWriter writer) {
-        String groupSeparator = view.getModel().getProperties().get(GROUP_SEPARATOR_PROPERTY_NAME);
-        String[] groups = group.split(groupSeparator);
+        String groupSeparator = view.getModel().getProperties().getOrDefault(GROUP_SEPARATOR_PROPERTY_NAME, "");
+        String[] groups = (groupSeparator.isEmpty()) ? Collections.singletonList(group).toArray(String[]::new) : group.split(groupSeparator);
         String fullName = "";
         HashMap<String, GroupBoundary> groupBoundariesRoot = groupBoundaries;
         for(String groupName : groups) {
@@ -479,7 +482,7 @@ public class MxExporter extends AbstractDiagramExporter {
             }
             ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(e);            
             Shape shape = es.getShape();
-            groups = ge.getGroup().split(groupSeparator);
+            groups = (groupSeparator.isEmpty()) ? Collections.singletonList(ge.getGroup()).toArray(String[]::new) : ge.getGroup().split(groupSeparator);
             groupBoundariesRoot = groupBoundaries;
             for(String groupName : groups) {
                 GroupBoundary gb = groupBoundariesRoot.get(groupName);
@@ -665,22 +668,26 @@ public class MxExporter extends AbstractDiagramExporter {
         String background = es.getBackground();
 
         Shape shape = view.getViewSet().getConfiguration().getStyles().findElementStyle(element).getShape();
-        String name = element.getName();
-        String description = element.getDescription();
-        name = name.replace("&", "&amp;");
-        description = description.replace("&", "&amp;");
+        String name = escapeHtml4(element.getName());
+        if(name == null) {
+            name = "";
+        }        
+        String description = escapeHtml4(element.getDescription());
+        if(description == null) {
+            description = "";
+        }
 
         if(element instanceof Person) {
             person(writer, name, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, ev.getX(), ev.getY(), es.getWidth(), es.getHeight());
         } else if(element instanceof Container) {
             Container container = ((Container)element);
-            String technolodgy = container.getTechnology() == null ? "" : container.getTechnology().replace("&", "&amp;");
+            String technolodgy = escapeHtml4(container.getTechnology());
             elementShape(shape, writer, "Container", name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, ev.getX(), ev.getY(), es.getWidth(), es.getHeight());
         } else if(element instanceof SoftwareSystem) {
             elementShape(shape, writer, "Software System", name, null, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, ev.getX(), ev.getY(), es.getWidth(), es.getHeight());
         } else if(element instanceof Component) {
             Component component = ((Component)element);
-            String technolodgy = component.getTechnology() == null ? "" : component.getTechnology().replace("&", "&amp;");
+            String technolodgy = escapeHtml4(component.getTechnology());
             elementShape(shape, writer, "Component", name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, ev.getX(), ev.getY(), es.getWidth(), es.getHeight());
         }
     }
@@ -1010,18 +1017,13 @@ public class MxExporter extends AbstractDiagramExporter {
             description = relationshipView.getOrder() + ". " + description;
         }
 
-        if (StringUtils.isNullOrEmpty(description)) {
+        description = escapeHtml4(description);
+        if(description == null) {
             description = "";
-        } else {
-            description = description.replace("&", "&amp;");
         }
 
         String technology = relationshipView.getRelationship().getTechnology();
-        if (StringUtils.isNullOrEmpty(technology)) {
-            technology = "";
-        } else {
-            technology = technology.replace("&", "&amp;");
-        }
+        technology = escapeHtml4(technology);
 
         if (relationshipView.getRelationship().getSource() instanceof DeploymentNode || relationshipView.getRelationship().getDestination() instanceof DeploymentNode) {
             source = relationshipView.getRelationship().getSource();

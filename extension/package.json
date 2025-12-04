@@ -9,7 +9,7 @@
   },
   "license": "Apache-2.0",
   "icon": "images/logo.png",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "engines": {
     "vscode": "^1.73.0"
   },
@@ -84,6 +84,10 @@
       {
         "command": "c4.diagram.import.layout.mx",
         "title": "Import layout from .drawio"
+      },
+      {
+        "command": "c4.workspace.save.json",
+        "title": "Save workspace to json file"
       }
     ],
     "menus": {
@@ -180,12 +184,6 @@
           "scope": "application",
           "description": "The number of spaces per indentation, when calling format document"
         },
-        "c4.sSL\\TLS.disabled": {
-          "type": "boolean",
-          "default": false,
-          "scope": "application",
-          "description": "Disable SSL\\TLS verification"
-        },
         "c4.beeline.api.secret": {
           "type": "string",
           "default": "",
@@ -222,12 +220,18 @@
           "scope": "application",
           "description": "Data dictionary names for data flow markup on architecture"
         },
-        "c4.beeline.telemetry.disabled": {
+        "c4.beeline.telemetry.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "Enable telemetry collection when interacting with the ArchOPS server"
+        },
+        "c4.beeline.cert.verification.enabled": {
           "type": "boolean",
           "default": false,
           "scope": "application",
-          "description": "Disable ArchOPS telemetry collection"
-        }
+          "description": "Enable SSL-certificate verification when interacting with the ArchOPS server"
+        }        
       }
     }
   },

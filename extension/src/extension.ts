@@ -22,7 +22,8 @@ import {
   StatusBarAlignment,
   TextDocument,
   env,
-  Uri
+  Uri,
+  TextEditor
 } from "vscode";
 
 import * as path from "path";
@@ -36,7 +37,9 @@ import {
 } from "vscode-languageclient";
 import { LanguageClient } from "vscode-languageclient/node";
 import {
+  CommandResultCode,
   ConfigurationOptions,
+  RefreshOptions,
   TextDocumentChangeConfig,
 } from "./types";
 import { C4Utils } from "./utils";
@@ -50,6 +53,9 @@ import { StructurizrPreviewService } from "./services/StructurizrPreviewService"
 import { CodeLensCommandArgs } from "./types/CodeLensCommandArgs";
 import { PreviewService } from "./services/PreviewService";
 import { DecorationService } from "./services/DecorationService";
+import { basename, dirname, join } from "node:path";
+import { writeFile } from "node:fs";
+import { BEELINE_CERT_VERIFICATION } from "./config";
 
 var proc: cp.ChildProcess;
 
@@ -101,7 +107,7 @@ export function activate(context: ExtensionContext) {
 
 function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
 
-  const logger = window.createOutputChannel("C4 DSL Extension");
+  const logger = window.createOutputChannel("C4 Architecture As A Code");
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "c4" }, { scheme: "file", language: "markdown" }],
@@ -164,7 +170,75 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
 
           updateServerConfigurationIndent();
           updateServerConfiguration(context);
-          initDecoractionService();
+
+          commands.registerCommand("c4.workspace.save.json", async () => {
+            const doc = window.activeTextEditor?.document as TextDocument;
+            const refreshOptions: RefreshOptions = {
+              viewKey: undefined,
+              document: doc.uri.fsPath,
+              svg: undefined,
+              mx: undefined
+            };
+            commands.executeCommand("c4-server.get-json", refreshOptions).then(async (callback) => {
+              const result = callback as CommandResultCode;
+              if (result.message !== undefined) {
+                const directoryPath = dirname(doc.uri.fsPath);
+                const bname = basename('workspace.json');
+                const filepath = join(directoryPath, bname);
+                writeFile(filepath, result.message, function (error) {
+                  if (error) {
+                    window.showErrorMessage(error.message);
+                  }
+                });
+              }
+            });
+          });
+
+          const statusBarJsonItem = window.createStatusBarItem(StatusBarAlignment.Left, 100);
+          statusBarJsonItem.command = "c4.workspace.save.json";
+          context.subscriptions.push(statusBarJsonItem);
+          statusBarJsonItem.text = "Write workspace.json";
+
+          const decType = window.createTextEditorDecorationType({});  
+          const textDecorations = workspace.getConfiguration().get(config.TEXT_DECORATIONS) as TextDocumentChangeConfig;
+
+          const switchJson = (editor: TextEditor | undefined) => {
+              if (editor && editor?.document && editor?.document.languageId === "c4" && editor?.document.fileName && editor?.document.fileName.toLowerCase().endsWith('workspace.dsl')) {
+                statusBarJsonItem.show();
+              } else {
+                statusBarJsonItem.hide();
+              }            
+          };
+
+          if (textDecorations !== "off") {
+            const decorationService = new DecorationService(decType);
+
+            if (textDecorations === "onSave") {
+              workspace.onDidSaveTextDocument((savedDocument) => {
+                decorationService.triggerDecorations(undefined, savedDocument);
+              });
+            } else if (textDecorations === "onChange") {
+              workspace.onDidChangeTextDocument((changed) => {
+                decorationService.triggerDecorations(undefined, changed.document);
+              });
+            }
+
+            window.onDidChangeActiveTextEditor((editor) => {
+              if (!editor) {
+                editor = window.activeTextEditor;
+              }
+              switchJson(editor);
+              decorationService.triggerDecorations(editor, undefined);
+            });
+            decorationService.triggerDecorations(window.activeTextEditor, undefined);
+          } else {
+            window.onDidChangeActiveTextEditor((editor) => {
+              if (!editor) {
+                editor = window.activeTextEditor;
+              }
+              switchJson(editor);
+            });
+          }
 
           commands.executeCommand('setContext', 'extension:c4', true);
 
@@ -218,6 +292,19 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
             updateServerConfiguration(context);
           });
 
+         const beelineApiUrl = C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_API_URL) as string);
+         const beelineApiSecret = workspace.getConfiguration().get(config.BEELINE_API_SECRET) as string;
+         const beelineApiKey = workspace.getConfiguration().get(config.BEELINE_API_KEY) as string;        
+         if(beelineApiUrl.length === 0 || beelineApiSecret.length === 0 || beelineApiKey.length === 0) {
+            window.showInformationMessage(
+              'You haven\'t filled out all the extension settings yet. Complete the configuration to use all the features.',
+              'Open settings'
+            ).then(selection => {
+              if (selection === 'Open settings') {
+                commands.executeCommand( 'workbench.action.openSettings', '@ext:vimpelcom.c4-varp');
+              }
+            });
+          }
         });
       }
     };
@@ -230,31 +317,6 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
   }
 }
 
-function initDecoractionService() {
-  // Defined here and not in the decoration service, as the decorations were being appended multiple times
-  const decType = window.createTextEditorDecorationType({});  
-  const textDecorations = workspace.getConfiguration().get(config.TEXT_DECORATIONS) as TextDocumentChangeConfig;  
-  if (textDecorations !== "off") {
-    const decorationService = new DecorationService(decType);
-
-    if (textDecorations === "onSave") {
-      workspace.onDidSaveTextDocument((savedDocument) => {
-        decorationService.triggerDecorations(undefined, savedDocument);
-      });
-    } else if (textDecorations === "onChange") {
-      workspace.onDidChangeTextDocument((changed) => {
-        decorationService.triggerDecorations(undefined, changed.document);
-      });
-    }
-
-    window.onDidChangeActiveTextEditor((editor) => {
-      decorationService.triggerDecorations(editor, undefined);
-    });
-
-    decorationService.triggerDecorations(window.activeTextEditor, undefined);
-  }
-}
-
 function updateServerConfigurationIndent() {
   const spaces = workspace.getConfiguration().get(config.AUTO_FORMAT_INDENT) as number
   commands.executeCommand("c4-server.autoformat.indent", { indent: spaces } )
@@ -262,19 +324,10 @@ function updateServerConfigurationIndent() {
 
 export function updateServerConfiguration(context: ExtensionContext) {
   const configOptions: ConfigurationOptions = {
-    beelineApiUrl : C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_API_URL) as string),
-    beelineApiSecret : workspace.getConfiguration().get(config.BEELINE_API_SECRET) as string,
-    beelineApiKey : workspace.getConfiguration().get(config.BEELINE_API_KEY) as string,    
-    beelineCloudUrl : C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_CLOUD_URL) as string),
-    beelineCloudToken : workspace.getConfiguration().get(config.BEELINE_CLOUD_TOKEN) as string,
-    beelineGlossaries : workspace.getConfiguration().get(config.BEELINE_GLOSSARIES) as string,
-    beelineNoTelemetry : workspace.getConfiguration().get(config.BEELINE_NO_TELEMETRY) as boolean,
-    noTLS : workspace.getConfiguration().get(config.NOTLS) as boolean,
-    serverLogsEnabled : workspace.getConfiguration().get(config.LOGS_ENABLED) as boolean,
     version : context.extension.packageJSON.version
   };
   
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = configOptions.noTLS ? "0" : "1";
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = (workspace.getConfiguration().get(BEELINE_CERT_VERIFICATION) as boolean) ? "1" : "0";
 
   commands.executeCommand("c4-server.configuration", configOptions);
 }

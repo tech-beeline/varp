@@ -50,7 +50,7 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
 
     context.subscriptions.push(view);
     const options: IRequestOptions = <IRequestOptions>{};
-    options.ignoreSslError = workspace.getConfiguration().get(config.NOTLS) as boolean;
+    options.ignoreSslError = !(workspace.getConfiguration().get(config.BEELINE_CERT_VERIFICATION) as boolean);
     const beelineApiUrl = C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_API_URL) as string);
     const httpc = new httpm.HttpClient('vscode-c4-dsl-plugin', [], options);
 

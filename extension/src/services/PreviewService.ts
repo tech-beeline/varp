@@ -30,7 +30,7 @@ import {
 import { CommandResultCode, RefreshOptions } from "../types";
 import { Graphviz } from "@hpcc-js/wasm-graphviz";
 import { readFile, writeFile } from 'fs';
-import { basename, dirname, join } from 'path';
+import { join } from 'path';
 import { homedir } from 'os';
 
 class PreviewService {
@@ -149,16 +149,7 @@ public async importLayoutMax(context: ExtensionContext) {
               }
               progress.report({ message: "Refresh diagram..." });
               this.panel ??= this.createPanel();
-              this.panel.webview.postMessage( { 'body' : result.message, 'view' : this._currentDiagram });
-              const directoryPath = dirname(this._currentDocument.uri.fsPath);
-              const bname = basename('workspace.json');
-              const filepath = join(directoryPath, bname);
-              writeFile(filepath, result.message, function (error) {
-                if (error) {
-                  window.showErrorMessage(error.message);
-                }
-                resolve();
-              });
+              this.panel.webview.postMessage( { 'body' : result.message, 'view' : this._currentDiagram }).then(() => resolve());
             });
           });
         });

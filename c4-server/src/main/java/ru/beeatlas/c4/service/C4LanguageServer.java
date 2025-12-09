@@ -94,7 +94,6 @@ public class C4LanguageServer implements LanguageServer, LanguageClientAware {
 	public void exit() {
 		logger.info("exit");
 		System.exit(0);
-		
 	}
 
 	@Override
@@ -117,14 +116,4 @@ public class C4LanguageServer implements LanguageServer, LanguageClientAware {
 	public void setTrace(SetTraceParams params) {
 		logger.info("setTrace {}", params.getValue());
 	}
-
-	@Override
-	public void initialized(InitializedParams params) {
-		Registration completionRegistration = new Registration(
-				UUID.randomUUID().toString(),
-				"workspace/didChangeConfiguration",
-				null);
-		client.registerCapability(new RegistrationParams(List.of(completionRegistration)));
-	}
-
 }

@@ -107,6 +107,10 @@ public class C4TextDocumentService implements TextDocumentService {
 		setUpDependencies();
 	}
 
+	public C4LanguageServer getServer() {
+		return ls;
+	}
+
 	private void setUpDependencies() {
         Module testModule = new AbstractModule() {
 

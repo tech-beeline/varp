@@ -208,7 +208,9 @@ public class C4WorkspaceService implements WorkspaceService {
 				case C4ExecuteCommandProvider.SEND_PATTERN_TELEMETRY: {
 					String patternId = ((JsonObject) params.getArguments().get(0)).get("patternId").getAsJsonPrimitive()
 							.getAsString();
-					Custom.getInstance().patternTelemetry(patternId);
+					String action = ((JsonObject) params.getArguments().get(0)).get("action").getAsJsonPrimitive()
+							.getAsString();							
+					Custom.getInstance().patternTelemetry(patternId, action);
 					return C4ExecuteCommandResult.OK;
 				}
 				default:

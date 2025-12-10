@@ -650,6 +650,7 @@ public class MxExporter extends AbstractDiagramExporter {
             deploymentNodeBoundary.elements.add(element);
         }
 
+        ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(element);
         ElementView ev = view.getElementView(element);
         String id = element.getId();
 
@@ -657,8 +658,6 @@ public class MxExporter extends AbstractDiagramExporter {
             StaticStructureElementInstance elementInstance = (StaticStructureElementInstance)element;
             element = elementInstance.getElement();
         }
-
-        ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(element);
 
         int nameFontSize = es.getFontSize() + 10;
         int metadataFontSize = es.getFontSize() - 5;

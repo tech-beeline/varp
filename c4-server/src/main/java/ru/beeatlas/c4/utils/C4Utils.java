@@ -123,6 +123,10 @@ public class C4Utils {
         return Lists.newArrayList(Iterables.concat(list1, list2));
     }
 
+    public static String trimTrailingSlash(String text) {
+        return text.substring(0, text.length() - (text.endsWith("/") ? 1 : 0));
+    }    
+
     public static String trimStringByString(String text, String trimBy) {
         int beginIndex = 0;
         int endIndex = text.length();

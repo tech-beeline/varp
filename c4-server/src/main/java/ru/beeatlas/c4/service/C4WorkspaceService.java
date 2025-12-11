@@ -16,27 +16,40 @@
 
 package ru.beeatlas.c4.service;
 
+import java.nio.charset.Charset;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.structurizr.Workspace;
 import com.structurizr.util.WorkspaceUtils;
 import com.structurizr.view.ModelView;
 import com.structurizr.view.ThemeUtils;
 import com.structurizr.view.View;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.PatternLayout;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.encoder.LayoutWrappingEncoder;
 import ru.beeatlas.c4.dto.RefreshOptions;
 import ru.beeatlas.c4.utils.C4Utils;
+import ru.beeatlas.c4.utils.ClientAppender;
 import ru.beeatlas.c4.utils.MxReader;
 import ru.beeatlas.c4.utils.SVGReader;
 import ru.beeatlas.c4.commands.C4ExecuteCommandProvider;
 import ru.beeatlas.c4.commands.C4ExecuteCommandResult;
 import ru.beeatlas.c4.custom.Custom;
 
+import org.eclipse.lsp4j.ConfigurationItem;
+import org.eclipse.lsp4j.ConfigurationParams;
 import org.eclipse.lsp4j.DidChangeConfigurationParams;
 import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
 import org.eclipse.lsp4j.DidChangeWorkspaceFoldersParams;
 import org.eclipse.lsp4j.ExecuteCommandParams;
+import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.WorkspaceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,8 +61,58 @@ public class C4WorkspaceService implements WorkspaceService {
 	private SVGReader svgReader = new SVGReader(400, true);
 	private MxReader mxReader = new MxReader(400, true);
 
+	private PatternLayout pattern = new PatternLayout();
+    private LayoutWrappingEncoder<ILoggingEvent> encoder = new LayoutWrappingEncoder<ILoggingEvent>();
+    private ClientAppender<ILoggingEvent> clientAppender = new ClientAppender<ILoggingEvent>();
+
 	public C4WorkspaceService(C4TextDocumentService documentService) {
 		this.documentService = documentService;
+        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+        pattern.setContext(loggerContext);
+        pattern.setPattern("%d{yyyy-MM-dd HH:mm:ss.SSS} [%-5level] %logger{0} - %msg");
+        pattern.start();
+
+        encoder.setContext(loggerContext);
+        encoder.setCharset(Charset.forName("utf-8"));
+        encoder.setLayout(pattern);
+
+        clientAppender.setEncoder(encoder);
+        clientAppender.setContext(loggerContext);		
+	}
+
+	void toggleLog() {
+        ConfigurationItem serverLogsEnabledItem = new ConfigurationItem();
+        serverLogsEnabledItem.setSection("c4.languageserver.logs.enabled");
+        ConfigurationParams configurationParams = new ConfigurationParams(Arrays.asList(serverLogsEnabledItem));
+
+        boolean serverLogsEnabled = false;
+		LanguageClient client = documentService.getServer().getClient();
+
+        try {
+            List<Object> values = client.configuration(configurationParams).get();
+            serverLogsEnabled = ((JsonPrimitive)values.get(0)).getAsBoolean();
+        } catch (Exception e) {
+            logger.debug(e.getMessage());
+        }
+        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory(); 
+        ch.qos.logback.classic.Logger log = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME);             
+        if(serverLogsEnabled) {
+            if(!log.isAttached(clientAppender)) {
+                clientAppender.setClient(client);                
+                clientAppender.start();
+
+                log.setAdditive(false);
+                log.setLevel(Level.DEBUG);
+                log.addAppender(clientAppender);
+                logger.info("Start logging...");
+            }
+        } else {
+            if(log.isAttached(clientAppender)) {
+                logger.info("Stop logging...");
+                log.setLevel(Level.OFF);
+                log.detachAndStopAllAppenders();
+            }
+        }
 	}
 
 	@Override
@@ -74,10 +137,10 @@ public class C4WorkspaceService implements WorkspaceService {
 			logger.info("executeCommand {}", params.getCommand());
 			switch (params.getCommand()) {
 				case C4ExecuteCommandProvider.UPDATE_CONFIGURATION : {
+					toggleLog();
 					String version = ((JsonObject) params.getArguments().get(0)).get("version").getAsJsonPrimitive().getAsString();
 					Custom.getInstance().setVersion(version);
 					Custom.getInstance().reinit();
-					Custom.getInstance().setServerLogsEnabled();
 					return C4ExecuteCommandResult.OK;
 				}
 				case C4ExecuteCommandProvider.CALCULATE_TEXT_DECORATIONS:
@@ -208,7 +271,9 @@ public class C4WorkspaceService implements WorkspaceService {
 				case C4ExecuteCommandProvider.SEND_PATTERN_TELEMETRY: {
 					String patternId = ((JsonObject) params.getArguments().get(0)).get("patternId").getAsJsonPrimitive()
 							.getAsString();
-					Custom.getInstance().patternTelemetry(patternId);
+					String action = ((JsonObject) params.getArguments().get(0)).get("action").getAsJsonPrimitive()
+							.getAsString();							
+					Custom.getInstance().patternTelemetry(patternId, action);
 					return C4ExecuteCommandResult.OK;
 				}
 				default:

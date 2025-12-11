@@ -134,7 +134,7 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
                 vscode.window.showErrorMessage(error.message);
               } else {
                 vscode.workspace.openTextDocument(filepath).then((doc) => { vscode.window.showTextDocument(doc); });
-                vscode.commands.executeCommand('c4-server.send-pattern-telemetry', { patternId: id });
+                vscode.commands.executeCommand('c4-server.send-pattern-telemetry', { patternId: id, action: 'pattern' });
               }
             });
           }
@@ -180,10 +180,12 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
           context.workspaceState.update(id, body);
           if (this.currentPanel !== undefined) {
             this.currentPanel.webview.html = body;
+            vscode.commands.executeCommand('c4-server.send-pattern-telemetry', { patternId: id, action: 'pattern_view' });
           }
         }).catch((error) => {
           if (this.currentPanel !== undefined) {
             this.currentPanel.webview.html = context.workspaceState.get(id) ?? "";
+            vscode.commands.executeCommand('c4-server.send-pattern-telemetry', { patternId: id, action: 'pattern_view' });
           }
         });
         this.currentPanel.title = args[0];

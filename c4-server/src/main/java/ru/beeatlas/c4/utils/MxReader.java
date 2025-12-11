@@ -78,20 +78,16 @@ public class MxReader {
 
             String expression = String.format("/mxfile/diagram/mxGraphModel/root/object[@id=\"%s\"]/mxCell/mxGeometry", elementView.getId());
             NodeList nodeList = (NodeList) xPath.compile(expression).evaluate(xmlDocument, XPathConstants.NODESET);
-            if (nodeList.getLength() == 0) {
-                continue;
+            if (nodeList.getLength() != 0) {
+                String xs = nodeList.item(0).getAttributes().getNamedItem("x").getNodeValue();
+                String ys = nodeList.item(0).getAttributes().getNamedItem("y").getNodeValue();
+
+                double x = Double.parseDouble(xs) + transformX;
+                double y = Double.parseDouble(ys) + transformY;
+
+                elementView.setX((int) (x));
+                elementView.setY((int) (y));
             }
-
-            String xs = nodeList.item(0).getAttributes().getNamedItem("x").getNodeValue();
-            String ys = nodeList.item(0).getAttributes().getNamedItem("y").getNodeValue();
-
-            logger.info("x = " + xs + " y = " + ys);
-
-            double x = Double.parseDouble(xs) + transformX;
-            double y = Double.parseDouble(ys) + transformY;
-
-            elementView.setX((int) (x));
-            elementView.setY((int) (y));
 
             minimumX = Math.min(elementView.getX(), minimumX);
             minimumY = Math.min(elementView.getY(), minimumY);
@@ -116,7 +112,6 @@ public class MxReader {
                 String ys = nodeList.item(i).getAttributes().getNamedItem("y").getNodeValue();                
                 double x = Double.parseDouble(xs) + transformX;
                 double y = Double.parseDouble(ys) + transformY;
-                //logger.info("REL x = " + xs + " y = " + ys);
                 Vertex vertex = new Vertex((int) (x), (int) (y));
                 vertices.add(vertex);
             }

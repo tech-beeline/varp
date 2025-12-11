@@ -288,7 +288,7 @@ public async importLayoutMax(context: ExtensionContext) {
             const message = event.data;
             if(message.body !== undefined) {
               structurizr.workspace = new structurizr.Workspace(JSON.parse(message.body));
-              structurizr.ui.loadThemes('', function() {
+              structurizr.ui.loadThemes('https://static.structurizr.com/themes/', function() {
                 diagram = new structurizr.ui.Diagram('diagram', false, function() {
                     diagram.onViewChanged(viewChanged);
                     diagram.changeView(message.view);

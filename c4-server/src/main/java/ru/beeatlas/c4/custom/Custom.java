@@ -22,7 +22,6 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.URL;
-import java.nio.charset.Charset;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.X509Certificate;
@@ -72,13 +71,7 @@ import com.google.gson.JsonPrimitive;
 import com.structurizr.Workspace;
 import com.structurizr.model.Container;
 import com.structurizr.model.Element;
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.LoggerContext;
-import ch.qos.logback.classic.PatternLayout;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.encoder.LayoutWrappingEncoder;
 import ru.beeatlas.c4.utils.C4Utils;
-import ru.beeatlas.c4.utils.ClientAppender;
 import ru.beeatlas.c4.dto.CodeLensCommandArgs;
 import ru.beeatlas.c4.model.C4DocumentModel;
 import ru.beeatlas.c4.model.C4ObjectWithContext;
@@ -91,10 +84,6 @@ import ru.beeatlas.c4.provider.C4CompletionItemCreator;
 public class Custom {
 
     private static final Logger logger = LoggerFactory.getLogger(Custom.class);    
-
-    private PatternLayout pattern = new PatternLayout();
-    private LayoutWrappingEncoder<ILoggingEvent> encoder = new LayoutWrappingEncoder<ILoggingEvent>();
-    private ClientAppender<ILoggingEvent> clientAppender = new ClientAppender<ILoggingEvent>();
 
     private HostnameVerifier allTrustingHostnameVerifier = null;
     private SSLSocketFactory allTrustingTrustManager = null;
@@ -162,6 +151,7 @@ public class Custom {
             apiKey = ((JsonPrimitive)values.get(0)).getAsString();
             apiSecret = ((JsonPrimitive)values.get(1)).getAsString();
             apiUrl = ((JsonPrimitive)values.get(2)).getAsString();
+            apiUrl = C4Utils.trimTrailingSlash(apiUrl);
             certVerification = ((JsonPrimitive)values.get(3)).getAsBoolean();
         } catch (Exception e) {
             logger.debug(e.getMessage());
@@ -210,6 +200,7 @@ public class Custom {
         List<Object> values = client.configuration(configurationParams).get();
         cloudToken = ((JsonPrimitive)values.get(0)).getAsString();
         cloudUrl = ((JsonPrimitive)values.get(1)).getAsString();
+        cloudUrl = C4Utils.trimTrailingSlash(cloudUrl);
         certVerification = ((JsonPrimitive)values.get(2)).getAsBoolean();
 
         HttpsURLConnection conn = (HttpsURLConnection) new URL(cloudUrl + path).openConnection();
@@ -277,53 +268,6 @@ public class Custom {
             };
         } catch (Exception e) {
         }
-        
-        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
-        pattern.setContext(loggerContext);
-        pattern.setPattern("%d{yyyy-MM-dd HH:mm:ss.SSS} [%-5level] %logger{0} - %msg");
-        pattern.start();
-
-        encoder.setContext(loggerContext);
-        encoder.setCharset(Charset.forName("utf-8"));
-        encoder.setLayout(pattern);
-
-        clientAppender.setEncoder(encoder);
-        clientAppender.setContext(loggerContext);      
-    }
-
-    public void setServerLogsEnabled() {
-
-        ConfigurationItem serverLogsEnabledItem = new ConfigurationItem();
-        serverLogsEnabledItem.setSection("c4.languageserver.logs.enabled");
-        ConfigurationParams configurationParams = new ConfigurationParams(Arrays.asList(serverLogsEnabledItem));
-
-        boolean serverLogsEnabled = false;
-
-        try {
-            List<Object> values = client.configuration(configurationParams).get();
-            serverLogsEnabled = ((JsonPrimitive)values.get(0)).getAsBoolean();
-        } catch (Exception e) {
-            logger.debug(e.getMessage());
-        }
-        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory(); 
-        ch.qos.logback.classic.Logger log = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME);             
-        if(serverLogsEnabled) {
-            if(!log.isAttached(clientAppender)) {
-                clientAppender.setClient(client);                
-                clientAppender.start();
-
-                log.setAdditive(false);
-                log.setLevel(Level.DEBUG);
-                log.addAppender(clientAppender);
-                logger.info("Start logging...");
-            }
-        } else {
-            if(log.isAttached(clientAppender)) {
-                logger.info("Stop logging...");
-                log.setLevel(Level.OFF);
-                log.detachAndStopAllAppenders();
-            }
-        } 
     }
 
     public void reinit() {
@@ -940,6 +884,7 @@ public class Custom {
             apiKey = ((JsonPrimitive)values.get(0)).getAsString();
             apiSecret = ((JsonPrimitive)values.get(1)).getAsString();
             apiUrl = ((JsonPrimitive)values.get(2)).getAsString();
+            apiUrl = C4Utils.trimTrailingSlash(apiUrl);
         } catch (Exception e) {
             logger.debug(e.getMessage());
         }
@@ -1035,10 +980,10 @@ public class Custom {
         });
     }
 
-    public void patternTelemetry(String patternId) {
+    public void patternTelemetry(String patternId, String action) {
        String message = MessageFormat.format(
-               "'{'\"version\": \"{0}\", \"action\": \"pattern\", \"pattern_id\": \"{1}\", \"user\": \"{2}\", \"cmdb\": \"{3}\"'}'", version,
-               patternId, username, cmdb);
+               "'{'\"version\": \"{0}\", \"action\": \"{1}\", \"pattern_id\": \"{2}\", \"user\": \"{3}\", \"cmdb\": \"{4}\"'}'", version,
+               action, patternId, username, cmdb);
         CompletableFuture.runAsync(() -> sendTelemetry(message));
     }
 

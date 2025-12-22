@@ -98,11 +98,6 @@ export function activate(context: ExtensionContext) {
       initExtension(context, envJava);
     }
   });
-
-  new PatternProvider(context);
-  const architectureCatalogueProvider : ArchitectureCatalogueProvider = new ArchitectureCatalogueProvider(context);
-  architectureCatalogueProvider.refresh();
-
 }
 
 function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
@@ -310,6 +305,10 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
     };
 
     reader.on('line', startListener);
+
+    new PatternProvider(context);
+    const architectureCatalogueProvider : ArchitectureCatalogueProvider = new ArchitectureCatalogueProvider(context);
+    architectureCatalogueProvider.refresh();
 
   } else {
     statusBarItem.text = "Connection to C4 DSL Socket Server could not be established";

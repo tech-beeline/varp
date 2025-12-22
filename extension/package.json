@@ -9,7 +9,7 @@
   },
   "license": "Apache-2.0",
   "icon": "images/logo.png",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "engines": {
     "vscode": "^1.73.0"
   },
@@ -40,8 +40,17 @@
         "path": "./yaml.json"
       }
     ],
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "c4-architecture-as-a-code",
+					"title": "C4 Architecture As A Code",
+					"icon": "images/logo.svg"
+				}
+			]
+		},    
     "views": {
-      "explorer": [
+      "c4-architecture-as-a-code": [
         {
           "id": "architectureAsACodeView",
           "name": "Architecture As A Code",

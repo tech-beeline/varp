@@ -185,9 +185,9 @@ public class InterceptParserTest {
 
         parser.parse(includeFile);
 
-        checkOrder.verify(mockListener).onInclude(eq(includedModelFile), eq("subFolder/model.dsl"));
+        checkOrder.verify(mockListener).onInclude(eq(includedModelFile));
 
-        checkOrder.verify(mockListener).onInclude(eq(includedStylesFile), eq("subFolder/styles.dsl"));
+        checkOrder.verify(mockListener).onInclude(eq(includedStylesFile));
     }
 
     @Test

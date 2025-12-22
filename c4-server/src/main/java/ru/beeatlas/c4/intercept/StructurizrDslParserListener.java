@@ -40,7 +40,7 @@ public interface StructurizrDslParserListener {
 	
 	default void onParsedColor() { }
 	
-	default void onInclude(File referencedFile, String path) { }
+	default void onInclude(File referencedFile) { }
 
     default void onStartContext(int contextId, String contextName) { }
 

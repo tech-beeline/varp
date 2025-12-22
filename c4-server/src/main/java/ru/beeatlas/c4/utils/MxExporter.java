@@ -21,8 +21,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.Stack;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,8 +41,10 @@ import com.structurizr.view.LineStyle;
 import com.structurizr.view.ModelView;
 import com.structurizr.view.RelationshipStyle;
 import com.structurizr.view.RelationshipView;
+import com.structurizr.view.Routing;
 import com.structurizr.view.Shape;
 import com.structurizr.view.Vertex;
+import org.apache.commons.text.StringSubstitutor;
 
 import static org.apache.commons.text.StringEscapeUtils.escapeHtml4;
 
@@ -122,29 +126,24 @@ public class MxExporter extends AbstractDiagramExporter {
 
     @Override
     protected void writeHeader(ModelView view, IndentingWriter writer) {
-
         writer.writeLine("<mxfile host=\"Electron\" agent=\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/28.0.6 Chrome/138.0.7204.100 Electron/37.2.3 Safari/537.36\" version=\"28.0.6\">");
         writer.indent();
-        StringBuilder sb = new StringBuilder();
-        sb.append("<diagram name=\"Страница — 1\" id=\"").append(view.getKey());
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        Map<String, String> values = new HashMap<>();
+        values.put("id", view.getKey());
+        values.put("name", view.getName());
+        values.put("pageWidth", String.valueOf(view.getDimensions().getWidth()));
+        values.put("pageHeight", String.valueOf(view.getDimensions().getHeight()));
+        values.put("rootId", rootId);
+        values.put("parentId", parentId);
+        StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
+        writer.writeLine(stringSubstitutor.replace("<diagram name='${name}' id='${id}'>"));
         writer.indent();
-
-        sb.append("<mxGraphModel dx=\"0\" dy=\"0\" grid=\"1\" gridSize=\"10\" guides=\"1\" tooltips=\"1\" connect=\"1\" arrows=\"1\" fold=\"1\" page=\"1\" pageScale=\"1\" pageWidth=\"").append(view.getDimensions().getWidth());
-        sb.append("\" pageHeight=\"").append(view.getDimensions().getHeight());
-        sb.append("\" math=\"0\" shadow=\"0\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        writer.writeLine(stringSubstitutor.replace("<mxGraphModel dx='0' dy='0' grid='1' gridSize='10' guides='1' tooltips='1' connect='1' arrows='1' fold='1' page='1' pageScale='1' pageWidth='${pageWidth}' pageHeight='${pageHeight}' math='0' shadow='0'>"));
         writer.indent();
         writer.writeLine("<root>");
         writer.indent();
-        sb.append("<mxCell id=\"").append(rootId).append("\" />");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
-        sb.append("<mxCell id=\"").append(parentId).append("\" parent=\"").append(rootId).append("\" />");
-        writer.writeLine(sb.toString());
+        writer.writeLine(stringSubstitutor.replace("<mxCell id='${rootId}'/>"));
+        writer.writeLine(stringSubstitutor.replace("<mxCell id='${parentId}' parent='${rootId}'/>"));
     }
 
     private void updateGroupBoundary(GroupBoundary groupBoundary, ModelView view) {
@@ -219,29 +218,28 @@ public class MxExporter extends AbstractDiagramExporter {
             }
         }
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("<object placeholders=\"1\" c4Name=\"").append(group.name);
-        sb.append("\" c4Type=\"GroupScopeBoundary\" c4Application=\"Group\" label=\"&lt;font style=&quot;font-size: ").append(fontSize);
-        sb.append("px&quot;&gt;&lt;b&gt;&lt;div style=&quot;text-align: left&quot;&gt;%c4Name%&lt;/div&gt;&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;text-align: left&quot;&gt;[%c4Application%]&lt;/div&gt;\" id=\"")
-                .append(UUID.randomUUID());
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        Map<String, String> values = new HashMap<>();
+        values.put("id", String.valueOf(UUID.randomUUID()));
+        values.put("c4Name", group.name);
+        values.put("fontSize", String.valueOf(fontSize));
+        String label = new StringSubstitutor(values).replace("<font style=\"font-size:${fontSize}px\"><b><div style=\"text-align: left\">%c4Name%</div></b></font><div style=\"text-align: left\">[%c4Application%]</div>");
+        values.put("label", escapeHtml4(label));
+        values.put("metadataFontSize", String.valueOf(metadataFontSize));
+        values.put("stroke", stroke);
+        values.put("color", color);
+        values.put("strokeWidth", String.valueOf(strokeWidth));
+        values.put("x", String.valueOf(group.minX));
+        values.put("y", String.valueOf(group.minY));
+        values.put("width", String.valueOf(group.maxX - group.minX));
+        values.put("height", String.valueOf(group.maxY - group.minY));
+        values.put("parentId", parentId);
+        
+        StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
+        writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='GroupScopeBoundary' c4Application='Group' label='${label}' id='${id}'>"));
         writer.indent();
-        sb.append("<mxCell style=\"rounded=1;fontSize=").append(metadataFontSize);
-        sb.append(";whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=").append(stroke);
-        sb.append(";fontColor=").append(color);
-        sb.append(";strokeWidth=").append(strokeWidth);
-        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=1 2;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        writer.writeLine(stringSubstitutor.replace("<mxCell style='rounded=1;fontSize=${fontSize};whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=${stroke};fontColor=%{color};strokeWidth=${strokeWidth};labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=1 2;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
         writer.indent();
-        sb.append("<mxGeometry x=\"").append(group.minX);
-        sb.append("\" y=\"").append(group.minY);
-        sb.append("\" width=\"").append(group.maxX - group.minX);
-        sb.append("\" height=\"").append(group.maxY - group.minY);
-        sb.append("\" as=\"geometry\" />");
-        writer.writeLine(sb.toString());
+        writer.writeLine(stringSubstitutor.replace("<mxGeometry x='${x}' y='${y}' width='${width}' height='${height}' as='geometry' />"));
         writer.outdent();
         writer.writeLine("</mxCell>");
         writer.outdent();
@@ -284,39 +282,42 @@ public class MxExporter extends AbstractDiagramExporter {
         maxY += C4Utils.getFontHeight(DEFAULT_FONT, fontSize);
         maxY += C4Utils.getFontHeight(DEFAULT_FONT, metadataFontSize);
 
+        String color = "#333333";
         String stroke = "#666666";
         int strokeWidth = 4;
         ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(softwareSystemBoundary.softwareSystem);
+        if(!StringUtils.isNullOrEmpty(es.getColor())) {
+            color = es.getColor();
+        }        
         if(!StringUtils.isNullOrEmpty(es.getStroke())) {
             stroke = es.getStroke();
         }
         if(es.getStrokeWidth() != null) {
             strokeWidth = es.getStrokeWidth();
         }
+        
+        Map<String, String> values = new HashMap<>();
+        values.put("id", softwareSystemBoundary.softwareSystem.getId());
+        values.put("c4Name", softwareSystemBoundary.softwareSystem.getName());
+        values.put("fontSize", String.valueOf(fontSize));
+        values.put("metadataFontSize", String.valueOf(metadataFontSize));
+        values.put("stroke", stroke);
+        values.put("color", color);
+        values.put("strokeWidth", String.valueOf(strokeWidth));
+        values.put("x", String.valueOf(minX));
+        values.put("y", String.valueOf(minY));
+        values.put("width", String.valueOf(maxX - minX));
+        values.put("height", String.valueOf(maxY - minY));
+        values.put("parentId", parentId);
+        String label = new StringSubstitutor(values).replace("<font style=\"font-size:${fontSize}px\"><b><div style=\"text-align: left\">%c4Name%</div></b></font><div style=\"text-align: left\">[%c4Application%]</div>");
+        values.put("label", escapeHtml4(label));
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("<object placeholders=\"1\" c4Name=\"").append(softwareSystemBoundary.softwareSystem.getName());
-        sb.append("\" c4Type=\"SystemScopeBoundary\" c4Application=\"Software System\" label=\"&lt;font style=&quot;font-size: ").append(fontSize);
-        sb.append("px&quot;&gt;&lt;b&gt;&lt;div style=&quot;text-align: left&quot;&gt;%c4Name%&lt;/div&gt;&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;text-align: left&quot;&gt;[%c4Application%]&lt;/div&gt;\" id=\"").append(softwareSystemBoundary.softwareSystem.getId());
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
+        writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='SystemScopeBoundary' c4Application='Software System' label='${label}' id='${id}'>"));
         writer.indent();
-        sb.append("<mxCell style=\"rounded=1;fontSize=").append(metadataFontSize);
-        sb.append(";whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=").append(stroke);
-        sb.append(";fontColor=").append(stroke);
-        sb.append(";strokeWidth=").append(strokeWidth);
-        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 8;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        writer.writeLine(stringSubstitutor.replace("<mxCell style='rounded=1;fontSize=${fontSize};whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=${stroke};fontColor=%{color};strokeWidth=${strokeWidth};labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 8;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
         writer.indent();
-        sb.append("<mxGeometry x=\"").append(minX);
-        sb.append("\" y=\"").append(minY);
-        sb.append("\" width=\"").append(maxX - minX);
-        sb.append("\" height=\"").append(maxY - minY);
-        sb.append("\" as=\"geometry\" />");
-
-        writer.writeLine(sb.toString());
+        writer.writeLine(stringSubstitutor.replace("<mxGeometry x='${x}' y='${y}' width='${width}' height='${height}' as='geometry' />"));
         writer.outdent();
         writer.writeLine("</mxCell>");
         writer.outdent();
@@ -363,7 +364,6 @@ public class MxExporter extends AbstractDiagramExporter {
         String stroke = "#666666";
         int strokeWidth = 4;
         ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(containerBoundary.container);
-
         if(!StringUtils.isNullOrEmpty(es.getColor())) {
             color = es.getColor();
         }
@@ -374,29 +374,28 @@ public class MxExporter extends AbstractDiagramExporter {
             strokeWidth = es.getStrokeWidth();
         }
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("<object placeholders=\"1\" c4Name=\"").append(containerBoundary.container.getName());
-        sb.append("\" c4Type=\"ContainerScopeBoundary\" c4Application=\"Container\" label=\"&lt;font style=&quot;font-size: ").append(fontSize);
-        sb.append("px&quot;&gt;&lt;b&gt;&lt;div style=&quot;text-align: left&quot;&gt;%c4Name%&lt;/div&gt;&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;text-align: left&quot;&gt;[%c4Application%]&lt;/div&gt;\" id=\"").append(containerBoundary.container.getId());
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        Map<String, String> values = new HashMap<>();
+        values.put("id", containerBoundary.container.getId());
+        values.put("c4Name", containerBoundary.container.getName());
+        values.put("fontSize", String.valueOf(fontSize));
+        String label = new StringSubstitutor(values).replace("<font style=\"font-size:${fontSize}px\"><b><div style=\"text-align: left\">%c4Name%</div></b></font><div style=\"text-align: left\">[%c4Application%]</div>");
+        values.put("label", escapeHtml4(label));
+        values.put("metadataFontSize", String.valueOf(metadataFontSize));
+        values.put("stroke", stroke);
+        values.put("color", color);
+        values.put("strokeWidth", String.valueOf(strokeWidth));
+        values.put("x", String.valueOf(minX));
+        values.put("y", String.valueOf(minY));
+        values.put("width", String.valueOf(maxX - minX));
+        values.put("height", String.valueOf(maxY - minY));
+        values.put("parentId", parentId);
+        
+        StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
+        writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='ContainerScopeBoundary' c4Application='Container' label='${label}' id='${id}'>"));
         writer.indent();
-        sb.append("<mxCell style=\"rounded=1;fontSize=").append(metadataFontSize);
-        sb.append(";whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=").append(stroke);
-        sb.append(";fontColor=").append(color);
-        sb.append(";strokeWidth=").append(strokeWidth);
-        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 8;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        writer.writeLine(stringSubstitutor.replace("<mxCell style='rounded=1;fontSize=${fontSize};whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=${stroke};fontColor=%{color};strokeWidth=${strokeWidth};labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 8;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
         writer.indent();
-        sb.append("<mxGeometry x=\"").append(minX);
-        sb.append("\" y=\"").append(minY);
-        sb.append("\" width=\"").append(maxX - minX);
-        sb.append("\" height=\"").append(maxY - minY);
-        sb.append("\" as=\"geometry\" />");
-
-        writer.writeLine(sb.toString());
+        writer.writeLine(stringSubstitutor.replace("<mxGeometry x='${x}' y='${y}' width='${width}' height='${height}' as='geometry' />"));
         writer.outdent();
         writer.writeLine("</mxCell>");
         writer.outdent();
@@ -548,7 +547,7 @@ public class MxExporter extends AbstractDiagramExporter {
         }
 
         String color = "#444444";
-        String strokeColor = "#666666";
+        String stroke = "#666666";
         int strokeWidth = 4;
         int fontSize = BOUNDARY_FONT_SIZE;
         int metadataFontSize = BOUNDARYMETA_FONT_SIZE;
@@ -560,36 +559,35 @@ public class MxExporter extends AbstractDiagramExporter {
                 color = es.getColor();
             }
             if(!StringUtils.isNullOrEmpty(es.getStroke())) {
-                strokeColor = es.getStroke();
+                stroke = es.getStroke();
             } 
             if(es.getStrokeWidth() != null) {
                 strokeWidth = es.getStrokeWidth();
             }
         }
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("<object placeholders=\"1\" c4Name=\"").append(deploymentNodeBoundary.deploymentNode.getName());
-        sb.append("\" c4Type=\"DeploymentNodeScopeBoundary\" c4Application=\"DeploymentNode\" label=\"&lt;font style=&quot;font-size: ").append(fontSize);
-        sb.append("px&quot;&gt;&lt;b&gt;&lt;div style=&quot;text-align: left&quot;&gt;%c4Name%&lt;/div&gt;&lt;/b&gt;&lt;/font&gt;&lt;div style=&quot;text-align: left&quot;&gt;[%c4Application%]&lt;/div&gt;\" id=\"")
-                .append(deploymentNodeBoundary.deploymentNode.getId());
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        Map<String, String> values = new HashMap<>();
+        values.put("id", deploymentNodeBoundary.deploymentNode.getId());
+        values.put("c4Name", deploymentNodeBoundary.deploymentNode.getName());
+        values.put("fontSize", String.valueOf(fontSize));
+        values.put("metadataFontSize", String.valueOf(metadataFontSize));
+        values.put("stroke", stroke);
+        values.put("color", color);
+        values.put("strokeWidth", String.valueOf(strokeWidth));
+        values.put("x", String.valueOf(deploymentNodeBoundary.minX));
+        values.put("y", String.valueOf(deploymentNodeBoundary.minY));
+        values.put("width", String.valueOf(deploymentNodeBoundary.maxX - deploymentNodeBoundary.minX));
+        values.put("height", String.valueOf(deploymentNodeBoundary.maxY - deploymentNodeBoundary.minY));
+        values.put("parentId", parentId);
+        String label = new StringSubstitutor(values).replace("<font style=\"font-size:${fontSize}px\"><b><div style=\"text-align: left\">%c4Name%</div></b></font><div style=\"text-align: left\">[%c4Application%]</div>");
+        values.put("label", escapeHtml4(label));
+
+        StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
+        writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='DeploymentNodeScopeBoundary' c4Application='DeploymentNode' label='${label}' id='${id}'>"));
         writer.indent();
-        sb.append("<mxCell style=\"rounded=1;fontSize=").append(metadataFontSize);
-        sb.append(";whiteSpace=wrap;html=1;arcSize=20;fillColor=none;strokeColor=").append(strokeColor);
-        sb.append(";fontColor=").append(color);
-        sb.append(";strokeWidth=").append(strokeWidth);
-        sb.append(";labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);        
+        writer.writeLine(stringSubstitutor.replace("<mxCell style='rounded=1;fontSize=${fontSize};whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=${stroke};fontColor=%{color};strokeWidth=${strokeWidth};labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 8;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
         writer.indent();
-        sb.append("<mxGeometry x=\"").append(deploymentNodeBoundary.minX);
-        sb.append("\" y=\"").append(deploymentNodeBoundary.minY);
-        sb.append("\" width=\"").append(deploymentNodeBoundary.maxX - deploymentNodeBoundary.minX);
-        sb.append("\" height=\"").append(deploymentNodeBoundary.maxY - deploymentNodeBoundary.minY);
-        sb.append("\" as=\"geometry\" />");
-        writer.writeLine(sb.toString());
+        writer.writeLine(stringSubstitutor.replace("<mxGeometry x='${x}' y='${y}' width='${width}' height='${height}' as='geometry' />"));
         writer.outdent();
         writer.writeLine("</mxCell>");
         writer.outdent();
@@ -676,32 +674,80 @@ public class MxExporter extends AbstractDiagramExporter {
             description = "";
         }
 
-        if(element instanceof Person) {
-            person(writer, name, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, ev.getX(), ev.getY(), es.getWidth(), es.getHeight());
-        } else if(element instanceof Container) {
-            Container container = ((Container)element);
-            String technolodgy = escapeHtml4(container.getTechnology());
-            elementShape(shape, writer, "Container", name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, ev.getX(), ev.getY(), es.getWidth(), es.getHeight());
-        } else if(element instanceof SoftwareSystem) {
-            elementShape(shape, writer, "Software System", name, null, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, ev.getX(), ev.getY(), es.getWidth(), es.getHeight());
-        } else if(element instanceof Component) {
-            Component component = ((Component)element);
-            String technolodgy = escapeHtml4(component.getTechnology());
-            elementShape(shape, writer, "Component", name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, ev.getX(), ev.getY(), es.getWidth(), es.getHeight());
+        Map<String, String> values = new HashMap<>();
+        values.put("id", id);
+        values.put("c4Name", name);
+        values.put("nameFontSize", String.valueOf(nameFontSize));
+        values.put("metadataFontSize", String.valueOf(metadataFontSize));
+        values.put("descriptionFontSize", String.valueOf(descriptionFontSize));
+        values.put("color", color);
+        values.put("background", background);
+        values.put("metadataFontSize", String.valueOf(metadataFontSize));
+        values.put("stroke", stroke);
+        values.put("x", String.valueOf(ev.getX()));
+        values.put("y", String.valueOf(ev.getY()));
+        values.put("width", String.valueOf(es.getWidth()));
+        values.put("height", String.valueOf(es.getHeight()));
+        values.put("parentId", parentId);
+        values.put("c4Description", description == null ? "" : description);
+
+        if(element instanceof Person person) {
+            if(!person.getProperties().isEmpty()) {
+                String properties = propertiesToString(person.getProperties());
+                values.put("properties", properties);
+            }
+            person(writer, values);
+        } else if(element instanceof Container container) {
+            String technology = escapeHtml4(container.getTechnology());
+            if(technology == null) {
+                technology = "";
+            }
+            values.put("c4Type", "Container");
+            values.put("c4Technology", technology);
+            if(!container.getProperties().isEmpty()) {
+                String properties = propertiesToString(container.getProperties());
+                values.put("properties", properties);
+            }
+            elementShape(shape, writer, values);
+        } else if(element instanceof SoftwareSystem softwareSystem) {
+            values.put("c4Type", "Software System");
+            if(!softwareSystem.getProperties().isEmpty()) {
+                String properties = propertiesToString(softwareSystem.getProperties());
+                values.put("properties", properties);
+            }
+            elementShape(shape, writer, values);
+        } else if(element instanceof Component component) {
+            String technology = escapeHtml4(component.getTechnology());
+            if(technology == null) {
+                technology = "";
+            }            
+            values.put("c4Type", "Component");
+            values.put("c4Technology", technology);
+            if(!component.getProperties().isEmpty()) {
+                String properties = propertiesToString(component.getProperties());
+                values.put("properties", properties);
+            }            
+            elementShape(shape, writer, values);
         }
     }
 
-    private void elementShape(Shape shape, IndentingWriter writer, String type, String name, String technolodgy, String description, String id, int nameFontSize, int metadataFontSize, int descriptionFontSize, String color, String stroke, String background, int x, int y, int width, int height) {
+    private String propertiesToString(Map<String, String> properties) {
+        return properties.entrySet().stream()
+            .map(entry -> entry.getKey() + "='" + entry.getValue() + "'")
+            .collect(Collectors.joining(" "));
+    }
+
+    private void elementShape(Shape shape, IndentingWriter writer, Map<String, String> values) {
         switch(shape) {
-            case Hexagon: hexagon(writer, type, name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, x, y, width, height);
+            case Hexagon: hexagon(writer, values);
             break;
-            case Box: box(writer, type, name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, x, y, width, height);
+            case Box: box(writer, values);
             break;
-            case Cylinder: cylinder(writer, type, name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, x, y, width, height);
+            case Cylinder: cylinder(writer, values);
             break;
-            case Pipe: pipe(writer, type, name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, x, y, width, height);
+            case Pipe: pipe(writer, values);
             break;
-            case WebBrowser: webBrowser(writer, type, name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, x, y, width, height);
+            case WebBrowser: webBrowser(writer, values);
             break;
             case RoundedBox:
             case Circle:
@@ -715,278 +761,137 @@ public class MxExporter extends AbstractDiagramExporter {
             case MobileDeviceLandscape:
             case Component:
             default:
-            roundedBox(writer, type, name, technolodgy, description, id, nameFontSize, metadataFontSize, descriptionFontSize, color, stroke, background, x, y, width, height);
+            roundedBox(writer, values);
         }
     }
 
-    private void person(IndentingWriter writer, String name, String description, String id, int nameFontSize, int metadataFontSize, int descriptionFontSize, String color, String stroke, String background, int x, int y, int width, int height) {
-        StringBuilder sb = new StringBuilder();
-
-        sb.append("<object placeholders=\"1\" c4Name=\"").append(name);
-        sb.append("\" c4Type=\"Person\" c4Description=\"").append(description);
-        sb.append("\" label=\"&lt;font style=&quot;font-size: ").append(nameFontSize);
-        sb.append("px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: ").append(descriptionFontSize);
-        sb.append("px&quot;&gt;&lt;font color=&quot;").append(color);
-        sb.append("&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;\" id=\"").append(id);
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+    private void person(IndentingWriter writer, Map<String, String> values) {
+        String label = "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>";
+        label = new StringSubstitutor(values).replace(label);
+        values.put("label", escapeHtml4(label));        
+        StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
+        writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='Person' c4Description='${c4Description}' label='${label}' id='${id}' ${properties} >"));
         writer.indent();
-        sb.append("<mxCell style=\"html=1;fontSize=").append(metadataFontSize);
-        sb.append(";dashed=0;whiteSpace=wrap;fillColor=").append(background);
-        sb.append(";strokeColor=").append(stroke);
-        sb.append(";fontColor=").append(color);
-        sb.append(";shape=mxgraph.c4.person2;align=center;metaEdit=1;points=[[0.5,0,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0]];resizable=0;\" vertex=\"1\" parent=\"").append(parentId).append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        writer.writeLine(stringSubstitutor.replace("<mxCell style='shape=mxgraph.c4.person2;rounded=0;whiteSpace=wrap;html=1;fontSize=${metadataFontSize};labelBackgroundColor=none;fillColor=${background};fontColor=${color};align=center;arcSize=10;strokeColor=${stroke};metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
         writer.indent();
-        sb.append("<mxGeometry x=\"").append(x);
-        sb.append("\" y=\"").append(y);
-        sb.append("\" width=\"").append(width);
-        sb.append("\" height=\"").append(height);
-        sb.append("\" as=\"geometry\" />");
-        writer.writeLine(sb.toString());
+        writer.writeLine(stringSubstitutor.replace("<mxGeometry x='${x}' y='${y}' width='${width}' height='${height}' as='geometry' />"));
         writer.outdent();
         writer.writeLine("</mxCell>");
         writer.outdent();
         writer.writeLine("</object>");
     }
 
-    private void box(IndentingWriter writer, String type, String name, String technolodgy, String description, String id, int nameFontSize, int metadataFontSize, int descriptionFontSize, String color, String stroke, String background, int x, int y, int width, int height) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("<object placeholders=\"1\" c4Name=\"").append(name);
-        sb.append("\" c4Type=\"").append(type);
-        if(technolodgy != null) {
-            sb.append("\" c4Technology=\"").append(technolodgy);
-        }
-        sb.append("\" c4Description=\"").append(description);
-        sb.append("\" label=\"&lt;font style=&quot;font-size: ").append(nameFontSize);
-        if(technolodgy != null) {
-            sb.append("px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: ").append(descriptionFontSize);
-        } else {
-            sb.append("px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: ").append(descriptionFontSize);
-        }
-        sb.append("px&quot;&gt;&lt;font color=&quot;").append(color);
-        sb.append("&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;\" id=\"").append(id);
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+    private void box(IndentingWriter writer, Map<String, String> values) {
+        String technology = values.get("c4Technology");
+        String label = (technology.isEmpty())
+                ? "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>"
+                : "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%: %c4Technology%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>";
+        label = new StringSubstitutor(values).replace(label);
+        values.put("label", escapeHtml4(label));        
+        StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
+        writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='${c4Type}' c4Technology='${c4Technology}' c4Description='${c4Description}' label='${label}' id='${id}' ${properties} >"));
         writer.indent();
-        sb.append("<mxCell style=\"rounded=0;whiteSpace=wrap;html=1;fontSize=").append(metadataFontSize);
-        sb.append(";labelBackgroundColor=none;fillColor=").append(background);
-        sb.append(";fontColor=").append(color);
-        sb.append(";align=center;arcSize=10;strokeColor=").append(stroke);
-        sb.append(";metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        writer.writeLine(stringSubstitutor.replace("<mxCell style='rounded=0;whiteSpace=wrap;html=1;fontSize=${metadataFontSize};labelBackgroundColor=none;fillColor=${background};fontColor=${color};align=center;arcSize=10;strokeColor=${stroke};metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
         writer.indent();
-        sb.append("<mxGeometry x=\"").append(x);
-        sb.append("\" y=\"").append(y);
-        sb.append("\" width=\"").append(width);
-        sb.append("\" height=\"").append(height);
-        sb.append("\" as=\"geometry\" />");
-        writer.writeLine(sb.toString());
+        writer.writeLine(stringSubstitutor.replace("<mxGeometry x='${x}' y='${y}' width='${width}' height='${height}' as='geometry' />"));
         writer.outdent();
         writer.writeLine("</mxCell>");
         writer.outdent();
         writer.writeLine("</object>");
     }
 
-    private void roundedBox(IndentingWriter writer, String type, String name, String technolodgy, String description, String id, int nameFontSize, int metadataFontSize, int descriptionFontSize, String color, String stroke, String background, int x, int y, int width, int height) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("<object placeholders=\"1\" c4Name=\"").append(name);
-        sb.append("\" c4Type=\"").append(type);
-        if(technolodgy != null) {
-            sb.append("\" c4Technology=\"").append(technolodgy);
-        }
-        sb.append("\" c4Description=\"").append(description);
-        sb.append("\" label=\"&lt;font style=&quot;font-size: ").append(nameFontSize);
-        if(technolodgy != null) {
-            sb.append("px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: ").append(descriptionFontSize);
-        } else {
-            sb.append("px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: ").append(descriptionFontSize);
-        }
-        sb.append("px&quot;&gt;&lt;font color=&quot;").append(color);
-        sb.append("&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;\" id=\"").append(id);
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+    private void roundedBox(IndentingWriter writer, Map<String, String> values) {
+        String technology = values.get("c4Technology");
+        String label = (technology.isEmpty())
+                ? "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>"
+                : "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%: %c4Technology%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>";
+        label = new StringSubstitutor(values).replace(label);
+        values.put("label", escapeHtml4(label));        
+        StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
+        writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='${c4Type}' c4Technology='${c4Technology}' c4Description='${c4Description}' label='${label}' id='${id}' ${properties} >"));
         writer.indent();
-        sb.append("<mxCell style=\"rounded=1;whiteSpace=wrap;html=1;fontSize=").append(metadataFontSize);
-        sb.append(";labelBackgroundColor=none;fillColor=").append(background);
-        sb.append(";fontColor=").append(color);
-        sb.append(";align=center;arcSize=10;strokeColor=").append(stroke);
-        sb.append(";metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        writer.writeLine(stringSubstitutor.replace("<mxCell style='rounded=1;whiteSpace=wrap;html=1;fontSize=${metadataFontSize};labelBackgroundColor=none;fillColor=${background};fontColor=${color};align=center;arcSize=10;strokeColor=${stroke};metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
         writer.indent();
-        sb.append("<mxGeometry x=\"").append(x);
-        sb.append("\" y=\"").append(y);
-        sb.append("\" width=\"").append(width);
-        sb.append("\" height=\"").append(height);
-        sb.append("\" as=\"geometry\" />");
-        writer.writeLine(sb.toString());
+        writer.writeLine(stringSubstitutor.replace("<mxGeometry x='${x}' y='${y}' width='${width}' height='${height}' as='geometry' />"));
         writer.outdent();
         writer.writeLine("</mxCell>");
         writer.outdent();
         writer.writeLine("</object>");
     }
 
-    private void hexagon(IndentingWriter writer, String type, String name, String technolodgy, String description, String id, int nameFontSize, int metadataFontSize, int descriptionFontSize, String color, String stroke, String background, int x, int y, int width, int height) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("<object placeholders=\"1\" c4Name=\"").append(name);
-        sb.append("\" c4Type=\"").append(type);
-        if(technolodgy != null) {
-            sb.append("\" c4Technology=\"").append(technolodgy);
-        }
-        sb.append("\" c4Description=\"").append(description);
-        sb.append("\" label=\"&lt;font style=&quot;font-size: ").append(nameFontSize);
-        if(technolodgy != null) {
-            sb.append("px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: ").append(descriptionFontSize);
-        } else {
-            sb.append("px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: ").append(descriptionFontSize);
-        }
-        sb.append("px&quot;&gt;&lt;font color=&quot;").append(color);
-        sb.append("&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;\" id=\"").append(id);
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+    private void hexagon(IndentingWriter writer, Map<String, String> values) {
+        int width = Integer.parseInt(values.get("width"));
+        int height = (int) (HEXAGON_RATIO * width);
+        values.put("height", String.valueOf(height));
+        String technology = values.get("c4Technology");
+        String label = (technology.isEmpty())
+                ? "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>"
+                : "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%: %c4Technology%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>";
+        label = new StringSubstitutor(values).replace(label);
+        values.put("label", escapeHtml4(label));        
+        StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
+        writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='${c4Type}' c4Technology='${c4Technology}' c4Description='${c4Description}' label='${label}' id='${id}' ${properties} >"));
         writer.indent();
-        sb.append("<mxCell style=\"shape=hexagon;size=120;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;rounded=1;fontSize=").append(metadataFontSize);
-        sb.append(";labelBackgroundColor=none;fillColor=").append(background);
-        sb.append(";fontColor=").append(color);
-        sb.append(";align=center;arcSize=10;strokeColor=").append(stroke);
-        sb.append(";metaEdit=1;resizable=0;points=[[0.5,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.5,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        writer.writeLine(stringSubstitutor.replace("<mxCell style='shape=hexagon;size=120;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;rounded=1;fontSize=${metadataFontSize};labelBackgroundColor=none;fillColor=${background};fontColor=${color};align=center;arcSize=10;strokeColor=${stroke};metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
         writer.indent();
-        sb.append("<mxGeometry x=\"").append(x);
-        sb.append("\" y=\"").append(y);
-        height = (int) (HEXAGON_RATIO * width);
-        sb.append("\" width=\"").append(width);
-        sb.append("\" height=\"").append(height);
-        sb.append("\" as=\"geometry\" />");
-        writer.writeLine(sb.toString());
+        writer.writeLine(stringSubstitutor.replace("<mxGeometry x='${x}' y='${y}' width='${width}' height='${height}' as='geometry' />"));
         writer.outdent();
         writer.writeLine("</mxCell>");
         writer.outdent();
         writer.writeLine("</object>");
     }
 
-    private void cylinder(IndentingWriter writer, String type, String name, String technolodgy, String description, String id, int nameFontSize, int metadataFontSize, int descriptionFontSize, String color, String stroke, String background, int x, int y, int width, int height) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("<object placeholders=\"1\" c4Name=\"").append(name);
-        sb.append("\" c4Type=\"").append(type);
-        if(technolodgy != null) {
-            sb.append("\" c4Technology=\"").append(technolodgy);
-        }
-        sb.append("\" c4Description=\"").append(description);
-        sb.append("\" label=\"&lt;font style=&quot;font-size: ").append(nameFontSize);
-        if(technolodgy != null) {
-            sb.append("px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: ").append(descriptionFontSize);
-        } else {
-            sb.append("px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: ").append(descriptionFontSize);
-        }
-        sb.append("px&quot;&gt;&lt;font color=&quot;").append(color);
-        sb.append("&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;\" id=\"").append(id);
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+    private void cylinder(IndentingWriter writer, Map<String, String> values) {
+        String technology = values.get("c4Technology");
+        String label = (technology.isEmpty())
+                ? "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>"
+                : "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%: %c4Technology%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>";
+        label = new StringSubstitutor(values).replace(label);
+        values.put("label", escapeHtml4(label));        
+        StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
+        writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='${c4Type}' c4Technology='${c4Technology}' c4Description='${c4Description}' label='${label}' id='${id}' ${properties} >"));
         writer.indent();
-        sb.append("<mxCell style=\"shape=cylinder3;size=15;whiteSpace=wrap;html=1;boundedLbl=1;rounded=0;fontSize=").append(metadataFontSize);
-        sb.append(";labelBackgroundColor=none;fillColor=").append(background);
-        sb.append(";fontColor=").append(color);
-        sb.append(";align=center;arcSize=10;strokeColor=").append(stroke);
-        sb.append(";metaEdit=1;resizable=0;points=[[0.5,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.5,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        writer.writeLine(stringSubstitutor.replace("<mxCell style='shape=cylinder3;size=15;whiteSpace=wrap;html=1;boundedLbl=1;rounded=0;fontSize=${metadataFontSize};labelBackgroundColor=none;fillColor=${background};fontColor=${color};align=center;arcSize=10;strokeColor=${stroke};metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
         writer.indent();
-        sb.append("<mxGeometry x=\"").append(x);
-        sb.append("\" y=\"").append(y);
-        sb.append("\" width=\"").append(width);
-        sb.append("\" height=\"").append(height);
-        sb.append("\" as=\"geometry\" />");
-        writer.writeLine(sb.toString());
+        writer.writeLine(stringSubstitutor.replace("<mxGeometry x='${x}' y='${y}' width='${width}' height='${height}' as='geometry' />"));
         writer.outdent();
         writer.writeLine("</mxCell>");
         writer.outdent();
         writer.writeLine("</object>");
     }
 
-    private void pipe(IndentingWriter writer, String type, String name, String technolodgy, String description, String id, int nameFontSize, int metadataFontSize, int descriptionFontSize, String color, String stroke, String background, int x, int y, int width, int height) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("<object placeholders=\"1\" c4Name=\"").append(name);
-        sb.append("\" c4Type=\"").append(type);
-        if(technolodgy != null) {
-            sb.append("\" c4Technology=\"").append(technolodgy);
-        }
-        sb.append("\" c4Description=\"").append(description);
-        sb.append("\" label=\"&lt;font style=&quot;font-size: ").append(nameFontSize);
-        if(technolodgy != null) {
-            sb.append("px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: ").append(descriptionFontSize);
-        } else {
-            sb.append("px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: ").append(descriptionFontSize);
-        }
-        sb.append("px&quot;&gt;&lt;font color=&quot;").append(color);
-        sb.append("&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;\" id=\"").append(id);
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+    private void pipe(IndentingWriter writer, Map<String, String> values) {
+        String technology = values.get("c4Technology");
+        String label = (technology.isEmpty())
+                ? "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>"
+                : "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%: %c4Technology%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>";
+        label = new StringSubstitutor(values).replace(label);
+        values.put("label", escapeHtml4(label));        
+        StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
+        writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='${c4Type}' c4Technology='${c4Technology}' c4Description='${c4Description}' label='${label}' id='${id}' ${properties} >"));
         writer.indent();
-        sb.append("<mxCell style=\"shape=cylinder3;size=15;direction=south;whiteSpace=wrap;html=1;boundedLbl=1;rounded=0;fontSize=").append(metadataFontSize);
-        sb.append(";labelBackgroundColor=none;fillColor=").append(background);
-        sb.append(";fontColor=").append(color);
-        sb.append(";align=center;arcSize=10;strokeColor=").append(stroke);
-        sb.append(";metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        writer.writeLine(stringSubstitutor.replace("<mxCell style='shape=cylinder3;size=15;direction=south;whiteSpace=wrap;html=1;boundedLbl=1;rounded=0;fontSize=${metadataFontSize};labelBackgroundColor=none;fillColor=${background};fontColor=${color};align=center;arcSize=10;strokeColor=${stroke};metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
         writer.indent();
-        sb.append("<mxGeometry x=\"").append(x);
-        sb.append("\" y=\"").append(y);
-        sb.append("\" width=\"").append(width);
-        sb.append("\" height=\"").append(height);
-        sb.append("\" as=\"geometry\" />");
-        writer.writeLine(sb.toString());
+        writer.writeLine(stringSubstitutor.replace("<mxGeometry x='${x}' y='${y}' width='${width}' height='${height}' as='geometry' />"));
         writer.outdent();
         writer.writeLine("</mxCell>");
         writer.outdent();
         writer.writeLine("</object>");
     }
 
-    private void webBrowser(IndentingWriter writer, String type, String name, String technolodgy, String description, String id, int nameFontSize, int metadataFontSize, int descriptionFontSize, String color, String stroke, String background, int x, int y, int width, int height) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("<object placeholders=\"1\" c4Name=\"").append(name);
-        sb.append("\" c4Type=\"").append(type);
-        if(technolodgy != null) {
-            sb.append("\" c4Technology=\"").append(technolodgy);
-        }
-        sb.append("\" c4Description=\"").append(description);
-        sb.append("\" label=\"&lt;font style=&quot;font-size: ").append(nameFontSize);
-        if(technolodgy != null) {
-            sb.append("px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%: %c4Technology%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: ").append(descriptionFontSize);
-        } else {
-            sb.append("px&quot;&gt;&lt;b&gt;%c4Name%&lt;/b&gt;&lt;/font&gt;&lt;div&gt;[%c4Type%]&lt;/div&gt;&lt;br&gt;&lt;div&gt;&lt;font style=&quot;font-size: ").append(descriptionFontSize);
-        }
-        sb.append("px&quot;&gt;&lt;font color=&quot;").append(color);
-        sb.append("&quot;&gt;%c4Description%&lt;/font&gt;&lt;/div&gt;\" id=\"").append(id);
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+    private void webBrowser(IndentingWriter writer, Map<String, String> values) {
+        String technology = values.get("c4Technology");
+        String label = (technology.isEmpty())
+                ? "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>"
+                : "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%: %c4Technology%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>";
+        label = new StringSubstitutor(values).replace(label);
+        values.put("label", escapeHtml4(label));        
+        StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
+        writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='${c4Type}' c4Technology='${c4Technology}' c4Description='${c4Description}' label='${label}' id='${id}' ${properties} >"));
         writer.indent();
-        sb.append("<mxCell style=\"shape=mxgraph.c4.webBrowserContainer2;whiteSpace=wrap;html=1;boundedLbl=1;rounded=0;fontSize=").append(metadataFontSize);
-        sb.append(";labelBackgroundColor=none;fillColor=").append(background);
-        sb.append(";fontColor=").append(color);
-        sb.append(";align=center;arcSize=10;strokeColor=").append(stroke);
-        sb.append(";metaEdit=1;resizable=0;points=[[0.5,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.5,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];\" vertex=\"1\" parent=\"").append(parentId).append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        writer.writeLine(stringSubstitutor.replace("<mxCell style='shape=mxgraph.c4.webBrowserContainer2;whiteSpace=wrap;html=1;boundedLbl=1;rounded=0;fontSize=${metadataFontSize};labelBackgroundColor=none;fillColor=${background};fontColor=${color};align=center;arcSize=10;strokeColor=${stroke};metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
         writer.indent();
-        sb.append("<mxGeometry x=\"").append(x);
-        sb.append("\" y=\"").append(y);
-        sb.append("\" width=\"").append(width);
-        sb.append("\" height=\"").append(height);
-        sb.append("\" as=\"geometry\" />");
-        writer.writeLine(sb.toString());
+        writer.writeLine(stringSubstitutor.replace("<mxGeometry x='${x}' y='${y}' width='${width}' height='${height}' as='geometry' />"));
         writer.outdent();
         writer.writeLine("</mxCell>");
         writer.outdent();
@@ -1004,8 +909,9 @@ public class MxExporter extends AbstractDiagramExporter {
 
         RelationshipStyle relationshipStyle = view.getViewSet().getConfiguration().getStyles().findRelationshipStyle(relationshipView.getRelationship());
         String color = relationshipStyle.getColor();
-        int fontSize = relationshipStyle.getFontSize();
         int descriptionFontSize = relationshipStyle.getFontSize();
+        int strokeWidth = relationshipStyle.getThickness();
+        Routing routing = relationshipStyle.getRouting();
 
         String description = relationshipView.getDescription();
         if (StringUtils.isNullOrEmpty(description)) {
@@ -1042,33 +948,48 @@ public class MxExporter extends AbstractDiagramExporter {
             }
         }
 
-        boolean solid = relationshipStyle.getStyle() == LineStyle.Solid || false == relationshipStyle.getDashed();
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("<object placeholders=\"1\" c4Type=\"Relationship\" c4Technology=\"").append(technology);
-        sb.append("\" c4Description=\"").append(description);
-        String id = relationshipId(relationshipView);
-        sb.append("\" label=\"&lt;div style=&quot;text-align: left&quot;&gt;&lt;div style=&quot;text-align: center&quot;&gt;&lt;b&gt;%c4Description%&lt;/b&gt;&lt;/div&gt;&lt;div style=&quot;text-align: center&quot;&gt;[%c4Technology%]&lt;/div&gt;&lt;/div&gt;\" id=\"").append(id);
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
-        writer.indent();
-        sb.append("<mxCell style=\"whiteSpace=wrap;endArrow=block;html=1;fontSize=").append(descriptionFontSize);
-        sb.append(";strokeWidth=").append(relationshipStyle.getThickness());
-        sb.append(";fontColor=").append(color);
-        if(relationshipStyle.getStyle() != LineStyle.Solid) {
-            if(relationshipStyle.getStyle() == LineStyle.Dotted) {
-                sb.append("dashed=1;dashPattern=1 8;");
+        Map<String, String> values = new HashMap<>();
+        values.put("id", relationshipId(relationshipView));
+        values.put("descriptionFontSize", String.valueOf(descriptionFontSize));
+        values.put("color", color);
+        String curved = (routing == Routing.Curved) ? "1" : "0";
+        values.put("curved", curved);
+        String edgeStyle = (routing == Routing.Orthogonal) ? "orthogonalEdgeStyle" : "none";
+        values.put("edgeStyle", edgeStyle);
+        values.put("color", color);
+        values.put("strokeWidth", String.valueOf(strokeWidth));
+        values.put("parentId", parentId);
+        values.put("c4Technology", technology == null ? "" : technology);
+        values.put("c4Description", description == null ? "" : description);
+        values.put("source", source.getId());
+        values.put("target", destination.getId());
+        String label = "";
+        if(!StringUtils.isNullOrEmpty(description)) {
+            if(!StringUtils.isNullOrEmpty(technology)) {
+                label = "<div style=\"text-align: left\"><div style=\"text-align: center\"><b>%c4Description%</b></div><div style=\"text-align: center\">[%c4Technology%]</div></div>";
             } else {
-                sb.append(";dashed=1;dashPattern=12 12");
+                label = "<div style=\"text-align: left\"><div style=\"text-align: center\"><b>%c4Description%</b></div>";
             }
         }
-        sb.append(";endFill=1;strokeColor=").append(color);
-        sb.append(";elbow=vertical;metaEdit=1;endSize=20;startSize=20;jumpStyle=arc;jumpSize=16;rounded=0;\" edge=\"1\" parent=\"").append(parentId).append("\" source=\"").append(source.getId());
-        sb.append("\" target=\"").append(destination.getId());
-        sb.append("\">");
-        writer.writeLine(sb.toString());
-        sb.setLength(0);
+        label = new StringSubstitutor(values).replace(label);
+        values.put("label", escapeHtml4(label));        
+        if(relationshipStyle.getStyle() != LineStyle.Solid) {
+            if(relationshipStyle.getStyle() == LineStyle.Dotted) {
+                values.put("dashed", "1");
+                values.put("dashPattern", "1 8");
+            } else {
+                values.put("dashed", "1");
+                values.put("dashPattern", "12 12");                
+            }
+        } else {
+            values.put("dashed", "0");
+            values.put("dashPattern", "1 8");
+        }
+
+        StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
+        writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Type='Relationship' c4Technology='${c4Technology}' c4Description='${c4Description}' label='${label}' id='${id}'>"));
+        writer.indent();
+        writer.writeLine(stringSubstitutor.replace("<mxCell style='endSize=20;startSize=20;jumpStyle=arc;jumpSize=16;elbow=vertical;endFill=1;whiteSpace=wrap;endArrow=block;html=1;fontSize=${descriptionFontSize};fontColor=${color};align=center;arcSize=10;strokeColor=${color};strokeWidth=${strokeWidth};metaEdit=1;resizable=0;dashed=${dashed};dashPattern=${dashPattern};rounded=0;curved=${curved};edgeStyle=${edgeStyle};' parent='${parentId}' edge='1' source='${source}' target='${target}'>"));
         writer.indent();
         Collection<Vertex> vertices = relationshipView.getVertices();        
         if(vertices.isEmpty()) {
@@ -1112,7 +1033,6 @@ public class MxExporter extends AbstractDiagramExporter {
         if (deploymentNode.hasChildren()) {
             for (DeploymentNode child : deploymentNode.getChildren()) {
                 Element element = findElementInside(child, view);
-
                 if (element != null) {
                     return element;
                 }

@@ -103,18 +103,20 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
 
     this.initRoot = async () : Promise<Chapter[]> =>  {
       const headers = generateHmac('GET', this.PATH + this.INDEX_ID);
-      return Promise.resolve(httpc.get(beelineApiUrl + this.PATH + this.INDEX_ID, headers).
-      then((res) => { return res.readBody(); }).
-      then((body) => { return JSON.parse(body) as Chapter; }).
-      then((root) => {
-        context.workspaceState.update(this.INDEX_ID, root); 
-        return this.initChapter((Array.isArray(root)) ? root : [root]);
+      return httpc.get(beelineApiUrl + this.PATH + this.INDEX_ID, headers).
+      then((res) => res.readBody()).
+      then((body) => {
+        const root = JSON.parse(body) as Chapter;
+        context.workspaceState.update(this.INDEX_ID, root);
+        return root;
       }).
-      catch((error) => {
-        const root : Chapter | undefined = (context.workspaceState.get(this.INDEX_ID));
-        return (root !== undefined) ? this.initChapter((Array.isArray(root)) ? root : [root]) : [];
-      })).
-      finally(() => { });
+      catch((error) => context.workspaceState.get(this.INDEX_ID) as Chapter).
+      then((root) => {
+        if(root === undefined) {
+          return [];
+        }
+        return this.initChapter((Array.isArray(root)) ? root : [root]);
+      });
     };
 
     vscode.commands.registerCommand('c4.architectureCatalogue.refresh', async (...args: string[]) => {

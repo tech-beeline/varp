@@ -175,6 +175,10 @@ public class Custom {
                     : HashBasedMessageAuthenticationCode.md5(body);
             String nonce = Long.toString(System.currentTimeMillis());
             HashBasedMessageAuthenticationCode code = new HashBasedMessageAuthenticationCode(apiSecret);
+            int index = path.indexOf("?");
+            if(index > -1) {
+                path = path.substring(0, index);
+            }
             HmacContent hmacContent = new HmacContent(method, path, bodyMD5, contentType, nonce);
             String generatedHmac = code.generate(hmacContent.toString());
             String xauth = apiKey + ":" + generatedHmac;
@@ -280,7 +284,7 @@ public class Custom {
 
     private void updateTechCapabilities() {
         CompletableFuture.runAsync(() -> {
-            String path = "/dashboard/api/tech-capabilities";
+            String path = "/capability/api/v1/tech-capabilities";
             try {
                 HttpsURLConnection conn = beelineApiConnection("GET", path, null, null);
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
@@ -314,7 +318,7 @@ public class Custom {
 
     private void updateCapabilities() {
         CompletableFuture.runAsync(() -> {
-            String path = "/dashboard/api/capabilities";
+            String path = "/capability/api/v1/business-capability?findBy=ALL";
             try {
                 HttpsURLConnection conn = beelineApiConnection("GET", path, null, null);
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {

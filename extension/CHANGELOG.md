@@ -1,5 +1,10 @@
 # Change Log
 
+## 1.0.9 - 1.0.10
+
+- Export styles and properties to drawio
+- Fixed a paper size calculation during layout import from drawio
+
 ## 1.0.8
 
 - Fixed a bug exporting large-sized diagrams to the drawio format

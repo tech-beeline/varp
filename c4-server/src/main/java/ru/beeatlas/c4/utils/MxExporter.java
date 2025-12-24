@@ -16,12 +16,16 @@
 
 package ru.beeatlas.c4.utils;
 
+import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Stack;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -70,7 +74,7 @@ public class MxExporter extends AbstractDiagramExporter {
         }
         public String name;
         public String fullName;
-        public HashMap<String, GroupBoundary> groupBoundaries = new HashMap<>();
+        public Map<String, GroupBoundary> groupBoundaries = new HashMap<>();
         public int minX = Integer.MAX_VALUE;
         public int minY = Integer.MAX_VALUE;
         public int maxX = Integer.MIN_VALUE;
@@ -79,8 +83,8 @@ public class MxExporter extends AbstractDiagramExporter {
 
     private class SoftwareSystemBoundary {
         SoftwareSystem softwareSystem;
-        public HashSet<GroupBoundary> groupBoundaries = new HashSet<>();
-        public LinkedList<Element> elements = new LinkedList<>();
+        public Set<GroupBoundary> groupBoundaries = new HashSet<>();
+        public List<Element> elements = new LinkedList<>();
         public SoftwareSystemBoundary(SoftwareSystem softwareSystem) {
             this.softwareSystem = softwareSystem;
         }
@@ -92,9 +96,9 @@ public class MxExporter extends AbstractDiagramExporter {
         public int maxX = Integer.MIN_VALUE;
         public int maxY = Integer.MIN_VALUE;
         public DeploymentNode deploymentNode;
-        public HashSet<GroupBoundary> groupBoundaries = new HashSet<>();
-        public LinkedList<Element> elements = new LinkedList<>();
-        public LinkedList<DeploymentNodeBoundary> deploymentNodes = new LinkedList<>();
+        public Set<GroupBoundary> groupBoundaries = new HashSet<>();
+        public List<Element> elements = new LinkedList<>();
+        public List<DeploymentNodeBoundary> deploymentNodes = new LinkedList<>();
         public DeploymentNodeBoundary(DeploymentNode deploymentNode) {
             this.deploymentNode = deploymentNode;
         }
@@ -102,8 +106,8 @@ public class MxExporter extends AbstractDiagramExporter {
 
     private class ContainerBoundary {
         Container container;
-        public HashSet<GroupBoundary> groupBoundaries = new HashSet<>();
-        public LinkedList<Element> elements = new LinkedList<>();
+        public Set<GroupBoundary> groupBoundaries = new HashSet<>();
+        public List<Element> elements = new LinkedList<>();
         public ContainerBoundary(Container container) {
             this.container = container;
         }
@@ -113,7 +117,7 @@ public class MxExporter extends AbstractDiagramExporter {
     private LinkedList<SoftwareSystemBoundary> softwareSystemBoundaries = new LinkedList<>();
     private LinkedList<ContainerBoundary> containerBoundaries = new LinkedList<>();
     private LinkedList<DeploymentNodeBoundary> deploymentNodeBoundaries = new LinkedList<>();
-    private Stack<DeploymentNodeBoundary> deploymentNodeBoundaryStack = new Stack<>();
+    private Deque<DeploymentNodeBoundary> deploymentNodeBoundaryStack = new ArrayDeque<>();
 
     private int clusterInternalMargin = 25;
 
@@ -253,8 +257,7 @@ public class MxExporter extends AbstractDiagramExporter {
         int maxY = Integer.MIN_VALUE;
         for(Element e : softwareSystemBoundary.elements) {
             ElementView ev = view.getElementView(e);
-            if (e instanceof StaticStructureElementInstance) {
-                StaticStructureElementInstance elementInstance = (StaticStructureElementInstance)e;
+            if (e instanceof StaticStructureElementInstance elementInstance) {
                 e = elementInstance.getElement();
             }
             ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(e);            
@@ -331,8 +334,7 @@ public class MxExporter extends AbstractDiagramExporter {
         int maxY = Integer.MIN_VALUE;
         for(Element e : containerBoundary.elements) {
             ElementView ev = view.getElementView(e);
-            if (e instanceof StaticStructureElementInstance) {
-                StaticStructureElementInstance elementInstance = (StaticStructureElementInstance)e;
+            if (e instanceof StaticStructureElementInstance elementInstance) {
                 e = elementInstance.getElement();
             }
             ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(e);
@@ -445,7 +447,7 @@ public class MxExporter extends AbstractDiagramExporter {
         String groupSeparator = view.getModel().getProperties().getOrDefault(GROUP_SEPARATOR_PROPERTY_NAME, "");
         String[] groups = (groupSeparator.isEmpty()) ? Collections.singletonList(group).toArray(String[]::new) : group.split(groupSeparator);
         String fullName = "";
-        HashMap<String, GroupBoundary> groupBoundariesRoot = groupBoundaries;
+        Map<String, GroupBoundary> groupBoundariesRoot = groupBoundaries;
         for(String groupName : groups) {
             GroupBoundary gb = groupBoundariesRoot.get(groupName);
             fullName += groupName;
@@ -459,7 +461,7 @@ public class MxExporter extends AbstractDiagramExporter {
                 if(containerBoundary != null) {
                     containerBoundary.groupBoundaries.add(gb);
                 }
-                if(deploymentNodeBoundaryStack.empty() == false) {
+                if(deploymentNodeBoundaryStack.isEmpty() == false) {
                     DeploymentNodeBoundary deploymentNodeBoundary = deploymentNodeBoundaryStack.peek();
                     deploymentNodeBoundary.groupBoundaries.add(gb);
                 }
@@ -474,9 +476,8 @@ public class MxExporter extends AbstractDiagramExporter {
             if(ge.getGroup() == null) {
                 continue;
             }
-            Element e = (Element)ev.getElement();
-            if (e instanceof StaticStructureElementInstance) {
-                StaticStructureElementInstance elementInstance = (StaticStructureElementInstance)e;
+            Element e = ev.getElement();
+            if (e instanceof StaticStructureElementInstance elementInstance) {
                 e = elementInstance.getElement();
             }
             ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(e);            
@@ -526,7 +527,7 @@ public class MxExporter extends AbstractDiagramExporter {
     protected void startDeploymentNodeBoundary(DeploymentView view, DeploymentNode deploymentNode, IndentingWriter writer) {
         DeploymentNodeBoundary newDeploymentNodeBoundary = new DeploymentNodeBoundary(deploymentNode);
         
-        if(deploymentNodeBoundaryStack.empty() == true) {
+        if(deploymentNodeBoundaryStack.isEmpty() == true) {
             deploymentNodeBoundaries.add(newDeploymentNodeBoundary);
         } else {
             DeploymentNodeBoundary deploymentNodeBoundary = deploymentNodeBoundaryStack.peek();
@@ -604,8 +605,7 @@ public class MxExporter extends AbstractDiagramExporter {
         }
         for(Element e : deploymentNodeBoundary.elements) {
             ElementView ev = view.getElementView(e);
-            if (e instanceof StaticStructureElementInstance) {
-                StaticStructureElementInstance elementInstance = (StaticStructureElementInstance)e;
+            if (e instanceof StaticStructureElementInstance elementInstance) {
                 e = elementInstance.getElement();
             }
             ElementStyle es = view.getViewSet().getConfiguration().getStyles().findElementStyle(e);
@@ -643,7 +643,7 @@ public class MxExporter extends AbstractDiagramExporter {
         if(containerBoundary != null) {
             containerBoundary.elements.add(element);
         }
-        if(deploymentNodeBoundaryStack.empty() == false) {
+        if(deploymentNodeBoundaryStack.isEmpty() == false) {
             DeploymentNodeBoundary deploymentNodeBoundary = deploymentNodeBoundaryStack.peek();
             deploymentNodeBoundary.elements.add(element);
         }
@@ -652,8 +652,7 @@ public class MxExporter extends AbstractDiagramExporter {
         ElementView ev = view.getElementView(element);
         String id = element.getId();
 
-        if (element instanceof StaticStructureElementInstance) {
-            StaticStructureElementInstance elementInstance = (StaticStructureElementInstance)element;
+        if (element instanceof StaticStructureElementInstance elementInstance) {
             element = elementInstance.getElement();
         }
 
@@ -682,7 +681,6 @@ public class MxExporter extends AbstractDiagramExporter {
         values.put("descriptionFontSize", String.valueOf(descriptionFontSize));
         values.put("color", color);
         values.put("background", background);
-        values.put("metadataFontSize", String.valueOf(metadataFontSize));
         values.put("stroke", stroke);
         values.put("x", String.valueOf(ev.getX()));
         values.put("y", String.valueOf(ev.getY()));
@@ -783,7 +781,7 @@ public class MxExporter extends AbstractDiagramExporter {
 
     private void box(IndentingWriter writer, Map<String, String> values) {
         String technology = values.get("c4Technology");
-        String label = (technology.isEmpty())
+        String label = (StringUtils.isNullOrEmpty(technology))
                 ? "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>"
                 : "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%: %c4Technology%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>";
         label = new StringSubstitutor(values).replace(label);
@@ -802,7 +800,7 @@ public class MxExporter extends AbstractDiagramExporter {
 
     private void roundedBox(IndentingWriter writer, Map<String, String> values) {
         String technology = values.get("c4Technology");
-        String label = (technology.isEmpty())
+        String label = (StringUtils.isNullOrEmpty(technology))
                 ? "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>"
                 : "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%: %c4Technology%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>";
         label = new StringSubstitutor(values).replace(label);
@@ -824,7 +822,7 @@ public class MxExporter extends AbstractDiagramExporter {
         int height = (int) (HEXAGON_RATIO * width);
         values.put("height", String.valueOf(height));
         String technology = values.get("c4Technology");
-        String label = (technology.isEmpty())
+        String label = (StringUtils.isNullOrEmpty(technology))
                 ? "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>"
                 : "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%: %c4Technology%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>";
         label = new StringSubstitutor(values).replace(label);
@@ -843,7 +841,7 @@ public class MxExporter extends AbstractDiagramExporter {
 
     private void cylinder(IndentingWriter writer, Map<String, String> values) {
         String technology = values.get("c4Technology");
-        String label = (technology.isEmpty())
+        String label = (StringUtils.isNullOrEmpty(technology))
                 ? "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>"
                 : "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%: %c4Technology%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>";
         label = new StringSubstitutor(values).replace(label);
@@ -862,7 +860,7 @@ public class MxExporter extends AbstractDiagramExporter {
 
     private void pipe(IndentingWriter writer, Map<String, String> values) {
         String technology = values.get("c4Technology");
-        String label = (technology.isEmpty())
+        String label = (StringUtils.isNullOrEmpty(technology))
                 ? "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>"
                 : "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%: %c4Technology%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>";
         label = new StringSubstitutor(values).replace(label);
@@ -881,7 +879,7 @@ public class MxExporter extends AbstractDiagramExporter {
 
     private void webBrowser(IndentingWriter writer, Map<String, String> values) {
         String technology = values.get("c4Technology");
-        String label = (technology.isEmpty())
+        String label = (StringUtils.isNullOrEmpty(technology))
                 ? "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>"
                 : "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%: %c4Technology%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>";
         label = new StringSubstitutor(values).replace(label);
@@ -932,12 +930,12 @@ public class MxExporter extends AbstractDiagramExporter {
 
         if (relationshipView.getRelationship().getSource() instanceof DeploymentNode || relationshipView.getRelationship().getDestination() instanceof DeploymentNode) {
             source = relationshipView.getRelationship().getSource();
-            if (source instanceof DeploymentNode) {
-                source = findElementInside((DeploymentNode)source, view);
+            if (source instanceof DeploymentNode deploymentNode) {
+                source = findElementInside(deploymentNode, view);
             }
             destination = relationshipView.getRelationship().getDestination();
-            if (destination instanceof DeploymentNode) {
-                destination = findElementInside((DeploymentNode)destination, view);
+            if (destination instanceof DeploymentNode deploymentNode) {
+                destination = findElementInside(deploymentNode, view);
             }
         } else {
             source = relationshipView.getRelationship().getSource();
@@ -962,7 +960,9 @@ public class MxExporter extends AbstractDiagramExporter {
         values.put("c4Technology", technology == null ? "" : technology);
         values.put("c4Description", description == null ? "" : description);
         values.put("source", source.getId());
-        values.put("target", destination.getId());
+        if(destination != null) {
+            values.put("target", destination.getId());
+        }
         String label = "";
         if(!StringUtils.isNullOrEmpty(description)) {
             if(!StringUtils.isNullOrEmpty(technology)) {

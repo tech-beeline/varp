@@ -1,5 +1,9 @@
 # Change Log
 
+## 1.0.11
+
+- Hot fix for drawio export
+
 ## 1.0.9 - 1.0.10
 
 - Export styles and properties to drawio

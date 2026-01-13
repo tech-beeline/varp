@@ -726,6 +726,18 @@ public class MxExporter extends AbstractDiagramExporter {
                 values.put("properties", properties);
             }            
             elementShape(shape, writer, values);
+        } else if(element instanceof InfrastructureNode infrastructureNode) {
+            String technology = escapeHtml4(infrastructureNode.getTechnology());
+            if(technology == null) {
+                technology = "";
+            }
+            values.put("c4Type", "InfrastructureNode");
+            values.put("c4Technology", technology);
+            if(!infrastructureNode.getProperties().isEmpty()) {
+                String properties = propertiesToString(infrastructureNode.getProperties());
+                values.put("properties", properties);
+            }            
+            elementShape(shape, writer, values);            
         }
     }
 
@@ -747,9 +759,13 @@ public class MxExporter extends AbstractDiagramExporter {
             break;
             case WebBrowser: webBrowser(writer, values);
             break;
-            case RoundedBox:
             case Circle:
+                ellipse(writer, values, true);
+                break;
             case Ellipse:
+                ellipse(writer, values, false);
+                break;
+            case RoundedBox:
             case Diamond:
             case Person:
             case Robot:
@@ -790,6 +806,35 @@ public class MxExporter extends AbstractDiagramExporter {
         writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='${c4Type}' c4Technology='${c4Technology}' c4Description='${c4Description}' label='${label}' id='${id}' ${properties} >"));
         writer.indent();
         writer.writeLine(stringSubstitutor.replace("<mxCell style='rounded=0;whiteSpace=wrap;html=1;fontSize=${metadataFontSize};labelBackgroundColor=none;fillColor=${background};fontColor=${color};align=center;arcSize=10;strokeColor=${stroke};metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
+        writer.indent();
+        writer.writeLine(stringSubstitutor.replace("<mxGeometry x='${x}' y='${y}' width='${width}' height='${height}' as='geometry' />"));
+        writer.outdent();
+        writer.writeLine("</mxCell>");
+        writer.outdent();
+        writer.writeLine("</object>");
+    }
+
+    private void ellipse(IndentingWriter writer, Map<String, String> values, boolean aspectFixed) {
+        String technology = values.get("c4Technology");
+        String label = (StringUtils.isNullOrEmpty(technology))
+                ? "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>"
+                : "<font style=\"font-size:${nameFontSize}px\"><b>%c4Name%</b></font><div>[%c4Type%: %c4Technology%]</div><br><div><font style=\"font-size:${descriptionFontSize}px\" color=\"${color}\">%c4Description%</font></div>";
+        label = new StringSubstitutor(values).replace(label);
+        values.put("label", escapeHtml4(label));        
+        StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
+        writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='${c4Type}' c4Technology='${c4Technology}' c4Description='${c4Description}' label='${label}' id='${id}' ${properties} >"));
+        writer.indent();
+        if(aspectFixed) {
+            Integer width = Integer.valueOf(values.get("width"));
+            Integer height = Integer.valueOf(values.get("height"));
+            width = Math.max(width, height);
+            height = width;
+            values.put("width", String.valueOf(width));
+            values.put("height", String.valueOf(height));
+            writer.writeLine(stringSubstitutor.replace("<mxCell style='ellipse;aspect=fixed;rounded=0;whiteSpace=wrap;html=1;fontSize=${metadataFontSize};labelBackgroundColor=none;fillColor=${background};fontColor=${color};align=center;arcSize=10;strokeColor=${stroke};metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
+        } else {
+            writer.writeLine(stringSubstitutor.replace("<mxCell style='ellipse;rounded=0;whiteSpace=wrap;html=1;fontSize=${metadataFontSize};labelBackgroundColor=none;fillColor=${background};fontColor=${color};align=center;arcSize=10;strokeColor=${stroke};metaEdit=1;resizable=0;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
+        }
         writer.indent();
         writer.writeLine(stringSubstitutor.replace("<mxGeometry x='${x}' y='${y}' width='${width}' height='${height}' as='geometry' />"));
         writer.outdent();

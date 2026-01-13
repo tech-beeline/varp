@@ -103,7 +103,7 @@ public class Custom {
     private Map<String, List<CompletionItem>> beelineCloudFlavors = new HashMap<>();
     private Map<String, List<CompletionItem>> beelineCloudImages = new HashMap<>();
 
-    private final static String TECH_PATTERN = "tech:";
+    private static final String TECH_PATTERN = "tech:";
     private Map<String, String> adrs = new HashMap<>();
 
     LanguageClient client;
@@ -165,7 +165,7 @@ public class Custom {
             contentType = ""; 
         }
 
-        if(certVerification == false) {
+        if(!certVerification) {
             conn.setHostnameVerifier(allTrustingHostnameVerifier);
             conn.setSSLSocketFactory(allTrustingTrustManager);
         }
@@ -209,7 +209,7 @@ public class Custom {
 
         HttpsURLConnection conn = (HttpsURLConnection) new URL(cloudUrl + path).openConnection();
         conn.setRequestMethod(method);
-        if(certVerification == false) {
+        if(!certVerification) {
             conn.setHostnameVerifier(allTrustingHostnameVerifier);
             conn.setSSLSocketFactory(allTrustingTrustManager);
         }
@@ -397,7 +397,7 @@ public class Custom {
         try {
             HttpsURLConnection conn = (HttpsURLConnection) new URL(themeLocation).openConnection();
             conn.setRequestMethod("GET");
-            if (certVerification == false) {
+            if (!certVerification) {
                 conn.setHostnameVerifier(allTrustingHostnameVerifier);
                 conn.setSSLSocketFactory(allTrustingTrustManager);
             }
@@ -442,7 +442,7 @@ public class Custom {
             return Collections.emptyList();
         }
         String text = line.get().substring(character - TECH_PATTERN.length(), character);
-        if (!text.toLowerCase().equals(TECH_PATTERN)) {
+        if (!text.equalsIgnoreCase(TECH_PATTERN)) {
             return Collections.emptyList();
         }
         return technologiesCompletion();
@@ -647,7 +647,7 @@ public class Custom {
             return Collections.emptyList();
         }
         Container container = (Container) element.get().getObject();
-        ArrayList<CompletionItem> completionItems = new ArrayList<CompletionItem>();
+        ArrayList<CompletionItem> completionItems = new ArrayList<>();
         container.getComponents().stream()
                 .filter(c -> c.getProperties().getOrDefault("type", "").equalsIgnoreCase("capability"))
                 .map(c -> c.getProperties().get("code")).filter(Objects::nonNull).forEach(c -> {
@@ -755,7 +755,7 @@ public class Custom {
             }
             lineNumberForward++;
         }
-        if(isTypeCapability == false) {
+        if(!isTypeCapability) {
             while(docModel.getSurroundingScope(lineNumberBackward).equals("PropertiesDslContext")) {
                 String line = docModel.getLineAt(lineNumberBackward);
                 if(line == null) {
@@ -783,9 +783,9 @@ public class Custom {
         LineToken firstToken = tokens.get(0);
         String firstTokenName = C4Utils.trimStringByString(firstToken.token(), "\"").toLowerCase();
 
-        if(isTypeCapability == true) {
+        if(isTypeCapability) {
             if(firstTokenName.equals("code") && LineTokenizer.isInsideToken(cursor, 1)) {
-                Set<Integer> idUsed = new HashSet<Integer>();
+                Set<Integer> idUsed = new HashSet<>();
                 
                 docModel.getC4PropertiesByName("code").forEach(e -> {
                     try {
@@ -794,8 +794,9 @@ public class Custom {
                     }
                 });
 
-                List<String> ids = new ArrayList<String>();
-                Integer i = 0, id = 0;
+                List<String> ids = new ArrayList<>();
+                Integer i = 0;
+                Integer id = 0;
                 while(i < 20) {
                     id++;
                     if(idUsed.contains(id)) {
@@ -861,7 +862,7 @@ public class Custom {
             if(LineTokenizer.isInsideToken(cursor, 2)) {
                 return C4CompletionItemCreator.identifierCompletion(model.getIdentifiers()).stream()
                         .filter( item -> item.getLabel().startsWith(tokens.get(2).token()))
-                        .collect(Collectors.toList());
+                        .toList();
             }
         }
         return Collections.emptyList();
@@ -936,7 +937,7 @@ public class Custom {
                         }
                     }
                 }
-                if(isApi == true && isSlaPresent == false && apiUrl.isBlank() == false) {
+                if(isApi && !isSlaPresent && !apiUrl.isBlank()) {
                     List<LineToken> tokens;
                     int i = 0;
                     do {
@@ -978,7 +979,7 @@ public class Custom {
     private void startTelemetry() {
         String message = MessageFormat.format("'{'\"version\": \"{0}\", \"action\": \"start\", \"user\": \"{1}\", \"cmdb\": \"{2}\"'}'", version, username, cmdb);
         CompletableFuture.runAsync(() -> {
-            if(started == false) {
+            if(!started) {
                 started = sendTelemetry(message);
             }
         });
@@ -1013,7 +1014,7 @@ public class Custom {
             logger.debug(e.getMessage());
         }
 
-        if(telemetryEnabled == false) {
+        if(!telemetryEnabled) {
             return false;
         }
         try {

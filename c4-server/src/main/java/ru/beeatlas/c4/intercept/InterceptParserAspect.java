@@ -17,10 +17,7 @@
 package ru.beeatlas.c4.intercept;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.After;
@@ -62,44 +59,28 @@ public class InterceptParserAspect {
     StructurizrDslParserListener parserListener;
     
     private static final Logger logger = LoggerFactory.getLogger(InterceptParserAspect.class);
-    private static final String BOM = "\uFEFF";            
 
     @After("within(com.structurizr.dsl.StructurizrDslParser) && execution(* startContext(com.structurizr.dsl.DslContext)) && args(dslContext)")
-    public void interceptStartContextAfter(Object dslContext) throws Exception {
+    public void interceptStartContextAfter(Object dslContext) {
         parserListener.onStartContext(dslContext.hashCode(), dslContext.getClass().getSimpleName());
     }
 
     @After("within(com.structurizr.dsl.StructurizrDslParser) && execution(* parse(com.structurizr.dsl.DslParserContext, java.io.File)) && args(*, file) ")
-    public void interceptParseAfter(File file) throws Exception {
+    public void interceptParseAfter(File file) {
         parserListener.onExtendsBy(file);
     }
 
     @AfterReturning(pointcut = "withincode(* com.structurizr.dsl.StructurizrDslParser.endContext(..)) && call(* java.util.Stack.pop(..))", returning = "result")
-    public void interceptEndContextBefore(Object result) throws Exception {
+    public void interceptEndContextBefore(Object result) {
         parserListener.onEndContext(result.hashCode(), result.getClass().getSimpleName());
     }
 
-    @Around("within(com.structurizr.dsl.StructurizrDslParser) && execution(* parse(java.util.List<String>, java.io.File, boolean, boolean))")
-    public void interceptParseAround(ProceedingJoinPoint joinPoint) throws StructurizrDslParserException {
-        Object[] args = joinPoint.getArgs();
-        File file = (File)args[1];
-        parserListener.onStartFile(file);
-        String content = parserListener.findContent(file);
-        if(content != null) {
-            List<String> lines = Arrays.asList(content.split("\\r?\\n"));
-            List<String> paddedLines = new ArrayList<>();
-            String leadingSpace = "";
-            for (String unpaddedLine : lines) {
-                if (unpaddedLine.startsWith(BOM)) {
-                    // this caters for files encoded as "UTF-8 with BOM"
-                    unpaddedLine = unpaddedLine.substring(1);
-                }
-                paddedLines.add(leadingSpace + unpaddedLine);
-            }            
-            args[0] = paddedLines;
-        }
+    @Around("within(com.structurizr.dsl.StructurizrDslParser) && execution(* parse(java.util.List<String>, java.io.File, boolean, boolean)) && args(lines, dslFile, fragment, includeInDslSourceLines)")
+    public void interceptParseAround(ProceedingJoinPoint joinPoint, List<String> lines, File dslFile, boolean fragment,
+            boolean includeInDslSourceLines) throws StructurizrDslParserException {
+        parserListener.onStartFile(dslFile);
         try {
-            joinPoint.proceed(args);
+            joinPoint.proceed();
         } catch (Throwable e) {
             parserListener.onException((StructurizrDslParserException) e);
         }
@@ -107,7 +88,7 @@ public class InterceptParserAspect {
     }
 
     @After("within(com.structurizr.dsl.DslLine) && execution(* getSource())")
-    public void interceptGetSourceAfter() throws Exception {
+    public void interceptGetSourceAfter() {
         parserListener.onNewLine();
     }
 
@@ -188,7 +169,7 @@ public class InterceptParserAspect {
 
     @AfterReturning(pointcut = "!within(com.structurizr.dsl.DslPackage) && !within(InterceptParserAspect) && target(com.structurizr.dsl.StructurizrDslParser) && execution(* preProcessLines(java.util.List<String>))", returning = "result")
     public void interceptPreProcessLinesAfterReturning(Object result) {
-        LinkedList<Line> lines = DslPackage.processPreProcessLines(result);
+        List<Line> lines = DslPackage.processPreProcessLines(result);
         parserListener.onLines(lines);
     }
 
@@ -255,11 +236,16 @@ public class InterceptParserAspect {
     public Object interceptloadFromAround(ProceedingJoinPoint joinPoint) {
         Object[] args = joinPoint.getArgs();        
         try {
-            return (String) joinPoint.proceed(args);
+            return joinPoint.proceed(args);
         } catch (Throwable e) {
             String themeLocation = (String)args[0];
             int timeoutInMilliseconds = (int)args[1];
             return Custom.getInstance().loadFrom(themeLocation, timeoutInMilliseconds);
         }
     }
+
+    @AfterReturning(pointcut = "withincode(* parse(java.util.List<String>, java.io.File, boolean, boolean)) && call(* java.lang.String.substring(int, int))", returning = "leadingSpace")
+    public void interceptSubstringAfter(String leadingSpace) {
+        parserListener.onLeadingSpace(leadingSpace.length());
+    }    
 }

@@ -30,5 +30,5 @@ public class C4SemanticTokenProvider {
         "declaration", "definition", "readonly", "static", "deprecated",
         "abstract", "async", "modification", "documentation", "defaultLibrary");
     
-    public final static int MODEL_ELEMENT = TOKEN_TYPES.indexOf("member");
+    public static final int MODEL_ELEMENT = TOKEN_TYPES.indexOf("member");
 }

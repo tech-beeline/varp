@@ -16,7 +16,6 @@
 
 package ru.beeatlas.c4.utils;
 
-import java.io.IOException;
 import org.eclipse.lsp4j.services.LanguageClient;
 
 import ch.qos.logback.core.OutputStreamAppender;
@@ -26,10 +25,5 @@ public class ClientAppender<E> extends OutputStreamAppender<E> {
     public void setClient(LanguageClient client) {
         ClientOutputStream cos = new ClientOutputStream(client);
         setOutputStream(cos);
-    }
-
-    @Override
-    protected void writeOut(E event) throws IOException {           
-        super.writeOut(event);
     }
 }

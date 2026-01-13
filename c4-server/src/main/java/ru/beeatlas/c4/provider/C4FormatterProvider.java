@@ -74,7 +74,7 @@ public class C4FormatterProvider {
     }
     
     String createNewText(String oldText, int leadingWhiteSpaces) {
-        return (new String(" ")).repeat(leadingWhiteSpaces) + removeWhiteSpacesBetweenTokens(oldText.trim());
+        return (" ").repeat(leadingWhiteSpaces) + removeWhiteSpacesBetweenTokens(oldText.trim());
     }
 
     TextEdit createTextEdit(String newText, String oldText, int line) {

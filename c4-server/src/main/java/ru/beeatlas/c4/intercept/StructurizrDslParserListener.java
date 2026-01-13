@@ -17,7 +17,6 @@
 package ru.beeatlas.c4.intercept;
 
 import java.io.File;
-import java.util.LinkedList;
 import java.util.List;
 
 import com.structurizr.model.Element;
@@ -28,7 +27,7 @@ import com.structurizr.dsl.StructurizrDslParserException;
 
 public interface StructurizrDslParserListener {
 
-	default void onLines(LinkedList<Line> lines) { }
+	default void onLines(List<Line> lines) { }
 
 	default void onNewLine() { }
 
@@ -60,5 +59,5 @@ public interface StructurizrDslParserListener {
 
 	default void onExtendsBy(File file) { }	
 
-	default String findContent(File file) { return null; }
+	default void onLeadingSpace(int leadingSpace) { }	
 }

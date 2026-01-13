@@ -156,13 +156,13 @@ public class DOTExporter extends AbstractDiagramExporter {
     protected void writeRelationship(ModelView view, RelationshipView relationshipView, IndentingWriter writer) {
         if (relationshipView.getRelationship().getSource() instanceof DeploymentNode || relationshipView.getRelationship().getDestination() instanceof DeploymentNode) {
             Element source = relationshipView.getRelationship().getSource();
-            if (source instanceof DeploymentNode) {
-                source = findElementInside((DeploymentNode)source, view);
+            if (source instanceof DeploymentNode deploymentNode) {
+                source = findElementInside(deploymentNode, view);
             }
 
             Element destination = relationshipView.getRelationship().getDestination();
-            if (destination instanceof DeploymentNode) {
-                destination = findElementInside((DeploymentNode)destination, view);
+            if (destination instanceof DeploymentNode deploymentNode) {
+                destination = findElementInside(deploymentNode, view);
             }
 
             if (source != null && destination != null) {

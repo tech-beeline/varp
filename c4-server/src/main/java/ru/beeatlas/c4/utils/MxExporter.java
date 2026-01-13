@@ -527,7 +527,7 @@ public class MxExporter extends AbstractDiagramExporter {
     protected void startDeploymentNodeBoundary(DeploymentView view, DeploymentNode deploymentNode, IndentingWriter writer) {
         DeploymentNodeBoundary newDeploymentNodeBoundary = new DeploymentNodeBoundary(deploymentNode);
         
-        if(deploymentNodeBoundaryStack.isEmpty() == true) {
+        if(deploymentNodeBoundaryStack.isEmpty()) {
             deploymentNodeBoundaries.add(newDeploymentNodeBoundary);
         } else {
             DeploymentNodeBoundary deploymentNodeBoundary = deploymentNodeBoundaryStack.peek();
@@ -643,7 +643,7 @@ public class MxExporter extends AbstractDiagramExporter {
         if(containerBoundary != null) {
             containerBoundary.elements.add(element);
         }
-        if(deploymentNodeBoundaryStack.isEmpty() == false) {
+        if(!deploymentNodeBoundaryStack.isEmpty()) {
             DeploymentNodeBoundary deploymentNodeBoundary = deploymentNodeBoundaryStack.peek();
             deploymentNodeBoundary.elements.add(element);
         }

@@ -16,17 +16,12 @@
 
 package ru.beeatlas.c4.service;
 
-import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import org.eclipse.lsp4j.CodeLensOptions;
 import org.eclipse.lsp4j.CompletionOptions;
 import org.eclipse.lsp4j.ExecuteCommandOptions;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
-import org.eclipse.lsp4j.InitializedParams;
-import org.eclipse.lsp4j.Registration;
-import org.eclipse.lsp4j.RegistrationParams;
 import org.eclipse.lsp4j.SemanticTokensLegend;
 import org.eclipse.lsp4j.SemanticTokensWithRegistrationOptions;
 import org.eclipse.lsp4j.ServerCapabilities;

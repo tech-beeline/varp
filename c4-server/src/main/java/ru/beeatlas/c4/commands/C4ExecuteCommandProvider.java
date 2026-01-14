@@ -47,7 +47,7 @@ public class C4ExecuteCommandProvider {
         switch (command) {
            
             case UPDATE_CONFIGURATION:
-                logger.info("Update configuration {}", arguments.get(0).toString());
+                logger.info("Update configuration {}", arguments.get(0));
                 return C4ExecuteCommandResult.OK;
 
             case CALCULATE_TEXT_DECORATIONS:

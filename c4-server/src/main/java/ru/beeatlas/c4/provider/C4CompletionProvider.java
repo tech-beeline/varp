@@ -48,7 +48,7 @@ import ru.beeatlas.c4.utils.LineTokenizer.CursorLocation;
 public class C4CompletionProvider {
 
     private static final Logger logger = LoggerFactory.getLogger(C4CompletionProvider.class);    
-    private final static List<CompletionItem> NO_COMPLETIONS = Collections.emptyList();
+    private static final List<CompletionItem> NO_COMPLETIONS = Collections.emptyList();
     private Map<String, List<CompletionItem>> keywordCompletions;
     private Map<String, List<CompletionItem>> snippetCompletions;
     private Map<String, List<CompletionItem>> detailCompletions;
@@ -76,8 +76,7 @@ public class C4CompletionProvider {
             });
             relationRelevantScopes = config.scopes().stream()
                                         .filter(C4TokenScope::hasRelations)
-                                        .map(C4TokenScope::name)
-                                        .collect(Collectors.toList());
+                                        .map(C4TokenScope::name).toList();
         }
     }
 
@@ -107,14 +106,12 @@ public class C4CompletionProvider {
 
             // Line is empty or cursor is located before first token. 
             // Determine all keywords in the given scope and potential identifer references (if applicable)
-            if(tokens.isEmpty() || LineTokenizer.isBeforeToken(cursorAt, 0) ) {
-                result = C4Utils.merge(completeAsPerConfiguration(scope, model), snippetCompletions.getOrDefault(scope, NO_COMPLETIONS));
-            }
-
-            else if(LineTokenizer.isInsideToken(cursorAt, 0)) {
+            if (tokens.isEmpty() || LineTokenizer.isBeforeToken(cursorAt, 0)) {
+                result = C4Utils.merge(completeAsPerConfiguration(scope, model),
+                        snippetCompletions.getOrDefault(scope, NO_COMPLETIONS));
+            } else if (LineTokenizer.isInsideToken(cursorAt, 0)) {
                 result = completeAsPerConfiguration(scope, model).stream()
-                        .filter( item -> item.getLabel().startsWith(tokens.get(0).token()))
-                        .collect(Collectors.toList());
+                        .filter(item -> item.getLabel().startsWith(tokens.get(0).token())).toList();
             }
 
             else {
@@ -189,25 +186,23 @@ public class C4CompletionProvider {
     private List<CompletionItem> completeModel(String scope, List<LineToken> tokens, CursorLocation cursor, C4DocumentModel model) {
         logger.info("completeModel");
         if(tokens.size() >= 2) {
-            if(tokens.get(1).token().equals(LineTokenizer.TOKEN_EXPR_ASSIGNMENT)) {
-                if(LineTokenizer.isBetweenTokens(cursor, 1, 2)) {
-                    return completeAsPerConfiguration(scope, model).stream().collect(Collectors.toList());
+            if (tokens.get(1).token().equals(LineTokenizer.TOKEN_EXPR_ASSIGNMENT)) {
+                if (LineTokenizer.isBetweenTokens(cursor, 1, 2)) {
+                    return completeAsPerConfiguration(scope, model).stream().toList();
                 }
-                if(LineTokenizer.isInsideToken(cursor, 2)) {
+                if (LineTokenizer.isInsideToken(cursor, 2)) {
                     return completeAsPerConfiguration(scope, model).stream()
-                            .filter( item -> item.getLabel().startsWith(tokens.get(2).token()))
-                            .collect(Collectors.toList());
+                            .filter(item -> item.getLabel().startsWith(tokens.get(2).token())).toList();
                 }
             }
 
-            if(tokens.get(1).token().equals(LineTokenizer.TOKEN_EXPR_RELATIONSHIP)) {
-                if(LineTokenizer.isBetweenTokens(cursor, 1, 2)) {
+            if (tokens.get(1).token().equals(LineTokenizer.TOKEN_EXPR_RELATIONSHIP)) {
+                if (LineTokenizer.isBetweenTokens(cursor, 1, 2)) {
                     return C4CompletionItemCreator.identifierCompletion(getIdentifiers(model));
                 }
-                if(LineTokenizer.isInsideToken(cursor, 2)) {
+                if (LineTokenizer.isInsideToken(cursor, 2)) {
                     return C4CompletionItemCreator.identifierCompletion(getIdentifiers(model)).stream()
-                            .filter( item -> item.getLabel().startsWith(tokens.get(2).token()))
-                            .collect(Collectors.toList());
+                            .filter(item -> item.getLabel().startsWith(tokens.get(2).token())).toList();
                 }
             }
         }
@@ -223,11 +218,10 @@ public class C4CompletionProvider {
             return detailCompletions.getOrDefault(firstToken.token(), NO_COMPLETIONS);
         }
 
-        if(LineTokenizer.isInsideToken(cursor, 1)) {
+        if (LineTokenizer.isInsideToken(cursor, 1)) {
             return detailCompletions.getOrDefault(firstToken.token(), NO_COMPLETIONS).stream()
-                    .filter( item -> item.getLabel().startsWith(tokens.get(1).token()))
-                    .collect(Collectors.toList());
-        }    
+                    .filter(item -> item.getLabel().startsWith(tokens.get(1).token())).toList();
+        }
 
         return NO_COMPLETIONS;
     }
@@ -260,10 +254,9 @@ public class C4CompletionProvider {
             return completionIds;
         }
 
-        if(LineTokenizer.isInsideToken(cursor, 1)) {
+        if (LineTokenizer.isInsideToken(cursor, 1)) {
             return completionIds.stream()
-                    .filter( item -> item.getLabel().startsWith(tokens.get(1).token()))
-                    .collect(Collectors.toList());
+                    .filter(item -> item.getLabel().startsWith(tokens.get(1).token())).toList();
         }
 
         return NO_COMPLETIONS;

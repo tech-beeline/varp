@@ -16,7 +16,7 @@
 
 package ru.beeatlas.c4.service;
 
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -62,8 +62,8 @@ public class C4WorkspaceService implements WorkspaceService {
 	private MxReader mxReader = new MxReader(400, true);
 
 	private PatternLayout pattern = new PatternLayout();
-    private LayoutWrappingEncoder<ILoggingEvent> encoder = new LayoutWrappingEncoder<ILoggingEvent>();
-    private ClientAppender<ILoggingEvent> clientAppender = new ClientAppender<ILoggingEvent>();
+    private LayoutWrappingEncoder<ILoggingEvent> encoder = new LayoutWrappingEncoder<>();
+    private ClientAppender<ILoggingEvent> clientAppender = new ClientAppender<>();
 
 	public C4WorkspaceService(C4TextDocumentService documentService) {
 		this.documentService = documentService;
@@ -73,7 +73,7 @@ public class C4WorkspaceService implements WorkspaceService {
         pattern.start();
 
         encoder.setContext(loggerContext);
-        encoder.setCharset(Charset.forName("utf-8"));
+        encoder.setCharset(StandardCharsets.UTF_8);
         encoder.setLayout(pattern);
 
         clientAppender.setEncoder(encoder);
@@ -183,12 +183,9 @@ public class C4WorkspaceService implements WorkspaceService {
 						return C4ExecuteCommandResult.OK;
 					}				
 					View view = workspace.getViews().getViewWithKey(refreshOptions.viewKey());
-					if (view != null && view instanceof ModelView) {
-						ModelView modelView = (ModelView) view;
-						if(modelView.getAutomaticLayout() != null) {
-							String dot = C4Utils.export2Dot(modelView);
-							return C4ExecuteCommandResult.OK.setMessage(dot).toJson();
-						}
+					if (view != null && view instanceof ModelView modelView && modelView.getAutomaticLayout() != null) {
+						String dot = C4Utils.export2Dot(modelView);
+						return C4ExecuteCommandResult.OK.setMessage(dot).toJson();
 					}
 					return C4ExecuteCommandResult.OK;
 				}
@@ -207,11 +204,7 @@ public class C4WorkspaceService implements WorkspaceService {
 							renderedWorkspaceJson = WorkspaceUtils.toJson(workspace, false);
 						} else {
 							View view = workspace.getViews().getViewWithKey(viewKey);
-							if (view == null && !(view instanceof ModelView)) {
-								// no view to render - return workspace json as is
-								renderedWorkspaceJson = WorkspaceUtils.toJson(workspace, false);
-							} else {
-								ModelView modelView = (ModelView) view;
+							if(view != null && view instanceof ModelView modelView) {
 								if (refreshOptions.svg() != null) {
 									// autolayout from svg
 									// keep original workspace as json before applying
@@ -227,7 +220,10 @@ public class C4WorkspaceService implements WorkspaceService {
 									// no autolayout, no import layout from drawio
 									// return json
 									renderedWorkspaceJson = WorkspaceUtils.toJson(workspace, false);
-								}
+								}								
+							} else {
+								// no view to render - return workspace json as is
+								renderedWorkspaceJson = WorkspaceUtils.toJson(workspace, false);								
 							}
 						}
 					} catch (Exception e) {
@@ -258,8 +254,7 @@ public class C4WorkspaceService implements WorkspaceService {
 					workspace.getViews().getConfiguration().getThemes();
 					View view = workspace.getViews().getViewWithKey(refreshOptions.viewKey());
 					try {
-						if (view != null && view instanceof ModelView) {
-							ModelView modelView = (ModelView)view;
+						if (view != null && view instanceof ModelView modelView) {
 							String content = C4Utils.export2Mx(modelView);
 							return C4ExecuteCommandResult.OK.setMessage(content).toJson();	
 						}

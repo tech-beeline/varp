@@ -34,11 +34,8 @@ import com.google.common.collect.Lists;
 import com.structurizr.export.Diagram;
 import com.structurizr.view.AutomaticLayout;
 import com.structurizr.view.ComponentView;
-import com.structurizr.view.ContainerView;
-import com.structurizr.view.DeploymentView;
 import com.structurizr.view.DynamicView;
 import com.structurizr.view.ModelView;
-import com.structurizr.view.SystemContextView;
 import com.structurizr.view.View;
 
 public class C4Utils {
@@ -54,7 +51,7 @@ public class C4Utils {
 
     public static int getStartPosition(String line, String key) {
 
-        if(line == null || line.length()==0 || key == null || key.length() == 0) {
+        if(line == null || line.isEmpty() || key == null || key.isEmpty()) {
             return NOT_FOUND_WITHIN_STRING;
         }
 
@@ -67,25 +64,20 @@ public class C4Utils {
 	}
 
 	public static String getIdentifierOfView(View view) {
-
-		if(view instanceof ContainerView || view instanceof SystemContextView || view instanceof DeploymentView) {
-			return ((ModelView)view).getSoftwareSystemId();
+		if(view instanceof DynamicView dynamicView) {
+			return dynamicView.getElementId();
+		} else if(view instanceof ComponentView componentView) {
+			return componentView.getContainerId();
+		} else if(view instanceof ModelView modelView) {
+			return modelView.getSoftwareSystemId();
 		}
-		else if(view instanceof ComponentView) {
-			return ((ComponentView)view).getContainerId();
-		}
-		else if(view instanceof DynamicView) {
-			return ((DynamicView)view).getElementId();
-		}
-
 		return null;
-
 	}
 
     public static int findFirstNonWhitespace(final CharSequence line, int startPos,
             boolean treatNewLineAsWhitespace) {
         
-        if (line == null || line.length() == 0 || startPos < 0 || startPos >= line.length()) {
+        if (line == null || line.isEmpty() || startPos < 0 || startPos >= line.length()) {
             return NOT_FOUND_WITHIN_STRING;
         }
 
@@ -95,10 +87,9 @@ public class C4Utils {
 
         do {
             c = line.charAt(pos);
-            if (!treatNewLineAsWhitespace) {
-                if (c == '\n' || c == '\r')
+            if (!treatNewLineAsWhitespace && (c == '\n' || c == '\r'))
                     return NOT_FOUND_WITHIN_STRING;
-            }
+            
             if (c > ' ')
                 return pos;
             pos++;

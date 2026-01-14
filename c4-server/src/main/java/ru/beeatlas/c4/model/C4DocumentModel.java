@@ -285,26 +285,10 @@ public class C4DocumentModel {
 		return result;
 	}
 
-	private static String getIdentifierOfView(View view) {
-
-		if(view instanceof ContainerView || view instanceof SystemContextView || view instanceof DeploymentView) {
-			return ((ModelView)view).getSoftwareSystemId();
-		}
-		else if(view instanceof ComponentView) {
-			return ((ComponentView)view).getContainerId();
-		}
-		else if(view instanceof DynamicView) {
-			return ((DynamicView)view).getElementId();
-		}
-
-		return null;
-
-	}	
-
 	public List<String> getIdentifiersWithFilter(Predicate<C4ObjectWithContext<Element>> func) {
 		return elementsToLineNumber.entrySet().stream()
 				.map(Entry::getValue)
-				.filter(e -> func.test(e))
+				.filter(func::test)
 				.map(C4ObjectWithContext::getIdentifier).toList();
 	}
 
@@ -351,10 +335,10 @@ public class C4DocumentModel {
 		c4ObjectWithContext.getDecorations().forEach(decorations::add);
 
 		Element element = c4ObjectWithContext.getObject();
-		if (element instanceof ContainerInstance) {
-			createToken(((ContainerInstance) element).getContainerId(), lineNumber - 1).ifPresent(t -> tokens.add(t));
-		} else if (element instanceof SoftwareSystemInstance) {
-			createToken(((SoftwareSystemInstance) element).getSoftwareSystemId(), lineNumber - 1).ifPresent(t -> tokens.add(t));
+		if (element instanceof ContainerInstance containerInstance) {
+			createToken(containerInstance.getContainerId(), lineNumber - 1).ifPresent(t -> tokens.add(t));
+		} else if (element instanceof SoftwareSystemInstance softwareSystemInstance) {
+			createToken(softwareSystemInstance.getSoftwareSystemId(), lineNumber - 1).ifPresent(t -> tokens.add(t));
 		}
 
 		elementsToLineNumber.put(lineNumber, c4ObjectWithContext);
@@ -363,7 +347,7 @@ public class C4DocumentModel {
 
 	public void addView(int lineNumber, C4ObjectWithContext<View> view) {
 		view.getDecorations().forEach(decorations::add);
-		createToken(getIdentifierOfView(view.getObject()), lineNumber - 1).ifPresent(t -> tokens.add(t));
+		createToken(C4Utils.getIdentifierOfView(view.getObject()), lineNumber - 1).ifPresent(t -> tokens.add(t));
 		viewToLineNumber.put(lineNumber, view);
 		Command command = new Command("$(link-external) Show as Structurizr Diagram", "c4.show.diagram");
 		CodeLensCommandArgs args = new CodeLensCommandArgs(null, view.getObject().getKey(), null, null, null, null, null);
@@ -401,9 +385,9 @@ public class C4DocumentModel {
 	}
 
 	public List<CodeLens> calcCodeLenses() {
-		Workspace workspace = getWorkspace();
+		Workspace currentWorkspace = getWorkspace();
 
-		if (!isValid() || workspace == null) {
+		if (!isValid() || currentWorkspace == null) {
 			return Collections.emptyList();
 		}
 
@@ -412,20 +396,16 @@ public class C4DocumentModel {
 		}
 
 		try {
-			encodedWorkspace = C4Generator.generateEncodedWorkspace(workspace);
+			encodedWorkspace = C4Generator.generateEncodedWorkspace(currentWorkspace);
 			codeLenses.forEach(cl -> {
 				Command command = cl.getCommand();
 				CodeLensCommandArgs args = (CodeLensCommandArgs)command.getArguments().get(0);
 				if(command.getCommand().equals("c4.show.diagram")) {
 					String dot = args.diagramAsDot();
 					if(dot == null) {
-						View view = workspace.getViews().getViewWithKey(args.diagramKey());
-						if (view != null && view instanceof ModelView) {
-							ModelView modelView = (ModelView) view;
-							AutomaticLayout automaticLayout = modelView.getAutomaticLayout();
-							if(automaticLayout != null) {
-								dot = C4Utils.export2Dot(modelView);
-							}
+						View view = currentWorkspace.getViews().getViewWithKey(args.diagramKey());
+						if (view != null && view instanceof ModelView modelView && modelView.getAutomaticLayout() != null) {
+							dot = C4Utils.export2Dot(modelView);
 						}
 					}
 					args = new CodeLensCommandArgs(encodedWorkspace, args.diagramKey(), dot, null, null,null,null);
@@ -493,7 +473,7 @@ public class C4DocumentModel {
 
 	public List<String> getRawLines() {
 		if(lines.isEmpty()) {
-			lines = Arrays.asList(getRawText().split(NEW_LINE));
+			lines = getRawText().lines().toList();
 		}
 		return lines;
 	}

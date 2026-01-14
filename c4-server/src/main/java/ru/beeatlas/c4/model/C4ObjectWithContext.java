@@ -76,7 +76,7 @@ public class C4ObjectWithContext<T> {
         return new Range(new Position(lineNumber - 1, pos), new Position(lineNumber - 1, pos));
     }
 
-    static public Stream<DecoratorRange> decorationsForRelationship(String line, int lineNumber) {
+    public static Stream<DecoratorRange> decorationsForRelationship(String line, int lineNumber) {
         List<LineToken> tokens = LineTokenizer.tokenize(line);
         if (tokens.size() < 2) {
             return Stream.empty();
@@ -131,17 +131,17 @@ public class C4ObjectWithContext<T> {
                         tokens.get(firstIndex + i).start()));
     }
 
-    private final static String[] PERSON_DECORATIONS = new String[] { "name: ", "description: ", "tags: " };
-    private final static String[] SOFTWARE_SYSTEM_DECORATIONS = new String[] { "name: ", "description: ", "tags: " };
-    private final static String[] CONTAINER_DECORATIONS = new String[] { "name: ", "description: ", "technology: ", "tags: " };
-    private final static String[] COMPONENT_DECORATIONS = new String[] { "name: ", "description: ", "technology: ", "tags: " };
-    private final static String[] DEPLOYMENT_NODE_DECORATIONS = new String[] { "name: ", "description: ", "technology: ", "tags: ", "instances: " };
-    private final static String[] INFRASTRUCUTRE_NODE_DECORATIONS = new String[] { "name: ", "description: ", "technology: ", "tags: " };
-    private final static String[] SOFTWARE_SYSTEM_INSTANCE_DECORATIONS = new String[] { "identifier: ", "deploymentGroups: ", "tags: " };
-    private final static String[] CONTAINER_INSTANCE_DECORATIONS = new String[] { "identifier: ", "deploymentGroups: ", "tags: " };
-    private final static String[] RELATIONSHIP_DECORATIONS = new String[] { "description: ", "technology: ", "tags: " };
-    private final static String[] VIEW_DECORATIONS = new String[] { "key: ", "description: " };
-    private final static String[] FILTERED_VIEW_DECORATIONS = new String[] { "baseKey: ", "mode: ", "tags: ", "key: ", "description: " };
+    private static final String[] PERSON_DECORATIONS = new String[] { "name: ", "description: ", "tags: " };
+    private static final String[] SOFTWARE_SYSTEM_DECORATIONS = new String[] { "name: ", "description: ", "tags: " };
+    private static final String[] CONTAINER_DECORATIONS = new String[] { "name: ", "description: ", "technology: ", "tags: " };
+    private static final String[] COMPONENT_DECORATIONS = new String[] { "name: ", "description: ", "technology: ", "tags: " };
+    private static final String[] DEPLOYMENT_NODE_DECORATIONS = new String[] { "name: ", "description: ", "technology: ", "tags: ", "instances: " };
+    private static final String[] INFRASTRUCUTRE_NODE_DECORATIONS = new String[] { "name: ", "description: ", "technology: ", "tags: " };
+    private static final String[] SOFTWARE_SYSTEM_INSTANCE_DECORATIONS = new String[] { "identifier: ", "deploymentGroups: ", "tags: " };
+    private static final String[] CONTAINER_INSTANCE_DECORATIONS = new String[] { "identifier: ", "deploymentGroups: ", "tags: " };
+    private static final String[] RELATIONSHIP_DECORATIONS = new String[] { "description: ", "technology: ", "tags: " };
+    private static final String[] VIEW_DECORATIONS = new String[] { "key: ", "description: " };
+    private static final String[] FILTERED_VIEW_DECORATIONS = new String[] { "baseKey: ", "mode: ", "tags: ", "key: ", "description: " };
 
     public static Stream<DecoratorRange> decorationsForPerson(String line, int lineNumber) {
         return decorationsForElement(line, lineNumber, PERSON_DECORATIONS);

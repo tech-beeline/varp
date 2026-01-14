@@ -2,6 +2,12 @@
 
 ## 1.0.11
 
+- Export InfrastructureNode to drawio
+- Use "Circle" and "Ellipse" shapes during export to drawio
+- Minor code refactoring
+
+## 1.0.11
+
 - Hot fix for drawio export
 
 ## 1.0.9 - 1.0.10

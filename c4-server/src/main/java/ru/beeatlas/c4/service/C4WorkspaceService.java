@@ -204,11 +204,7 @@ public class C4WorkspaceService implements WorkspaceService {
 							renderedWorkspaceJson = WorkspaceUtils.toJson(workspace, false);
 						} else {
 							View view = workspace.getViews().getViewWithKey(viewKey);
-							if (view == null && !(view instanceof ModelView)) {
-								// no view to render - return workspace json as is
-								renderedWorkspaceJson = WorkspaceUtils.toJson(workspace, false);
-							} else {
-								ModelView modelView = (ModelView) view;
+							if(view != null && view instanceof ModelView modelView) {
 								if (refreshOptions.svg() != null) {
 									// autolayout from svg
 									// keep original workspace as json before applying
@@ -224,7 +220,10 @@ public class C4WorkspaceService implements WorkspaceService {
 									// no autolayout, no import layout from drawio
 									// return json
 									renderedWorkspaceJson = WorkspaceUtils.toJson(workspace, false);
-								}
+								}								
+							} else {
+								// no view to render - return workspace json as is
+								renderedWorkspaceJson = WorkspaceUtils.toJson(workspace, false);								
 							}
 						}
 					} catch (Exception e) {

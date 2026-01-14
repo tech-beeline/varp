@@ -34,11 +34,8 @@ import com.google.common.collect.Lists;
 import com.structurizr.export.Diagram;
 import com.structurizr.view.AutomaticLayout;
 import com.structurizr.view.ComponentView;
-import com.structurizr.view.ContainerView;
-import com.structurizr.view.DeploymentView;
 import com.structurizr.view.DynamicView;
 import com.structurizr.view.ModelView;
-import com.structurizr.view.SystemContextView;
 import com.structurizr.view.View;
 
 public class C4Utils {
@@ -90,10 +87,9 @@ public class C4Utils {
 
         do {
             c = line.charAt(pos);
-            if (!treatNewLineAsWhitespace) {
-                if (c == '\n' || c == '\r')
+            if (!treatNewLineAsWhitespace && (c == '\n' || c == '\r'))
                     return NOT_FOUND_WITHIN_STRING;
-            }
+            
             if (c > ' ')
                 return pos;
             pos++;

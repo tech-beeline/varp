@@ -250,7 +250,7 @@ public class Custom {
             TrustManager[] trustAllCerts = new TrustManager[] {
                     new X509TrustManager() {
                         public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                            return null;
+                            return new X509Certificate[0];
                         }
 
                         @Override
@@ -262,14 +262,10 @@ public class Custom {
                         }
                     } };
 
-            SSLContext sc = SSLContext.getInstance("SSL");
+            SSLContext sc = SSLContext.getInstance("TLS");
             sc.init(null, trustAllCerts, new java.security.SecureRandom());
             allTrustingTrustManager = sc.getSocketFactory();
-            allTrustingHostnameVerifier = new HostnameVerifier() {
-                public boolean verify(String hostname, SSLSession session) {
-                    return true;
-                }
-            };
+            allTrustingHostnameVerifier = (String hostname, SSLSession session) -> true;
         } catch (Exception e) {
         }
     }
@@ -347,8 +343,8 @@ public class Custom {
                     logger.debug(e.getMessage());
                 }
 
-                List<String> glossariesAList = Arrays.asList(glossaries.split(",")).stream()
-                        .map(String::toLowerCase).collect(Collectors.toList());
+                List<String> glossariesAList = Arrays.asList(glossaries.split(",")).stream().map(String::toLowerCase)
+                        .toList();
                 Map<String, Term> map = new HashMap<>();
                 String path = "/dashboard/api/v1/data-model/glossaries";
                 HttpsURLConnection conn = beelineApiConnection("GET", path, null, null);

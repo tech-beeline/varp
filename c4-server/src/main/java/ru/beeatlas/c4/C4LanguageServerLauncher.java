@@ -75,18 +75,10 @@ public class C4LanguageServerLauncher implements Callable<Integer> {
                 // Get the computed result from LS.
                 startListening.get();
             }
-
-		} 
-        catch (ExecutionException e) {
+		} catch (ExecutionException | InterruptedException | IOException e) {
 			logger.error(e.getMessage());
+            Thread.currentThread().interrupt();
 		} 
-        catch (InterruptedException e) {
-			logger.error(e.getMessage());
-		} 
-        catch (IOException e) {
-			logger.error(e.getMessage());
-        }
-		
         return 1;
 	}
 

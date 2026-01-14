@@ -33,7 +33,7 @@ public class ClientOutputStream extends OutputStream {
     }
 
     @Override
-    public void write(byte b[]) throws IOException {
+    public void write(byte[] b) throws IOException {
         String message = new String(b, StandardCharsets.UTF_8);
         MessageParams params = new MessageParams(MessageType.Log, message);
         client.logMessage(params);

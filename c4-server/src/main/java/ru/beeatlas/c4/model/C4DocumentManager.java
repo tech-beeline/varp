@@ -30,7 +30,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.Stack;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
@@ -62,10 +61,23 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	class ParseContext {
 		public File file;
 		public C4DocumentModel model;
-		public int lineNumber;
 		public String currentIdentifier;
-		public String line;
-		public LinkedList<Line> lines;
+		public Line line;
+		public List<Line> lines;
+		int lineIndex;
+		int leadingSpace = 0;
+		public void newLine() {
+			if(lines != null && !lines.isEmpty()) {
+				Line newLine = lines.get(lineIndex++);
+				if(newLine != null) {
+					if(leadingSpace > 0 && newLine.source().length() >= leadingSpace) {
+						line = new Line(newLine.number(), newLine.source().substring(leadingSpace));
+					} else {
+						line = newLine;
+					}
+				}
+			}			
+		}
 	}
 
     private static final Logger logger = LoggerFactory.getLogger(C4DocumentManager.class);
@@ -74,13 +86,14 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	private AtomicReference<Set<C4ObjectWithContext<Element>>> elements = new AtomicReference<>(new HashSet<>());
 
 	private ParseContext context = null;
-	private Stack<ParseContext> contextStack = new Stack<>();
+	private LinkedList<ParseContext> contextStack = new LinkedList<>();
 
 	private Workspace jsonWorkspace = null;
 	private long jsonModified = 0;
 
 	private Map<File, String> fileContent = new HashMap<>();
 
+	private int nextLeadingSpace = 0; 
 	private Workspace lastParsedWorkspace = null;
 
 	public Workspace getLastParsedWorkspace() {
@@ -104,19 +117,19 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	}
 
 	@Override
-	public void onLines(LinkedList<Line> lines) {
+	public void onLeadingSpace(int leadingSpace) {
+		nextLeadingSpace = leadingSpace;
+	}
+
+	@Override
+	public void onLines(List<Line> lines) {
 		context.lines = lines;
+		context.lineIndex = 0;
 	}
 
 	@Override
 	public void onNewLine() {
-		if(context.lines != null) {
-			Line line = context.lines.pollFirst();
-			if(line != null) {
-				context.line = line.source();
-				context.lineNumber = line.lineNumber();
-			}
-		}
+		context.newLine();
 	}	
 
 	@Override
@@ -126,23 +139,25 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 
 	@Override
 	public void onStartFile(File file) {
-		contextStack.push(context);
+		contextStack.addLast(context);
 		context = new ParseContext();
 		context.file = file;
 		context.model = getModel(file);
 		context.model.clear();
+		context.leadingSpace = nextLeadingSpace;
+		nextLeadingSpace = 0;
 	}
 
 	@Override
 	public void onEndFile() {
-		context = contextStack.pop();
+		context = contextStack.removeLast();
 	}	
 
 	@Override
 	public void onParsedRelationShip(Relationship relationship) {
 		if (relationship != null) {
-			context.model.addRelationship(context.lineNumber, new C4ObjectWithContext<Relationship>(
-					context.currentIdentifier, context.lineNumber, context.line, relationship, context.model));
+			context.model.addRelationship(context.line.number(), new C4ObjectWithContext<>(
+					context.currentIdentifier, context.line.number(), context.line.source(), relationship, context.model));
 		} else {
 			logger.error("onParsedRelationShip() - Context is null");
 		}
@@ -151,8 +166,8 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	@Override
 	public void onParsedModelElement(Element item) {
 		if (context != null) {
-			C4ObjectWithContext<Element> element = new C4ObjectWithContext<Element>(context.currentIdentifier, context.lineNumber, context.line, item, context.model);
-			context.model.addElement(context.lineNumber, element);
+			C4ObjectWithContext<Element> element = new C4ObjectWithContext<>(context.currentIdentifier, context.line.number(), context.line.source(), item, context.model);
+			context.model.addElement(context.line.number(), element);
 			elements.get().add(element);
 		} else {
 			logger.error("onParsedModelElement() - Context is null");
@@ -162,8 +177,8 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	@Override
 	public void onParsedView(View view) {
 		if (context != null) {
-			context.model.addView(context.lineNumber,
-					new C4ObjectWithContext<View>(null, context.lineNumber, context.line, view, null));
+			context.model.addView(context.line.number(),
+					new C4ObjectWithContext<>(null, context.line.number(), context.line.source(), view, null));
 		} else {
 			logger.error("onParsedView() - Context is null");
 		}
@@ -172,7 +187,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	@Override
 	public void onParsedColor() {
 		if (context != null) {
-			context.model.addColor(context.lineNumber, context.line);
+			context.model.addColor(context.line.number(), context.line.source());
 		} else {
 			logger.error("onParsedColor() - Context is null");
 		}
@@ -182,7 +197,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	public void onInclude(File referencedFile) {
 		if (context != null) {
 			getModel(referencedFile).setExtendsBy(context.model.getExtendsBy());
-			context.model.addReferencedModel(getModel(referencedFile), context.lineNumber, referencedFile.getPath());
+			context.model.addReferencedModel(getModel(referencedFile), context.line.number(), referencedFile.getPath());
 		} else {
 			logger.error("onInclude() - Context is null");
 		}
@@ -191,7 +206,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	@Override
 	public void onStartContext(int contextId, String contextName) {
 		if (context != null) {
-			context.model.openScope(context.lineNumber, contextId, contextName);
+			context.model.openScope(context.line.number(), contextId, contextName);
 		} else {
 			logger.error("onStartContext() - Context is null");
 		}
@@ -200,7 +215,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	@Override
 	public void onEndContext(int contextId, String contextName) {
 		if (context != null) {
-			context.model.closeScope(context.lineNumber, contextId, contextName);
+			context.model.closeScope(context.line.number(), contextId, contextName);
 		} else {
 			logger.error("onEndContext() - Context is null");
 		}
@@ -215,15 +230,10 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	@Override
 	public void onParsedProperty(String name, String value) {
 		if(context != null) {
-			context.model.addProperty(new C4Property(context.lineNumber, name, value));
+			context.model.addProperty(new C4Property(context.line.number(), name, value));
 		} else {
 			logger.error("onParsedProperty() - Context is null");
 		}
-	}
-
-	@Override
-	public String findContent(File file) { 
-		return fileContent.get(file);
 	}
 
 	private C4DocumentModel getModel(File _file) {
@@ -309,7 +319,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 				if (parser.getWorkspace() != null) {
 					lastParsedWorkspace = parser.getWorkspace();
 					model.setWorkspace(lastParsedWorkspace);
-					if(errors.size() == 0) {
+					if(errors.isEmpty()) {
 						updateModel(model, layouts);
 					}
 				} else {
@@ -351,7 +361,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 						if (parser.getWorkspace() != null) {
 							lastParsedWorkspace = parser.getWorkspace();
 							model.setWorkspace(lastParsedWorkspace);
-							if(errors.size() == 0) {
+							if(errors.isEmpty()) {
 								updateModel(model, layouts);
 							}
 						} else {
@@ -371,7 +381,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 			if (parser.getWorkspace() != null) {
 				lastParsedWorkspace = parser.getWorkspace();
 				model.setWorkspace(lastParsedWorkspace);
-				if(errors.size() == 0) {
+				if(errors.isEmpty()) {
 					updateModel(model, layouts);
 				}
 			} else {

@@ -26,8 +26,8 @@ public class LineTokenizer {
     public static final String TOKEN_EXPR_RELATIONSHIP = "->";
     public static final String TOKEN_EXPR_ASSIGNMENT = "=";
 
-    private final static String TOKENIZE_PATTERN = "(#?[\\w\\!\\.+#->]+(\\.\\w+)*)|\"([^\"]*)\"|->|=|\\{";
-    private final static Pattern pattern = Pattern.compile(TOKENIZE_PATTERN);
+    private static final String TOKENIZE_PATTERN = "(#?[\\w\\!\\.+#->]+(\\.\\w+)*)|\"([^\"]*)\"|->|=|\\{";
+    private static final Pattern pattern = Pattern.compile(TOKENIZE_PATTERN);
 
     public static List<LineToken> tokenize(String line) {
 
@@ -47,7 +47,7 @@ public class LineTokenizer {
 
     public static CursorLocation cursorLocation(List<LineToken> tokens, int charAt) {
 
-        if(tokens == null || tokens.size() == 0) {
+        if(tokens == null || tokens.isEmpty()) {
             return new CursorLocation(-1, TokenPosition.NOT_APPLICABLE);
         }
 

@@ -317,7 +317,7 @@ public class C4TextDocumentService implements TextDocumentService {
 			TextDocumentIdentifier documentId = new TextDocumentIdentifier(new File(uri).toURI().toURL().toString());
 			currentFuture.join();
 			C4DocumentModel model = getDocument(documentId);
-			return model.isValid() ? gson.toJsonTree(model.calculateDecorations()) : null;
+			return (model != null && model.isValid()) ? gson.toJsonTree(model.calculateDecorations()) : null;
 		} catch (Exception e) {
 			return null;
 		}
@@ -327,7 +327,7 @@ public class C4TextDocumentService implements TextDocumentService {
 		try {
 			TextDocumentIdentifier documentId = new TextDocumentIdentifier(new File(document).toURI().toURL().toString());
 			C4DocumentModel model = getDocument(documentId);
-			return model.isValid() ? model.getWorkspace() : null;
+			return (model != null && model.isValid()) ? model.getWorkspace() : null;
 		} catch (Exception e) {
 			return null;
 		}

@@ -580,11 +580,18 @@ public class MxExporter extends AbstractDiagramExporter {
         values.put("width", String.valueOf(deploymentNodeBoundary.maxX - deploymentNodeBoundary.minX));
         values.put("height", String.valueOf(deploymentNodeBoundary.maxY - deploymentNodeBoundary.minY));
         values.put("parentId", parentId);
-        String label = new StringSubstitutor(values).replace("<font style=\"font-size:${fontSize}px\"><b><div style=\"text-align: left\">%c4Name%</div></b></font><div style=\"text-align: left\">[%c4Application%]</div>");
-        values.put("label", escapeHtml4(label));
-
         StringSubstitutor stringSubstitutor = new StringSubstitutor(values);
-        writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='DeploymentNodeScopeBoundary' c4Application='DeploymentNode' label='${label}' id='${id}'>"));
+        String technology = escapeHtml4(deploymentNodeBoundary.deploymentNode.getTechnology());
+        if(technology == null || technology.isEmpty()) {
+            String label = new StringSubstitutor(values).replace("<font style=\"font-size:${fontSize}px\"><b><div style=\"text-align: left\">%c4Name%</div></b></font><div style=\"text-align: left\">[%c4Application%]</div>");
+            values.put("label", escapeHtml4(label));
+            writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='DeploymentNodeScopeBoundary' c4Application='DeploymentNode' label='${label}' id='${id}'>"));
+        } else {
+            values.put("c4Technology", technology);
+            String label = new StringSubstitutor(values).replace("<font style=\"font-size:${fontSize}px\"><b><div style=\"text-align: left\">%c4Name%</div></b></font><div style=\"text-align: left\">[%c4Application%: %c4Technology%]</div>");
+            values.put("label", escapeHtml4(label));
+            writer.writeLine(stringSubstitutor.replace("<object placeholders='1' c4Name='${c4Name}' c4Type='DeploymentNodeScopeBoundary' c4Application='DeploymentNode' c4Technology='${c4Technology}' label='${label}' id='${id}'>"));
+        }
         writer.indent();
         writer.writeLine(stringSubstitutor.replace("<mxCell style='rounded=1;fontSize=${fontSize};whiteSpace=wrap;html=1;dashed=1;arcSize=20;fillColor=none;strokeColor=${stroke};fontColor=%{color};strokeWidth=${strokeWidth};labelBackgroundColor=none;align=left;verticalAlign=bottom;labelBorderColor=none;spacingTop=0;spacing=10;dashPattern=8 8;metaEdit=1;rotatable=0;perimeter=rectanglePerimeter;noLabel=0;labelPadding=0;allowArrows=0;connectable=0;expand=0;recursiveResize=0;editable=1;pointerEvents=0;absoluteArcSize=1;points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];' vertex='1' parent='${parentId}'>"));
         writer.indent();

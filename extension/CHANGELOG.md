@@ -1,6 +1,10 @@
 # Change Log
 
-## 1.0.11
+## 1.0.13
+
+- Export technology for deploymentNode to drawio
+
+## 1.0.12
 
 - Export InfrastructureNode to drawio
 - Use "Circle" and "Ellipse" shapes during export to drawio

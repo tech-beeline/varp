@@ -62,7 +62,13 @@
           "name": "Architecture Catalogue",
           "when": "extension:c4",
           "icon": "$(book)"
-        }
+        },
+        {
+          "id": "cjCatalogueView",
+          "name": "CJ Catalogue",
+          "when": "extension:c4",
+          "icon": "$(book)"
+        }        
       ]
     },
     "commands": [

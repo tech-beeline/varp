@@ -56,6 +56,7 @@ import { DecorationService } from "./services/DecorationService";
 import { basename, dirname, join } from "node:path";
 import { writeFile } from "node:fs";
 import { BEELINE_CERT_VERIFICATION } from "./config";
+import { CjProvider } from "./custom/CjCatalogueView";
 
 var proc: cp.ChildProcess;
 
@@ -307,6 +308,7 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
     reader.on('line', startListener);
 
     new PatternProvider(context);
+    new CjProvider(context);
     const architectureCatalogueProvider : ArchitectureCatalogueProvider = new ArchitectureCatalogueProvider(context);
     architectureCatalogueProvider.refresh();
 

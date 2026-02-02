@@ -9,7 +9,7 @@
   },
   "license": "Apache-2.0",
   "icon": "images/logo.png",
-  "version": "1.0.12",
+  "version": "1.0.14",
   "engines": {
     "vscode": "^1.73.0"
   },
@@ -68,7 +68,13 @@
           "name": "CJ Catalogue",
           "when": "extension:c4",
           "icon": "$(book)"
-        }        
+        },
+        {
+          "id": "bcCatalogueView",
+          "name": "Business Capabilities",
+          "when": "extension:c4",
+          "icon": "$(book)"
+        }
       ]
     },
     "commands": [

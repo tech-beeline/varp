@@ -57,6 +57,7 @@ import { basename, dirname, join } from "node:path";
 import { writeFile } from "node:fs";
 import { BEELINE_CERT_VERIFICATION } from "./config";
 import { CjProvider } from "./custom/CjCatalogueView";
+import { BusinessCapabilityProvider } from "./custom/BusinessCapabilitiesView";
 
 var proc: cp.ChildProcess;
 
@@ -309,6 +310,7 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
 
     new PatternProvider(context);
     new CjProvider(context);
+    new BusinessCapabilityProvider(context);    
     const architectureCatalogueProvider : ArchitectureCatalogueProvider = new ArchitectureCatalogueProvider(context);
     architectureCatalogueProvider.refresh();
 

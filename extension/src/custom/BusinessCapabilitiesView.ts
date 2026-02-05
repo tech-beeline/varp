@@ -26,6 +26,7 @@ class Item extends vscode.TreeItem {
 	bcid: string | undefined;
 	hasChildren: boolean | undefined;
 	istc: boolean;
+	code: string;
 	businessCapabilities: Item[];
 }
 
@@ -94,6 +95,15 @@ export class BusinessCapabilityProvider implements vscode.TreeDataProvider<Item>
 				then((root) => this.initItem(root, false)).
 				catch((error) => []);
 		};
+
+		vscode.commands.registerCommand('c4.capabilitiesCatalogue.copy', async (element: Item) => {
+			vscode.env.clipboard.writeText(element.code).then(() => {
+				vscode.window.showInformationMessage(`Capability code ${element.code} copied to clipboard!`);
+			}, (error) => {
+				vscode.window.showErrorMessage(`Failed to copy capability code: ${error.message}`);
+			});			
+		});
+
 	}
 
 	private readonly _onDidChangeTreeData: vscode.EventEmitter<Item | undefined | null | void> = new vscode.EventEmitter<Item | undefined | null | void>();

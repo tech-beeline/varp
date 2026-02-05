@@ -26,8 +26,8 @@ import {
   TextEditor
 } from "vscode";
 
-import * as path from "path";
-import * as cp from "child_process"; 
+import * as path from "node:path";
+import * as cp from "node:child_process"; 
 import * as readline from "node:readline";
 
 import {
@@ -56,10 +56,9 @@ import { DecorationService } from "./services/DecorationService";
 import { basename, dirname, join } from "node:path";
 import { writeFile } from "node:fs";
 import { BEELINE_CERT_VERIFICATION } from "./config";
-import { CjProvider } from "./custom/CjCatalogueView";
 import { BusinessCapabilityProvider } from "./custom/BusinessCapabilitiesView";
 
-var proc: cp.ChildProcess;
+let proc: cp.ChildProcess;
 
 export function activate(context: ExtensionContext) {
 
@@ -221,18 +220,14 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
             }
 
             window.onDidChangeActiveTextEditor((editor) => {
-              if (!editor) {
-                editor = window.activeTextEditor;
-              }
+              editor ??= window.activeTextEditor;
               switchJson(editor);
               decorationService.triggerDecorations(editor, undefined);
             });
             decorationService.triggerDecorations(window.activeTextEditor, undefined);
           } else {
             window.onDidChangeActiveTextEditor((editor) => {
-              if (!editor) {
-                editor = window.activeTextEditor;
-              }
+              editor ??= window.activeTextEditor;
               switchJson(editor);
             });
           }
@@ -309,7 +304,6 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
     reader.on('line', startListener);
 
     new PatternProvider(context);
-    new CjProvider(context);
     new BusinessCapabilityProvider(context);    
     const architectureCatalogueProvider : ArchitectureCatalogueProvider = new ArchitectureCatalogueProvider(context);
     architectureCatalogueProvider.refresh();

@@ -64,12 +64,6 @@
           "icon": "$(book)"
         },
         {
-          "id": "cjCatalogueView",
-          "name": "CJ Catalogue",
-          "when": "extension:c4",
-          "icon": "$(book)"
-        },
-        {
           "id": "bcCatalogueView",
           "name": "Capabilities Catalogue",
           "when": "extension:c4",
@@ -88,6 +82,12 @@
         "shortTitle": "Add",
         "icon": "$(add)"
       },
+      {
+        "command": "c4.capabilitiesCatalogue.copy",
+        "title": "Copy capability code to clipdoard",
+        "shortTitle": "Copy capability code",
+        "icon": "$(copy)"
+      },      
       {
         "command": "c4.architectureCatalogue.refresh",
         "title": "Refresh architecture catalogue",
@@ -121,10 +121,15 @@
       ],
       "view/item/context": [
         {
+          "command": "c4.capabilitiesCatalogue.copy",
+          "when": "view == bcCatalogueView",
+          "group": "inline"
+        },
+        {
           "command": "c4.architectureCatalogue.add",
           "when": "view == architectureCatalogueView && viewItem == leaf",
           "group": "inline"
-        }
+        }        
       ],
       "editor/title/context": [
         {

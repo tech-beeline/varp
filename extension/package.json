@@ -9,7 +9,7 @@
   },
   "license": "Apache-2.0",
   "icon": "images/logo.png",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "engines": {
     "vscode": "^1.73.0"
   },
@@ -62,6 +62,12 @@
           "name": "Architecture Catalogue",
           "when": "extension:c4",
           "icon": "$(book)"
+        },
+        {
+          "id": "bcCatalogueView",
+          "name": "Capabilities Catalogue",
+          "when": "extension:c4",
+          "icon": "$(book)"
         }
       ]
     },
@@ -76,6 +82,12 @@
         "shortTitle": "Add",
         "icon": "$(add)"
       },
+      {
+        "command": "c4.capabilitiesCatalogue.copy",
+        "title": "Copy capability code to clipdoard",
+        "shortTitle": "Copy capability code",
+        "icon": "$(copy)"
+      },      
       {
         "command": "c4.architectureCatalogue.refresh",
         "title": "Refresh architecture catalogue",
@@ -109,10 +121,15 @@
       ],
       "view/item/context": [
         {
+          "command": "c4.capabilitiesCatalogue.copy",
+          "when": "view == bcCatalogueView",
+          "group": "inline"
+        },
+        {
           "command": "c4.architectureCatalogue.add",
           "when": "view == architectureCatalogueView && viewItem == leaf",
           "group": "inline"
-        }
+        }        
       ],
       "editor/title/context": [
         {

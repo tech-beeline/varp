@@ -15,8 +15,8 @@
 */
 
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as httpm from 'typed-rest-client/HttpClient';
 import * as config from '../config';
 import { workspace } from 'vscode';
@@ -24,25 +24,24 @@ import { generateHmac } from './hmac';
 import { IRequestOptions } from 'typed-rest-client/Interfaces';
 import { C4Utils } from '../utils/c4-utils';
 
-class Chapter extends vscode.TreeItem {
+class Item extends vscode.TreeItem {
     title: string;
     docs: string;
     dsl: string;
-    childrens: Chapter[];
+    childrens: Item[];
 }
 
-export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Chapter> {
+export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Item> {
 
-  private INDEX_ID: string = '/index';
-  private CONTENT_ID: string = '/content/';
-  private PATH = '/architecture-center';
+  private readonly INDEX_ID: string = '/index';
+  private readonly CONTENT_ID: string = '/content/';
+  private readonly PATH = '/architecture-center';
 
   private currentPanel: vscode.WebviewPanel | undefined = undefined;
   private lastDocs: string | undefined = undefined;
 
-  private initChapter: (chapters: Chapter[]) => Chapter[];
-
-  private initRoot: () => Promise<Chapter[]>;
+  private readonly initItem: (items: Item[]) => Item[];
+  private readonly initRoot: () => Promise<Item[]>;
 
   constructor(context: vscode.ExtensionContext) {
 
@@ -51,79 +50,72 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
     context.subscriptions.push(view);
     const options: IRequestOptions = <IRequestOptions>{};
     options.ignoreSslError = !(workspace.getConfiguration().get(config.BEELINE_CERT_VERIFICATION) as boolean);
-    const beelineApiUrl = C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_API_URL) as string);
+    const archopsApiUrl = C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_API_URL) as string);
     const httpc = new httpm.HttpClient('vscode-c4-dsl-plugin', [], options);
 
-    this.initChapter = (chapters: Chapter[]) : Chapter[] => {
-      chapters.forEach(chapter => {
+    this.initItem = (items: Item[]) : Item[] => {
+      items.forEach(item => {
 
-        chapter.label = chapter.title;
+        item.label = item.title;
 
-        if (chapter.dsl.length > 0) {
-          const id = this.CONTENT_ID + chapter.dsl;
+        if (item.dsl.length > 0) {
+          const id = this.CONTENT_ID + item.dsl;
           const headers = generateHmac('GET', this.PATH + id);
-          httpc.get(beelineApiUrl + this.PATH + id, headers).
-            then((result) => { return result.readBody() }).
-            then((body) => { context.workspaceState.update(id, body); }).
-            catch((error) => { }).
-            finally(() => { });
+          httpc.get(archopsApiUrl + this.PATH + id, headers).
+            then((result) => result.readBody()).
+            then((body) => context.workspaceState.update(id, body));
         }
 
-        if (chapter.docs.length > 0) {
-          chapter.collapsibleState = vscode.TreeItemCollapsibleState.None;
-          chapter.command = {
+        if (item.docs.length > 0) {
+          item.collapsibleState = vscode.TreeItemCollapsibleState.None;
+          item.command = {
             command: "c4.architectureCatalogue.showDescription",
             title: "Show pattern description",
-            arguments: [chapter.title, chapter.docs]
+            arguments: [item.title, item.docs]
           };
 
-          const id = this.CONTENT_ID + chapter.docs;
+          const id = this.CONTENT_ID + item.docs;
           const headers = generateHmac('GET', this.PATH + id);
-          httpc.get(beelineApiUrl + this.PATH + id, headers).
-          then((result) => { return result.readBody() }).
-          then((body) => { context.workspaceState.update(id, body); }).
-          catch((error) => { }).
-          finally(() => { });
+          httpc.get(archopsApiUrl + this.PATH + id, headers).
+          then((result) => result.readBody()).
+          then((body) => context.workspaceState.update(id, body));
         }
 
-        if (chapter.childrens.length === 0) {
-          const basename = path.basename(chapter.dsl);
-          chapter.contextValue = (basename.length > 0) ? 'leaf' : 'chapter';
+        if (item.childrens.length === 0) {
+          const basename = path.basename(item.dsl);
+          item.contextValue = (basename.length > 0) ? 'leaf' : 'chapter';
         } else {
-          chapter.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
-          chapter.contextValue = 'chapter';
+          item.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
+          item.contextValue = 'chapter';
         }
 
-        this.initChapter(chapter.childrens);
-
+        this.initItem(item.childrens);
       });
 
-      return chapters;
+      return items;
     };
 
-    this.initRoot = async () : Promise<Chapter[]> =>  {
+    this.initRoot = async () : Promise<Item[]> =>  {
       const headers = generateHmac('GET', this.PATH + this.INDEX_ID);
-      return httpc.get(beelineApiUrl + this.PATH + this.INDEX_ID, headers).
+      let root = await httpc.get(archopsApiUrl + this.PATH + this.INDEX_ID, headers).
       then((res) => res.readBody()).
-      then((body) => {
-        const root = JSON.parse(body) as Chapter;
+      then((body) => JSON.parse(body) as Item).
+      catch(() => undefined);
+
+      if(root === undefined) {
+        root = context.workspaceState.get(this.INDEX_ID) as Item;
+      } else {
         context.workspaceState.update(this.INDEX_ID, root);
-        return root;
-      }).
-      catch((error) => context.workspaceState.get(this.INDEX_ID) as Chapter).
-      then((root) => {
-        if(root === undefined) {
-          return [];
-        }
-        return this.initChapter((Array.isArray(root)) ? root : [root]);
-      });
+      }
+
+      return this.initItem([root]);
     };
 
     vscode.commands.registerCommand('c4.architectureCatalogue.refresh', async (...args: string[]) => {
       this.refresh();
     });
 
-    vscode.commands.registerCommand('c4.architectureCatalogue.add', async (element: Chapter) => {
+    vscode.commands.registerCommand('c4.architectureCatalogue.add', async (element: Item) => {
 
       const createFile = (id: string, body: string) => {
         const basename = path.basename(id);
@@ -145,52 +137,51 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
 
       const id = this.CONTENT_ID + element.dsl;
       const headers = generateHmac('GET', this.PATH + id);
-      httpc.get(beelineApiUrl + this.PATH + id, headers).then((result) => { return result.readBody(); }).then((body) => {
-        createFile(id, body);
+      let body = await httpc.get(archopsApiUrl + this.PATH + id, headers).
+      then((result) => result.readBody()).
+      catch(() => undefined);
+      if(body === undefined) {
+        body = context.workspaceState.get(id);  
+      } else {
         context.workspaceState.update(id, body);
-      }).catch((error) => {
-        const body: string | undefined = context.workspaceState.get(id);
-        if (body !== undefined) {
-          createFile(id, body);
-        }
-      }).
-      finally(() => { });
+      }
+      if (body !== undefined) {
+        createFile(id, body);
+      }
     });
 
     vscode.commands.registerCommand('c4.architectureCatalogue.showDescription', async (...args: string[]) => {
 
       const columnToShowIn = vscode.window.activeTextEditor ? vscode.window.activeTextEditor.viewColumn : undefined;
 
-      if (this.currentPanel !== undefined) {
-        // If we already have a panel, show it in the target column
-        this.currentPanel.reveal(columnToShowIn);
-      } else {
-        // Create and show panel
+      if (this.currentPanel === undefined) {
         this.currentPanel = vscode.window.createWebviewPanel(
           'architectureCatalogueDescription',
           args[0],
           columnToShowIn || vscode.ViewColumn.One,
           {}
         );
+      } else {
+        this.currentPanel.reveal(columnToShowIn);
       }
 
       if (this.lastDocs !== args[1]) {
         this.lastDocs = args[1];
         const id = this.CONTENT_ID + args[1];
         const headers = generateHmac('GET', this.PATH + id);
-        httpc.get(beelineApiUrl + this.PATH + id, headers).then((result) => { return result.readBody() }).then((body) => {
-          context.workspaceState.update(id, body);
-          if (this.currentPanel !== undefined) {
-            this.currentPanel.webview.html = body;
-            vscode.commands.executeCommand('c4-server.send-pattern-telemetry', { patternId: id, action: 'pattern_view' });
-          }
-        }).catch((error) => {
-          if (this.currentPanel !== undefined) {
-            this.currentPanel.webview.html = context.workspaceState.get(id) ?? "";
-            vscode.commands.executeCommand('c4-server.send-pattern-telemetry', { patternId: id, action: 'pattern_view' });
-          }
-        });
+        let body = await httpc.get(archopsApiUrl + this.PATH + id, headers).
+        then((result) => result.readBody()).
+        catch(() => undefined);
+
+        if(body === undefined) {
+          body = this.currentPanel.webview.html = context.workspaceState.get(id) ?? "";
+        } else {
+          context.workspaceState.update(id, body);          
+        }
+
         this.currentPanel.title = args[0];
+        this.currentPanel.webview.html = body;
+        vscode.commands.executeCommand('c4-server.send-pattern-telemetry', { patternId: id, action: 'pattern_view' });        
       }
 
       this.currentPanel.onDidDispose(() => {
@@ -201,18 +192,18 @@ export class ArchitectureCatalogueProvider implements vscode.TreeDataProvider<Ch
 
   }
 
-  private _onDidChangeTreeData: vscode.EventEmitter<Chapter | undefined | null | void> = new vscode.EventEmitter<Chapter | undefined | null | void>();
-  readonly onDidChangeTreeData: vscode.Event<Chapter | undefined | null | void> = this._onDidChangeTreeData.event;
+  private readonly _onDidChangeTreeData: vscode.EventEmitter<Item | undefined | null | void> = new vscode.EventEmitter<Item | undefined | null | void>();
+  readonly onDidChangeTreeData: vscode.Event<Item | undefined | null | void> = this._onDidChangeTreeData.event;
 
   refresh(): void {
     this._onDidChangeTreeData.fire();
   }
 
-  getTreeItem(element: Chapter): vscode.TreeItem {
+  getTreeItem(element: Item): vscode.TreeItem {
     return element;
   }
 
-  async getChildren(element?: Chapter): Promise<Chapter[]> {
+  async getChildren(element?: Item): Promise<Item[]> {
     return element ? Promise.resolve(element.childrens) : this.initRoot();
   }
 }

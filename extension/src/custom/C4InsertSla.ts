@@ -22,13 +22,13 @@ import {
   workspace
 } from "vscode";
 
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import * as httpm from 'typed-rest-client/HttpClient';
 import { IRequestOptions } from "typed-rest-client/Interfaces";
 import { BEELINE_API_URL, BEELINE_CERT_VERIFICATION } from "../config";
 import { generateHmac } from "./hmac";
 import { CodeLensCommandArgs } from "../types/CodeLensCommandArgs";
-import { dirname, join } from 'path';
+import { dirname, join } from 'node:path';
 import { C4Utils } from "../utils/c4-utils";
 
 export function c4InsertSla() {

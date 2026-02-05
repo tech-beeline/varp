@@ -1,5 +1,9 @@
 # Change Log
 
+## 1.0.14
+
+- Capability Catalogue implemented
+
 ## 1.0.13
 
 - Export technology for deploymentNode to drawio

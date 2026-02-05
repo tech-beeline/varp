@@ -21,24 +21,27 @@ import { IRequestOptions } from 'typed-rest-client/Interfaces';
 import { C4Utils } from '../utils';
 import { generateHmac } from './hmac';
 
-class Chapter extends vscode.TreeItem {
+class Item extends vscode.TreeItem {
 	name: string;
-	title: string;
-	docs: string;
-	dsl: string;
-	childrens: Chapter[];
+	bcid: string | undefined;
+	hasChildren: boolean | undefined;
+	istc: boolean;
+	businessCapabilities: Item[];
 }
 
-export class BusinessCapabilityProvider implements vscode.TreeDataProvider<Chapter> {
+class Child {
+	techCapabilities: Item[];
+	businessCapabilities: Item[];
+}
+
+export class BusinessCapabilityProvider implements vscode.TreeDataProvider<Item> {
 	private readonly PARAMS = '?findBy=CORE';
-	private INDEX_ID: string = '/business-capability';
-	private PATH = '/capability/api/v1';
+	private readonly ROOT_ID: string = '/business-capability';
+	private readonly PATH = '/capability/api/v1';
 
-	private initChapter: (chapters: Chapter[]) => Chapter[];
-
-	private initChild: (chapters: Chapter) => Chapter[];
-
-	private initRoot: () => Promise<Chapter[]>;
+	private readonly initItem: (items: Item[], istc: boolean) => Item[];
+	private readonly initChild: (items: Item) => Promise<Item[]>;
+	private readonly initRoot: () => Promise<Item[]>;
 
 	constructor(context: vscode.ExtensionContext) {
 
@@ -47,67 +50,74 @@ export class BusinessCapabilityProvider implements vscode.TreeDataProvider<Chapt
 		context.subscriptions.push(view);
 		const options: IRequestOptions = <IRequestOptions>{};
 		options.ignoreSslError = !(vscode.workspace.getConfiguration().get(config.BEELINE_CERT_VERIFICATION) as boolean);
-		const beelineApiUrl = C4Utils.removeTrailingSlash(vscode.workspace.getConfiguration().get(config.BEELINE_API_URL) as string);
+		const archopsApiUrl = C4Utils.removeTrailingSlash(vscode.workspace.getConfiguration().get(config.BEELINE_API_URL) as string);
 		const httpc = new httpm.HttpClient('vscode-c4-dsl-plugin', [], options);
 
-		this.initChild = (chapter: Chapter): Chapter[] => {
-			return [];
+		this.initChild = async (chapter: Item): Promise<Item[]> => {
+			const children: string = `/${chapter.bcid}/children`;
+			const path = this.PATH + this.ROOT_ID + children;
+			const headers = generateHmac('GET', path);
+
+			const [items, istc] = await httpc.get(archopsApiUrl + path, headers).
+				then((res) => res.readBody()).
+				then((body) => JSON.parse(body) as Child).
+				then((child) : [Item[], boolean] => child.businessCapabilities.length === 0 ? [child.techCapabilities, true] : [child.businessCapabilities, false]);
+				
+			return this.initItem(items, istc);
 		}
 
-		this.initChapter = (chapters: Chapter[]): Chapter[] => {
-			chapters.forEach(chapter => {
-
-				chapter.label = chapter.name;
-
-				if (chapter.childrens !== undefined && chapter.childrens.length === 0) {
-				} else {
-					chapter.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
+		this.initItem = (items: Item[], istc: boolean): Item[] => {
+			items.forEach(item => {
+				if (item.hasChildren) {
+					item.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
 				}
-
-				if (chapter.childrens !== undefined) {
-					this.initChapter(chapter.childrens);
+				if (typeof item.description === 'string') {
+					item.tooltip = new vscode.MarkdownString(item.description);
 				}
-
-				chapter.id = undefined;
-
+				item.iconPath = (istc) ? vscode.ThemeIcon.File : vscode.ThemeIcon.Folder;
+				item.label = item.name;
+				item.description = undefined;
+				item.bcid = item.id;
+				item.istc = istc;
+				item.id = undefined;
 			});
-
-			return chapters;
+			return items;
 		};
 
-		this.initRoot = async (): Promise<Chapter[]> => {
-			const headers = generateHmac('GET', this.PATH + this.INDEX_ID);
-			return httpc.get(beelineApiUrl + this.PATH + this.INDEX_ID + this.PARAMS, headers).
+		this.initRoot = async (): Promise<Item[]> => {
+			const headers = generateHmac('GET', this.PATH + this.ROOT_ID);
+			return httpc.get(archopsApiUrl + this.PATH + this.ROOT_ID + this.PARAMS, headers).
 				then((res) => res.readBody()).
-				then((body) => {
-					const root = JSON.parse(body) as Chapter[];
-					return root;
-				}).then((root) => {
-					if (root === undefined) {
-						return [];
-					}
-					return this.initChapter((Array.isArray(root)) ? root : [root]);
-				});
+				then((body) => JSON.parse(body) as Item[]).
+				then((root) => root ?? []).
+				then((root) => Array.isArray(root) ? root : [root]).
+				then((root) => this.initItem(root, false)).
+				catch((error) => []);
 		};
-
-		vscode.commands.registerCommand('c4.architectureCatalogue.refresh', async (...args: string[]) => {
-			this.refresh();
-		});
-
 	}
 
-	private _onDidChangeTreeData: vscode.EventEmitter<Chapter | undefined | null | void> = new vscode.EventEmitter<Chapter | undefined | null | void>();
-	readonly onDidChangeTreeData: vscode.Event<Chapter | undefined | null | void> = this._onDidChangeTreeData.event;
+	private readonly _onDidChangeTreeData: vscode.EventEmitter<Item | undefined | null | void> = new vscode.EventEmitter<Item | undefined | null | void>();
+	readonly onDidChangeTreeData: vscode.Event<Item | undefined | null | void> = this._onDidChangeTreeData.event;
 
 	refresh(): void {
 		this._onDidChangeTreeData.fire();
 	}
 
-	getTreeItem(element: Chapter): vscode.TreeItem {
+	getTreeItem(element: Item): vscode.TreeItem {
 		return element;
 	}
 
-	async getChildren(element?: Chapter): Promise<Chapter[]> {
-		return element ? this.initChild(element) : this.initRoot();
+	async getChildren(element?: Item): Promise<Item[]> {
+		if (element) {
+			return this.initChild(element);
+		}
+		const root = await this.initRoot();
+		if (root.length === 1) {
+			const child = root.at(0);
+			if (child !== undefined) {
+				return this.initChild(child);
+			}
+		}
+		return root;
 	}
 }

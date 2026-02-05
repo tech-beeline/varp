@@ -71,7 +71,7 @@
         },
         {
           "id": "bcCatalogueView",
-          "name": "Business Capabilities",
+          "name": "Capabilities Catalogue",
           "when": "extension:c4",
           "icon": "$(book)"
         }

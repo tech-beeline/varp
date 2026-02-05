@@ -21,15 +21,15 @@ import { IHeaders } from 'typed-rest-client/Interfaces';
 
 export function generateHmac(method: string, path: string, body: string | undefined = undefined, contentType: string | undefined = undefined): IHeaders {
     const headers: IHeaders = <IHeaders>{};
-    const beelineApiSecret = workspace.getConfiguration().get(config.BEELINE_API_SECRET) as string;
-    const beelineApiKey = workspace.getConfiguration().get(config.BEELINE_API_KEY) as string;
-    if(beelineApiKey.length > 0 && beelineApiSecret.length > 0) {
+    const archopsApiSecret = workspace.getConfiguration().get(config.BEELINE_API_SECRET) as string;
+    const archopsApiKey = workspace.getConfiguration().get(config.BEELINE_API_KEY) as string;
+    if(archopsApiKey.length > 0 && archopsApiSecret.length > 0) {
         const nonce = randomBytes(8).toString('base64');
         const md5Hash = (body === undefined) ? 'd41d8cd98f00b204e9800998ecf8427e' : createHash('md5').update(body).digest('hex');
-        const parts: string[] = [method, path, md5Hash, (contentType === undefined) ? '' : contentType, nonce];
+        const parts: string[] = [method, path, md5Hash, contentType ?? '', nonce];
         const message: string = parts.join('\n') + '\n';
-        const hmac = createHmac('sha256', beelineApiSecret).update(message).digest('base64');
-        headers['X-Authorization'] = beelineApiKey + ":" + hmac;
+        const hmac = createHmac('sha256', archopsApiSecret).update(message).digest('base64');
+        headers['X-Authorization'] = archopsApiKey + ":" + hmac;
         headers['Nonce'] = nonce;
     }
     return headers;

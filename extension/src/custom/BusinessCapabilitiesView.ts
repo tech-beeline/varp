@@ -77,7 +77,7 @@ export class BusinessCapabilityProvider implements vscode.TreeDataProvider<Item>
 				}
 				item.iconPath = (istc) ? vscode.ThemeIcon.File : vscode.ThemeIcon.Folder;
 				item.label = item.name;
-				item.description = undefined;
+				item.description = item.code;
 				item.bcid = item.id;
 				item.istc = istc;
 				item.id = undefined;

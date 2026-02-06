@@ -34,10 +34,13 @@ jobs:
       - name: Build
         run: yarn package-github
 
-      - name: Install vsce
-        run: yarn dlx @yarnpkg/sdks vscode
-
       - name: Publish extension package
         env:
           VSCODE_MARKETPLACE_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_TOKEN }}
-        run: yarn vsce publish --pat $VSCODE_MARKETPLACE_TOKEN
+        run: yarn dlx @vscode/vsce publish --pat $VSCODE_MARKETPLACE_TOKEN
+        
+      - name: Publish to Open VSX
+        env:
+          OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
+        run: yarn dlx ovsx publish -pat $OPEN_VSX_TOKEN
+        

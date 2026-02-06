@@ -22,15 +22,15 @@ import {
   ViewColumn
 } from "vscode";
 
-import { writeFile, mkdirSync, existsSync } from 'fs';
-import { dirname, join, basename } from 'path';
+import { writeFile, mkdirSync, existsSync } from 'node:fs';
+import { dirname, join, basename } from 'node:path';
 import { HttpClient } from 'typed-rest-client/HttpClient';
 import { IRequestOptions } from 'typed-rest-client/Interfaces';
 import { BEELINE_API_URL, BEELINE_CERT_VERIFICATION } from '../config';
 import { generateHmac } from './hmac';
 import { CodeLensCommandArgs } from '../types/CodeLensCommandArgs';
 import { C4Utils } from '../utils';
-import { EOL } from 'os';
+import { EOL } from 'node:os';
 
 const CONF_VEGA_TOKEN = "c4.vega.token";
 

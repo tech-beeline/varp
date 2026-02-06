@@ -40,10 +40,9 @@ jobs:
       - name: Publish to VSCode Marketplace
         env:
           VSCODE_MARKETPLACE_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_TOKEN }}
-        run: yarn vsce publish --pat $VSCODE_MARKETPLACE_TOKEN --packagePath *.vsix
+        run: yarn vsce publish -p $VSCODE_MARKETPLACE_TOKEN --packagePath *.vsix
         
       - name: Publish to Open VSX
-        if: always()
         env:
           OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
         run: yarn dlx ovsx publish -p $OPEN_VSX_TOKEN  *.vsix

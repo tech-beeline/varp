@@ -9,7 +9,7 @@
   },
   "license": "Apache-2.0",
   "icon": "images/logo.png",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "engines": {
     "vscode": "^1.73.0"
   },
@@ -40,15 +40,15 @@
         "path": "./yaml.json"
       }
     ],
-		"viewsContainers": {
-			"activitybar": [
-				{
-					"id": "c4-architecture-as-a-code",
-					"title": "C4 Architecture As A Code",
-					"icon": "images/logo.svg"
-				}
-			]
-		},    
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "c4-architecture-as-a-code",
+          "title": "C4 Architecture As A Code",
+          "icon": "images/logo.svg"
+        }
+      ]
+    },
     "views": {
       "c4-architecture-as-a-code": [
         {
@@ -87,7 +87,7 @@
         "title": "Copy capability code to clipdoard",
         "shortTitle": "Copy capability code",
         "icon": "$(copy)"
-      },      
+      },
       {
         "command": "c4.architectureCatalogue.refresh",
         "title": "Refresh architecture catalogue",
@@ -129,7 +129,7 @@
           "command": "c4.architectureCatalogue.add",
           "when": "view == architectureCatalogueView && viewItem == leaf",
           "group": "inline"
-        }        
+        }
       ],
       "editor/title/context": [
         {
@@ -257,7 +257,7 @@
           "default": false,
           "scope": "application",
           "description": "Enable SSL-certificate verification when interacting with the ArchOPS server"
-        }        
+        }
       }
     }
   },

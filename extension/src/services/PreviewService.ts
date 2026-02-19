@@ -28,10 +28,10 @@ import {
 } from "vscode";
 
 import { CommandResultCode, RefreshOptions } from "../types";
-import { Graphviz } from "@hpcc-js/wasm-graphviz";
-import { readFile, writeFile } from 'fs';
-import { join } from 'path';
-import { homedir } from 'os';
+import { readFile, writeFile } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { getGraphviz } from "../utils/graphvizInstance";
 
 class PreviewService {
   private panel: WebviewPanel | undefined;
@@ -39,31 +39,29 @@ class PreviewService {
   private _currentDocument: TextDocument;
   private _currentDiagramAsDot: string;
 
-  private title: string = 'Structurizr Preview';
-  private id: string = 'structurizrPreview';
-  private graphviz: Graphviz;
+  private readonly title: string = 'Structurizr Preview';
+  private readonly id: string = 'structurizrPreview';
 
-  private jsjquery: Uri;
-  private jslodash: Uri;
-  private jsbackbone: Uri;
-  private jsjoint: Uri;
-  private jscanvg: Uri;
-  private jspanzoom: Uri;
-  private jsstructurizr: Uri;
-  private jsstructurizrutil: Uri;
-  private jsstructurizrui: Uri;
-  private jsstructurizrworkspace: Uri;
-  private jsstructurizrdiagram: Uri;
-  private cssjoint: Uri;
-  private cssstructurizrdiagram: Uri;
-  private localResourceRoots: Uri[];
+  private readonly jsjquery: Uri;
+  private readonly jslodash: Uri;
+  private readonly jsbackbone: Uri;
+  private readonly jsjoint: Uri;
+  private readonly jscanvg: Uri;
+  private readonly jspanzoom: Uri;
+  private readonly jsstructurizr: Uri;
+  private readonly jsstructurizrutil: Uri;
+  private readonly jsstructurizrui: Uri;
+  private readonly jsstructurizrworkspace: Uri;
+  private readonly jsstructurizrdiagram: Uri;
+  private readonly cssjoint: Uri;
+  private readonly cssstructurizrdiagram: Uri;
+  private readonly localResourceRoots: Uri[];
 
   constructor(context: ExtensionContext) {
-    this.LoadAsync();
-    this.jsjquery = Uri.joinPath(context.extensionUri, 'js', 'jquery-3.6.3.min.js');
-    this.jslodash = Uri.joinPath(context.extensionUri, 'js', 'lodash-4.17.21.js');    
-    this.jsbackbone = Uri.joinPath(context.extensionUri, 'js', 'backbone-1.4.1.js');    
-    this.jsjoint = Uri.joinPath(context.extensionUri, 'js', 'joint-3.6.5.js');
+    this.jsjquery = Uri.joinPath(context.extensionUri, 'js', 'jquery.min.js');
+    this.jslodash = Uri.joinPath(context.extensionUri, 'js', 'lodash.min.js');    
+    this.jsbackbone = Uri.joinPath(context.extensionUri, 'js', 'backbone-min.js');
+    this.jsjoint = Uri.joinPath(context.extensionUri, 'js', 'joint.min.js');
     this.jscanvg = Uri.joinPath(context.extensionUri, 'js', 'canvg-1.5.4.js');
     this.jspanzoom = Uri.joinPath(context.extensionUri, 'js', 'panzoom.min.js');
     this.jsstructurizr = Uri.joinPath(context.extensionUri, 'js', 'structurizr.js');    
@@ -71,15 +69,11 @@ class PreviewService {
     this.jsstructurizrui = Uri.joinPath(context.extensionUri, 'js', 'structurizr-ui.js');        
     this.jsstructurizrworkspace = Uri.joinPath(context.extensionUri, 'js', 'structurizr-workspace.js');    
     this.jsstructurizrdiagram = Uri.joinPath(context.extensionUri, 'js', 'structurizr-diagram.js');    
-    this.cssjoint = Uri.joinPath(context.extensionUri, 'css', 'joint-3.6.5.css');
+    this.cssjoint = Uri.joinPath(context.extensionUri, 'css', 'joint.min.css');
     this.cssstructurizrdiagram = Uri.joinPath(context.extensionUri, 'css', 'structurizr-diagram.css');
         
     this.localResourceRoots = [Uri.joinPath(context.extensionUri, 'css'), Uri.joinPath(context.extensionUri, 'js')];
   }
-
-  private LoadAsync = async () => {
-      this.graphviz = await Graphviz.load();
-  };
 
   public set currentDiagramAsDot(dot: string) {
     this._currentDiagramAsDot = dot;
@@ -191,14 +185,8 @@ public async importLayoutMax(context: ExtensionContext) {
   public async getSvg(context: ExtensionContext) {
     this.panel?.webview.onDidReceiveMessage(
       async message => {
-        const getUserDocumentsPath = (): string => {
-          const userHomeDir = homedir();
-          const documentsPath = join(userHomeDir, 'Documents');
-          return documentsPath;
-        };
-
         const options: SaveDialogOptions = {
-          defaultUri: Uri.file(join(getUserDocumentsPath(), this._currentDiagram)),
+          defaultUri: Uri.file(join(this.getUserDocumentsPath(), this._currentDiagram)),
           filters: {
             'Svg Files': ['svg'],
             'All Files': ['*']
@@ -223,10 +211,11 @@ public async importLayoutMax(context: ExtensionContext) {
   }
 
   public async updateWebView() {
+    const svg = (this._currentDiagramAsDot === undefined) ? undefined : (await getGraphviz()).dot(this._currentDiagramAsDot);
     const refreshOptions: RefreshOptions = {
       viewKey: this._currentDiagram,
       document: this._currentDocument.uri.path,
-      svg: (this._currentDiagramAsDot !== undefined) ? this.graphviz.dot(this._currentDiagramAsDot) : undefined,
+      svg: svg,
       mx: undefined
     };
     commands.executeCommand("c4-server.get-json", refreshOptions).then(async (callback) => {

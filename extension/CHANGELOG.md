@@ -1,5 +1,12 @@
 # Change Log
 
+## 1.0.15
+
+- Updating JS dependencies
+- Updating NodeJS dependencies
+- Some unneeded JS files removed
+- Support ArchOps integration over HTTP
+
 ## 1.0.14
 
 - Capability Catalogue implemented

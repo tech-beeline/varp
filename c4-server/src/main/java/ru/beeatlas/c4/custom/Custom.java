@@ -21,7 +21,10 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLConnection;
+import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.X509Certificate;
@@ -127,7 +130,7 @@ public class Custom {
         }
     }
 
-    private HttpsURLConnection beelineApiConnection(String method, String path, String body, String contentType) throws IOException, InvalidKeyException, NoSuchAlgorithmException {
+    private URLConnection archOpsApiConnection(String method, String path, String body, String contentType) throws IOException, InvalidKeyException, NoSuchAlgorithmException {
         ConfigurationItem keyItem = new ConfigurationItem();
         keyItem.setSection("c4.beeline.api.key");
 
@@ -157,17 +160,20 @@ public class Custom {
             logger.debug(e.getMessage());
         }
         
-        HttpsURLConnection conn = (HttpsURLConnection) new URL(apiUrl + path).openConnection();
-        conn.setRequestMethod(method);
+        URLConnection conn = new URL(apiUrl + path).openConnection();
         if(contentType != null) {
             conn.setRequestProperty("Content-Type", contentType);
         } else {
             contentType = ""; 
         }
-
-        if(!certVerification) {
-            conn.setHostnameVerifier(allTrustingHostnameVerifier);
-            conn.setSSLSocketFactory(allTrustingTrustManager);
+        if(conn instanceof HttpsURLConnection httpsURLConnection) {
+            httpsURLConnection.setRequestMethod(method);
+            if(!certVerification) {
+                httpsURLConnection.setHostnameVerifier(allTrustingHostnameVerifier);
+                httpsURLConnection.setSSLSocketFactory(allTrustingTrustManager);
+            }
+        } else if(conn instanceof HttpURLConnection httpURLConnection) {
+            httpURLConnection.setRequestMethod(method);
         }
 
         if(!apiKey.isEmpty() && !apiSecret.isEmpty()) {
@@ -185,10 +191,11 @@ public class Custom {
             conn.setRequestProperty("X-Authorization", xauth);
             conn.setRequestProperty("Nonce", nonce);
         }
+
         return conn;
     }
 
-    private HttpsURLConnection beelineCloudConnection(String method, String path) throws IOException, InterruptedException, ExecutionException {
+    private URLConnection cloudConnection(String method, String path) throws IOException, InterruptedException, ExecutionException {
         ConfigurationItem tokenItem = new ConfigurationItem();
         tokenItem.setSection("c4.beeline.cloud.token");
         ConfigurationItem urlItem = new ConfigurationItem();
@@ -207,11 +214,15 @@ public class Custom {
         cloudUrl = C4Utils.trimTrailingSlash(cloudUrl);
         certVerification = ((JsonPrimitive)values.get(2)).getAsBoolean();
 
-        HttpsURLConnection conn = (HttpsURLConnection) new URL(cloudUrl + path).openConnection();
-        conn.setRequestMethod(method);
-        if(!certVerification) {
-            conn.setHostnameVerifier(allTrustingHostnameVerifier);
-            conn.setSSLSocketFactory(allTrustingTrustManager);
+        URLConnection conn = new URL(cloudUrl + path).openConnection();
+        if(conn instanceof HttpsURLConnection httpsURLConnection) {
+            httpsURLConnection.setRequestMethod(method);
+            if(!certVerification) {
+                httpsURLConnection.setHostnameVerifier(allTrustingHostnameVerifier);
+                httpsURLConnection.setSSLSocketFactory(allTrustingTrustManager);
+            }
+        } else if(conn instanceof HttpURLConnection httpURLConnection) {
+            httpURLConnection.setRequestMethod(method);            
         }
         conn.setRequestProperty("accept", "application/json");
         if(!cloudToken.isEmpty()) {
@@ -282,7 +293,7 @@ public class Custom {
         CompletableFuture.runAsync(() -> {
             String path = "/capability/api/v1/tech-capabilities";
             try {
-                HttpsURLConnection conn = beelineApiConnection("GET", path, null, null);
+                URLConnection conn = archOpsApiConnection("GET", path, null, null);
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                     techCapabilities.set(Arrays.stream((new Gson()).fromJson(in, TechCapability[].class))
                             .collect(Collectors.toMap(TechCapability::code, Function.identity())));
@@ -299,7 +310,7 @@ public class Custom {
         CompletableFuture.runAsync(() -> {
             String path = "/api-gateway/techradar/v1/tech";
             try {
-                HttpsURLConnection conn = beelineApiConnection("GET", path, null, null);
+                URLConnection conn = archOpsApiConnection("GET", path, null, null);
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                     technologies.set(Arrays.stream((new Gson()).fromJson(in, Technology[].class))
                             .collect(Collectors.toMap(Technology::label, Function.identity())));
@@ -316,7 +327,7 @@ public class Custom {
         CompletableFuture.runAsync(() -> {
             String path = "/capability/api/v1/business-capability?findBy=ALL";
             try {
-                HttpsURLConnection conn = beelineApiConnection("GET", path, null, null);
+                URLConnection conn = archOpsApiConnection("GET", path, null, null);
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                     capabilities.set(Arrays.stream((new Gson()).fromJson(in, Capability[].class))
                             .collect(Collectors.toMap(Capability::code, Function.identity(), (existingCapability, newCapability) -> existingCapability)));
@@ -347,14 +358,14 @@ public class Custom {
                         .toList();
                 Map<String, Term> map = new HashMap<>();
                 String path = "/dashboard/api/v1/data-model/glossaries";
-                HttpsURLConnection conn = beelineApiConnection("GET", path, null, null);
+                URLConnection conn = archOpsApiConnection("GET", path, null, null);
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                     Arrays.stream((new Gson()).fromJson(in, Glossary[].class))
                             .filter(g -> glossariesAList.contains(g.name().toLowerCase()))
                             .forEach(g -> {
                                 try {
                                     String path0 = MessageFormat.format("/dashboard/api/v1/data-model/glossaries/{0}/terms", g.id());
-                                    HttpsURLConnection conn0 = beelineApiConnection("GET", path0, null, null);
+                                    URLConnection conn0 = archOpsApiConnection("GET", path0, null, null);
                                     try (BufferedReader in0 = new BufferedReader(new InputStreamReader(conn0.getInputStream()))) {
                                         Arrays.asList((new Gson()).fromJson(in0, Term[].class)).forEach(t -> map.put(t.name(), t));
                                     }
@@ -391,11 +402,15 @@ public class Custom {
         }
 
         try {
-            HttpsURLConnection conn = (HttpsURLConnection) new URL(themeLocation).openConnection();
-            conn.setRequestMethod("GET");
-            if (!certVerification) {
-                conn.setHostnameVerifier(allTrustingHostnameVerifier);
-                conn.setSSLSocketFactory(allTrustingTrustManager);
+            URLConnection conn = new URL(themeLocation).openConnection();
+            if(conn instanceof HttpsURLConnection httpsURLConnection) {
+                httpsURLConnection.setRequestMethod("GET");
+                if (!certVerification) {
+                    httpsURLConnection.setHostnameVerifier(allTrustingHostnameVerifier);
+                    httpsURLConnection.setSSLSocketFactory(allTrustingTrustManager);
+                }
+            } else if(conn instanceof HttpURLConnection httpURLConnection) {
+                httpURLConnection.setRequestMethod("GET");
             }
             try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                 return in.lines().collect(Collectors.joining());
@@ -491,12 +506,12 @@ public class Custom {
         }).toList();
     }
 
-    public List<CompletionItem> beelineCloudImagesCompletion(String vegaProject) {
+    public List<CompletionItem> cloudImagesCompletion(String vegaProject) {
         List<CompletionItem> completionItems = beelineCloudImages.getOrDefault(vegaProject, Collections.emptyList());
         if(completionItems.isEmpty()) {
             try {
                 String path = MessageFormat.format("/api/v1/projects/{0}/vps/images", vegaProject);
-                HttpsURLConnection conn = beelineCloudConnection("GET", path);
+                URLConnection conn = cloudConnection("GET", path);
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                     completionItems = Arrays.stream((new Gson()).fromJson(in, Image[].class)).map(i -> {
                         CompletionItem item = new CompletionItem();
@@ -512,7 +527,6 @@ public class Custom {
                         return item;
                     }).toList();
                 }
-                conn.disconnect();
             } catch (IOException | InterruptedException | ExecutionException e) {
             } finally {
                 if(!completionItems.isEmpty()) {
@@ -523,12 +537,12 @@ public class Custom {
         return completionItems;
     }
 
-    public List<CompletionItem> beelineCloudFlavorsCompletion(String vegaProject) {
+    public List<CompletionItem> cloudFlavorsCompletion(String vegaProject) {
         List<CompletionItem> completionItems = beelineCloudFlavors.getOrDefault(vegaProject, Collections.emptyList());
         if(completionItems.isEmpty()) {
             try {
                 String path = MessageFormat.format("/api/v1/projects/{0}/vps/flavors", vegaProject);
-                HttpsURLConnection conn = beelineCloudConnection("GET", path);
+                URLConnection conn = cloudConnection("GET", path);
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                     completionItems = Arrays.stream((new Gson()).fromJson(in, Flavor[].class)).map(f -> {
                         CompletionItem item = new CompletionItem();
@@ -537,7 +551,6 @@ public class Custom {
                         return item;
                     }).toList();
                 }
-                conn.disconnect();
             } catch (IOException | InterruptedException | ExecutionException e) {
             } finally {
                 if(!completionItems.isEmpty()) {
@@ -600,12 +613,12 @@ public class Custom {
         return null;
     }
 
-    public List<CompletionItem> beelineCloudRegionsCompletion(String vegaProject) {
+    public List<CompletionItem> cloudRegionsCompletion(String vegaProject) {
         List<CompletionItem> completionItems = beelineCloudRegions.getOrDefault(vegaProject, Collections.emptyList());
         if (completionItems.isEmpty()) {
             try {
                 String path = MessageFormat.format("/api/v1/projects/{0}/vps/regions", vegaProject);
-                HttpsURLConnection conn = beelineCloudConnection("GET", path);
+                URLConnection conn = cloudConnection("GET", path);
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                     completionItems = Arrays.stream((new Gson()).fromJson(in, Region[].class)).map(r -> {
                         CompletionItem item = new CompletionItem();
@@ -620,7 +633,6 @@ public class Custom {
                         return item;
                     }).toList();
                 }
-                conn.disconnect();
             } catch (IOException | InterruptedException | ExecutionException e) {
             } finally {
                 if (!completionItems.isEmpty()) {
@@ -810,15 +822,15 @@ public class Custom {
 
         if (isVegaProject && !vegaProject.isEmpty()) {
             if (firstTokenName.equals("region") && LineTokenizer.isInsideToken(cursor, 1)) {
-                return beelineCloudRegionsCompletion(vegaProject);
+                return cloudRegionsCompletion(vegaProject);
             }
             
             if ((firstTokenName.equals("flavour") || firstTokenName.equals("flavor")) && LineTokenizer.isInsideToken(cursor, 1)) {
-                return beelineCloudFlavorsCompletion(vegaProject);
+                return cloudFlavorsCompletion(vegaProject);
             }
             
             if (isVm && firstTokenName.equals("image") && LineTokenizer.isInsideToken(cursor, 1)) {
-                return beelineCloudImagesCompletion(vegaProject);
+                return cloudImagesCompletion(vegaProject);
             }
         }
 
@@ -1015,21 +1027,16 @@ public class Custom {
         }
         try {
             String path = "/dashboard/api/v1/telemetry/c4plugin/start";
-            HttpsURLConnection conn = beelineApiConnection("POST", path, message, "application/json");
+            URLConnection conn = archOpsApiConnection("POST", path, message, "application/json");
             conn.setRequestProperty("Accept", "text/plain");
 
             conn.setDoOutput(true);
             OutputStream outStream = conn.getOutputStream();
-            OutputStreamWriter outStreamWriter = new OutputStreamWriter(outStream, "UTF-8");
+            OutputStreamWriter outStreamWriter = new OutputStreamWriter(outStream, StandardCharsets.UTF_8);
             outStreamWriter.write(message);
             outStreamWriter.flush();
             outStreamWriter.close();
             outStream.close();
-
-            conn.getResponseCode();
-            conn.getResponseMessage();
-
-            conn.disconnect();
             return true;
         } catch (Exception e) {
             return false;

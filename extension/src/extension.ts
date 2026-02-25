@@ -149,8 +149,7 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
   statusBarItem.text = "C4 DSL Socket Server is starting up...";
   statusBarItem.color = "white";
 
-  const jar = path.join('server','c4-server.jar');
-  const jarPath = context.asAbsolutePath(jar);
+  const jarPath = context.asAbsolutePath('server.jar');
 
   const args = ["-Dfile.encoding=UTF8", "-jar", jarPath, "-e=" + READY_ECHO];
   const opts = (workspace.workspaceFolders) ? { cwd: workspace.workspaceFolders[0].uri.fsPath, shell: true, env : env } : { shell: true, env : env };

@@ -23,11 +23,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.net.URI;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +37,6 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.Stack;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -53,13 +54,7 @@ import com.structurizr.model.ContainerInstance;
 import com.structurizr.model.Element;
 import com.structurizr.model.Relationship;
 import com.structurizr.model.SoftwareSystemInstance;
-import com.structurizr.view.AutomaticLayout;
-import com.structurizr.view.ComponentView;
-import com.structurizr.view.ContainerView;
-import com.structurizr.view.DeploymentView;
-import com.structurizr.view.DynamicView;
 import com.structurizr.view.ModelView;
-import com.structurizr.view.SystemContextView;
 import com.structurizr.view.View;
 
 import ru.beeatlas.c4.custom.Custom;
@@ -86,7 +81,7 @@ public class C4DocumentModel {
 			int start,
 			int end,
 			int depth) {
-		final public static int SCOPE_NOT_CLOSED = -1;
+		public static final int SCOPE_NOT_CLOSED = -1;
 	}
 
 	public static final String NO_SCOPE = "UnknownScope"; 
@@ -97,12 +92,11 @@ public class C4DocumentModel {
 	private String rawText = "";
 	private Workspace workspace;
 	private boolean valid = false;
-	private static final String NEW_LINE = "\\r?\\n";
 	
 	private List<String> lines = Collections.emptyList();
     private static final Logger logger = LoggerFactory.getLogger(C4DocumentModel.class);
     
-	private Stack<C4CompletionScope> scopeStack = new Stack<>();
+	private Deque<C4CompletionScope> scopeStack = new ArrayDeque<>();
 	private List<C4CompletionScope> scopes = new ArrayList<>();
 
     private Map<Integer, C4ObjectWithContext<View>> viewToLineNumber = new HashMap<>();
@@ -118,7 +112,7 @@ public class C4DocumentModel {
 	private List<DecoratorRange> decorations = new ArrayList<>();
 	private List<C4SemanticToken> tokens = new ArrayList<>();
 
-	private List<CodeLens> codeLenses = new ArrayList<CodeLens>();
+	private List<CodeLens> codeLenses = new ArrayList<>();
 
 	private URI uri;
 	private boolean parsedInternally;
@@ -167,7 +161,7 @@ public class C4DocumentModel {
 	}
 
 	public String getRawText() {
-		if(rawText.length() == 0) {
+		if(rawText.isEmpty()) {
 			try {
 				rawText = new String(Files.readAllBytes(Paths.get(uri)));
 			} catch (IOException e) {
@@ -441,7 +435,7 @@ public class C4DocumentModel {
 
 	public void closeScope(int lineNumber, int contextId, String contextName) {
 
-		if (!scopeStack.empty()) {
+		if (!scopeStack.isEmpty()) {
 			C4CompletionScope scope = scopeStack.pop();
 			if (scope.id() != contextId) {
 				logger.error("Closed scope Id should be {} but got {}", scope.id(), contextId);

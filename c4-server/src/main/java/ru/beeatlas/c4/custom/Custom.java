@@ -44,6 +44,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
@@ -78,6 +79,7 @@ import ru.beeatlas.c4.utils.C4Utils;
 import ru.beeatlas.c4.dto.CodeLensCommandArgs;
 import ru.beeatlas.c4.model.C4DocumentModel;
 import ru.beeatlas.c4.model.C4ObjectWithContext;
+import ru.beeatlas.c4.model.DecoratorRange;
 import ru.beeatlas.c4.model.C4DocumentModel.C4CompletionScope;
 import ru.beeatlas.c4.utils.LineToken;
 import ru.beeatlas.c4.utils.LineTokenizer;
@@ -296,7 +298,7 @@ public class Custom {
                 URLConnection conn = archOpsApiConnection("GET", path, null, null);
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                     techCapabilities.set(Arrays.stream((new Gson()).fromJson(in, TechCapability[].class))
-                            .collect(Collectors.toMap(TechCapability::code, Function.identity())));
+                            .collect(Collectors.toMap(cap -> cap.code().toLowerCase(), Function.identity())));
                 } catch(IOException e) {
                     throw e;
                 }
@@ -330,7 +332,7 @@ public class Custom {
                 URLConnection conn = archOpsApiConnection("GET", path, null, null);
                 try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
                     capabilities.set(Arrays.stream((new Gson()).fromJson(in, Capability[].class))
-                            .collect(Collectors.toMap(Capability::code, Function.identity(), (existingCapability, newCapability) -> existingCapability)));
+                            .collect(Collectors.toMap(c -> c.code().toLowerCase(), Function.identity(), (existingCapability, newCapability) -> existingCapability)));
                 } catch(IOException e) {
                     throw e;
                 }
@@ -465,7 +467,7 @@ public class Custom {
             CompletionItemLabelDetails details = new CompletionItemLabelDetails();
             details.setDetail(" " + e.getValue().name());
             item.setKind(CompletionItemKind.Property);
-            item.setLabel(e.getKey());
+            item.setLabel(e.getValue().code());
             item.setLabelDetails(details);
             return item;
         }).toList();
@@ -477,7 +479,7 @@ public class Custom {
             CompletionItemLabelDetails details = new CompletionItemLabelDetails();
             details.setDetail(" " + e.getValue().name());
             item.setKind(CompletionItemKind.Property);
-            item.setLabel(e.getKey());
+            item.setLabel(e.getValue().code());
             item.setLabelDetails(details);
             return item;
         }).toList();
@@ -562,7 +564,7 @@ public class Custom {
     }
 
     public Hover businessCapabilitiesHover(String code) {
-        Capability capability = capabilities.get().get(code);
+        Capability capability = capabilities.get().get(code.toLowerCase());
         if (capability != null) {
             String name = capability.name();
             if (name != null) {
@@ -579,7 +581,7 @@ public class Custom {
     }
 
     public Hover technologicalCapabilitiesHover(String code) {
-        TechCapability capability = techCapabilities.get().get(code);
+        TechCapability capability = techCapabilities.get().get(code.toLowerCase());
         if (capability != null) {
             String name = capability.name();
             if (name != null) {
@@ -659,7 +661,7 @@ public class Custom {
         container.getComponents().stream()
                 .filter(c -> c.getProperties().getOrDefault("type", "").equalsIgnoreCase("capability"))
                 .map(c -> c.getProperties().get("code")).filter(Objects::nonNull).forEach(c -> {
-                    TechCapability capability = techCapabilities.get().get(c);
+                    TechCapability capability = techCapabilities.get().get(c.toLowerCase());
 
                     CompletionItem item = new CompletionItem();
                     item.setLabel(c);
@@ -730,6 +732,27 @@ public class Custom {
             }
         }
         return null;
+    }
+
+    public Stream<DecoratorRange> getDecorations(C4DocumentModel docModel) {
+        return isApiConfigured() ? docModel.getProperties().stream().<DecoratorRange>mapMulti( (p, consumer) -> {
+            List<LineToken> tokens = LineTokenizer.tokenize(p.line());
+            int character = tokens.get(1).end();
+            if(p.name().equalsIgnoreCase("tc")) {
+                TechCapability tc = techCapabilities.get().get(p.value().toLowerCase());
+                if(tc == null && cmdb != null) {
+                    tc = techCapabilities.get().get(cmdb.toLowerCase() + "." + p.value().toLowerCase());
+                }
+                if(tc!= null) {
+                    consumer.accept(new DecoratorRange("# " + tc.name(),new Range(new Position(p.lineNumber() - 1, character), new Position(p.lineNumber() - 1, character))));
+                }
+            } else if(p.name().equalsIgnoreCase("parents")) {
+                Capability c = capabilities.get().get(p.value().toLowerCase());
+                if(c!= null) {
+                    consumer.accept(new DecoratorRange("# " + c.name(),new Range(new Position(p.lineNumber() - 1, character), new Position(p.lineNumber() - 1, character))));
+                }
+            }
+        }) : Stream.empty();
     }
 
     public List<CompletionItem> comleteProperties(List<LineToken> tokens, CursorLocation cursor, C4DocumentModel docModel, Position position) {

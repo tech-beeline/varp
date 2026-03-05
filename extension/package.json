@@ -284,6 +284,7 @@
   "activationEvents": [
     "onLanguage:c4"
   ],
+  "browser": "./dist/extension",
   "main": "./dist/extension",
   "devDependencies": {
     "@hpcc-js/wasm-graphviz": "^1.10.0",

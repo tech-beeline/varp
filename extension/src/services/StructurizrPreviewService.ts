@@ -25,12 +25,12 @@ import { RefreshOptions } from "../types/RefreshOptions";
 import { CommandResultCode } from "../types/CommandResultCode";
 
 class StructurizrPreviewService {
-  private renderService: string;
+  private readonly renderService: string;
   private panel: WebviewPanel | undefined;
   private _currentDiagram: string;
   private _currentDocument: TextDocument;
 
-  private VIEW_TYPE: string = 'Structurizr Preview';  
+  private readonly VIEW_TYPE: string = 'Structurizr Preview';  
 
   constructor(renderService: string) {
     this.renderService = renderService;

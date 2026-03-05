@@ -14,14 +14,14 @@
 	limitations under the License.
 */
 
-import * as vscode from 'vscode';
-import * as httpm from 'typed-rest-client/HttpClient';
 import * as config from '../config';
 import { IRequestOptions } from 'typed-rest-client/Interfaces';
 import { C4Utils } from '../utils';
 import { generateHmac } from './hmac';
+import { EventEmitter, ExtensionContext, MarkdownString, ThemeIcon, TreeDataProvider, TreeItem, TreeItemCollapsibleState, window, workspace, Event, commands, env } from 'vscode';
+import { HttpClient } from 'typed-rest-client/HttpClient';
 
-class Item extends vscode.TreeItem {
+class Item extends TreeItem {
 	name: string;
 	bcid: string | undefined;
 	hasChildren: boolean | undefined;
@@ -35,7 +35,7 @@ class Child {
 	businessCapabilities: Item[];
 }
 
-export class BusinessCapabilityProvider implements vscode.TreeDataProvider<Item> {
+export class BusinessCapabilityProvider implements TreeDataProvider<Item> {
 	private readonly PARAMS = '?findBy=CORE';
 	private readonly ROOT_ID: string = '/business-capability';
 	private readonly PATH = '/capability/api/v1';
@@ -44,15 +44,15 @@ export class BusinessCapabilityProvider implements vscode.TreeDataProvider<Item>
 	private readonly initChild: (items: Item) => Promise<Item[]>;
 	private readonly initRoot: () => Promise<Item[]>;
 
-	constructor(context: vscode.ExtensionContext) {
+	constructor(context: ExtensionContext) {
 
-		const view = vscode.window.createTreeView('bcCatalogueView', { treeDataProvider: this, showCollapseAll: true, canSelectMany: true });
+		const view = window.createTreeView('bcCatalogueView', { treeDataProvider: this, showCollapseAll: true, canSelectMany: true });
 
 		context.subscriptions.push(view);
 		const options: IRequestOptions = <IRequestOptions>{};
-		options.ignoreSslError = !(vscode.workspace.getConfiguration().get(config.BEELINE_CERT_VERIFICATION) as boolean);
-		const archopsApiUrl = C4Utils.removeTrailingSlash(vscode.workspace.getConfiguration().get(config.BEELINE_API_URL) as string);
-		const httpc = new httpm.HttpClient('vscode-c4-dsl-plugin', [], options);
+		options.ignoreSslError = !(workspace.getConfiguration().get(config.BEELINE_CERT_VERIFICATION) as boolean);
+		const archopsApiUrl = C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_API_URL) as string);
+		const httpc = new HttpClient('vscode-c4-dsl-plugin', [], options);
 
 		this.initChild = async (chapter: Item): Promise<Item[]> => {
 			const children: string = `/${chapter.bcid}/children`;
@@ -70,12 +70,12 @@ export class BusinessCapabilityProvider implements vscode.TreeDataProvider<Item>
 		this.initItem = (items: Item[], istc: boolean): Item[] => {
 			items.forEach(item => {
 				if (item.hasChildren) {
-					item.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
+					item.collapsibleState = TreeItemCollapsibleState.Collapsed;
 				}
 				if (typeof item.description === 'string') {
-					item.tooltip = new vscode.MarkdownString(item.description);
+					item.tooltip = new MarkdownString(item.description);
 				}
-				item.iconPath = (istc) ? vscode.ThemeIcon.File : vscode.ThemeIcon.Folder;
+				item.iconPath = (istc) ? ThemeIcon.File : ThemeIcon.Folder;
 				item.label = item.name;
 				item.description = item.code;
 				item.bcid = item.id;
@@ -96,24 +96,24 @@ export class BusinessCapabilityProvider implements vscode.TreeDataProvider<Item>
 				catch((error) => []);
 		};
 
-		vscode.commands.registerCommand('c4.capabilitiesCatalogue.copy', async (element: Item) => {
-			vscode.env.clipboard.writeText(element.code).then(() => {
-				vscode.window.showInformationMessage(`Capability code ${element.code} copied to clipboard!`);
+		commands.registerCommand('c4.capabilitiesCatalogue.copy', async (element: Item) => {
+			env.clipboard.writeText(element.code).then(() => {
+				window.showInformationMessage(`Capability code ${element.code} copied to clipboard!`);
 			}, (error) => {
-				vscode.window.showErrorMessage(`Failed to copy capability code: ${error.message}`);
+				window.showErrorMessage(`Failed to copy capability code: ${error.message}`);
 			});			
 		});
 
 	}
 
-	private readonly _onDidChangeTreeData: vscode.EventEmitter<Item | undefined | null | void> = new vscode.EventEmitter<Item | undefined | null | void>();
-	readonly onDidChangeTreeData: vscode.Event<Item | undefined | null | void> = this._onDidChangeTreeData.event;
+	private readonly _onDidChangeTreeData: EventEmitter<Item | undefined | null | void> = new EventEmitter<Item | undefined | null | void>();
+	readonly onDidChangeTreeData: Event<Item | undefined | null | void> = this._onDidChangeTreeData.event;
 
 	refresh(): void {
 		this._onDidChangeTreeData.fire();
 	}
 
-	getTreeItem(element: Item): vscode.TreeItem {
+	getTreeItem(element: Item): TreeItem {
 		return element;
 	}
 

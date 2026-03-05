@@ -27,12 +27,6 @@
             <version>1.5.20</version>
             <scope>compile</scope>
         </dependency>
-        <!-- https://mvnrepository.com/artifact/info.picocli/picocli -->
-        <dependency>
-            <groupId>info.picocli</groupId>
-            <artifactId>picocli</artifactId>
-            <version>4.7.7</version>
-        </dependency>
         <!-- https://mvnrepository.com/artifact/com.google.inject/guice -->
         <dependency>
             <groupId>com.google.inject</groupId>
@@ -43,7 +37,7 @@
         <dependency>
             <groupId>org.eclipse.lsp4j</groupId>
             <artifactId>org.eclipse.lsp4j</artifactId>
-            <version>0.24.0</version>
+            <version>1.0.0</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/com.structurizr/structurizr-dsl -->
         <dependency>
@@ -108,7 +102,6 @@
                     <debug>false</debug>
                 </configuration>
             </plugin>
-            <!-- AspectJ оставляем без изменений, он нужен для компиляции -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>aspectj-maven-plugin</artifactId>
@@ -159,7 +152,7 @@
                             <outputDirectory>${outputDirectory}</outputDirectory>
                             <finalName>server</finalName>
                             <shadedArtifactAttached>false</shadedArtifactAttached>
-                            <minimizeJar>false</minimizeJar>
+                            <minimizeJar>true</minimizeJar>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                             <artifactSet>
                                 <excludes>
@@ -182,87 +175,15 @@
                             </artifactSet>
                             <filters>
                                 <filter>
-                                    <artifact>com.structurizr:structurizr-client</artifact>
-                                    <includes>
-                                        <include>com/structurizr/util/**</include>
-                                        <include>com/structurizr/view/**</include>
-                                        <include>com/structurizr/io/WorkspaceWriter**</include>
-                                        <include>com/structurizr/io/json/JsonWriter**</include>
-                                        <include>com/structurizr/http/**</include>
-                                    </includes>
-                                </filter>
-                                <filter>
-                                    <artifact>com.structurizr:structurizr-export</artifact>
-                                    <includes>
-                                        <include>com/structurizr/export/AbstractDiagramExporter*</include>
-                                        <include>com/structurizr/export/AbstractExporter*</include>
-                                        <include>com/structurizr/export/DiagramExporter*</include>
-                                        <include>com/structurizr/export/Exporter*</include>
-                                        <include>com/structurizr/export/Diagram*</include>
-                                        <include>com/structurizr/export/IndentingWriter*</include>
-                                        <include>com/structurizr/export/IndentType*</include>
-                                        <include>com/structurizr/export/Legend*</include>
-                                        <include>com/structurizr/export/dot/DOTDiagram*</include>
-                                    </includes>
-                                </filter>
-                                <filter>
-                                    <artifact>com.fasterxml.jackson.core:jackson-databind</artifact>
-                                    <includes>
-                                        <include>com/fasterxml/jackson/databind/**</include>
-                                    </includes>
+                                    <artifact>commons-logging:commons-logging</artifact>
+                                    <includes><include>**</include></includes>
                                     <excludes>
                                         <exclude>META-INF/versions/**</exclude>
-                                        <exclude>**/jdk14/**</exclude>
-                                        <exclude>com/fasterxml/jackson/databind/ext/Java7*</exclude>
-                                        <exclude>com/fasterxml/jackson/databind/ext/NioPath*</exclude>
-                                    </excludes>
-                                </filter>
-                                <filter>
-                                    <artifact>info.picocli:picocli</artifact>
-                                    <includes>
-                                        <include>picocli/CommandLine*</include>
-                                        <include>picocli/CommandLine$I*</include>
-                                        <include>picocli/CommandLine$Model*</include>
-                                        <include>picocli/CommandLine$ParseResult*</include>
-                                    </includes>
-                                    <excludes>
-                                        <exclude>picocli/AutoComplete*</exclude>
-                                        <exclude>picocli/codegen/**</exclude>
-                                    </excludes>
-                                </filter>
-                                <filter>
-                                    <artifact>org.apache.commons:commons-text</artifact>
-                                    <includes>
-                                        <include>org/apache/commons/text/*</include>
-                                        <include>org/apache/commons/text/matcher/**</include>
-                                        <include>org/apache/commons/text/lookup/**</include>
-                                        <include>org/apache/commons/text/translate/**</include>
-                                    </includes>
-                                    <excludes>
-                                        <exclude>org/apache/commons/text/similarity/**</exclude>
-                                    </excludes>
-                                </filter>
-                                <filter>
-                                    <artifact>com.google.guava:guava</artifact>
-                                    <includes>
-                                        <include>**/*</include>
-                                    </includes>
-                                    <excludes>
-                                        <exclude>com/google/common/hash/**</exclude>
-                                        <exclude>com/google/common/reflect/**</exclude>
-                                    </excludes>
-                                </filter>
-                                <filter>
-                                    <artifact>org.apache.commons:commons-lang3</artifact>
-                                    <includes>
-                                        <include>org/apache/commons/lang3/*</include>
-                                        <include>org/apache/commons/lang3/charsets/**</include>
-                                    </includes>
-                                    <excludes>
-                                        <exclude>org/apache/commons/lang3/time/**</exclude>
-                                        <exclude>org/apache/commons/lang3/concurrent/**</exclude>
-                                        <exclude>org/apache/commons/lang3/builder/**</exclude>
-                                    </excludes>
+                                        <exclude>org/apache/commons/logging/impl/Jdk13*</exclude>
+                                        <exclude>org/apache/commons/logging/impl/Jdk14*</exclude>
+                                        <exclude>org/apache/commons/logging/impl/Avalon*</exclude>
+                                        <exclude>org/apache/commons/logging/impl/LogKit*</exclude>
+                                    </excludes>            
                                 </filter>
                                 <filter>
                                     <artifact>*:*</artifact>
@@ -270,10 +191,10 @@
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
-                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                        <exclude>META-INF/MANIFEST.MF*</exclude>
                                         <exclude>META-INF/DEPENDENCIES</exclude>
-                                        <exclude>META-INF/LICENSE*</exclude>
-                                        <exclude>META-INF/NOTICE*</exclude>
+                                        <exclude>META-INF/*LICENSE*</exclude>
+                                        <exclude>META-INF/*NOTICE*</exclude>
                                         <exclude>module-info.class</exclude>
                                         <exclude>META-INF/versions/*/module-info.class</exclude>
                                         <exclude>about.html</exclude>

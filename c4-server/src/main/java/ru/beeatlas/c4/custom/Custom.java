@@ -128,6 +128,7 @@ public class Custom {
             new URL(url).toURI();
             return true;
         } catch (Exception e) {
+            logger.debug(e.getMessage());
             return false;
         }
     }
@@ -280,6 +281,7 @@ public class Custom {
             allTrustingTrustManager = sc.getSocketFactory();
             allTrustingHostnameVerifier = (String hostname, SSLSession session) -> true;
         } catch (Exception e) {
+            logger.debug(e.getMessage());
         }
     }
 
@@ -418,6 +420,7 @@ public class Custom {
                 return in.lines().collect(Collectors.joining());
             }
         } catch (IOException e) {
+            logger.debug(e.getMessage());
             return "";
         }
     }
@@ -1062,6 +1065,7 @@ public class Custom {
             outStream.close();
             return true;
         } catch (Exception e) {
+            logger.debug(e.getMessage());
             return false;
         }
     }

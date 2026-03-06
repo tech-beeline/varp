@@ -1,5 +1,14 @@
 # Change Log
 
+## 1.0.16
+
+- Using stdin/stdout instead of sockets (during iteraction with lang server)
+- Using maven shade (with minimizeJar) instead of maven assembly
+- Removing picocli dependency
+- Up lsp4j to 1.0.0
+- Minor TypeScript code cleanup
+- Some custom code decoration
+
 ## 1.0.15
 
 - Updating JS dependencies

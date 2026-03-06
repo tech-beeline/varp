@@ -14,30 +14,30 @@
     limitations under the License.
 */
 
-import * as vscode from 'vscode';
-import * as httpm from 'typed-rest-client/HttpClient';
 import * as config from '../config';
 import { IRequestOptions } from 'typed-rest-client/Interfaces';
 import { C4Utils } from '../utils';
 import { generateHmac } from './hmac';
+import { HttpClient } from 'typed-rest-client/HttpClient';
+import { ExtensionContext, TreeDataProvider, TreeItem, TreeItemCollapsibleState, window, workspace } from 'vscode';
 
-class Cj extends vscode.TreeItem {
+class Cj extends TreeItem {
     name: string;
 	bpmn: boolean;
     childrens: Cj[];
 }
 
-export class CjProvider implements vscode.TreeDataProvider<Cj> {
+export class CjProvider implements TreeDataProvider<Cj> {
 	private readonly PARAMS = '?sample=ALL';
 	private readonly CJ_ID = '/cj';
 	private readonly PATH = '/cx/api/cx/v1/product';
 
-	constructor(context: vscode.ExtensionContext) {
-		const view = vscode.window.createTreeView('cjCatalogueView', { treeDataProvider: this, showCollapseAll: true, canSelectMany: true });
+	constructor(context: ExtensionContext) {
+		const view = window.createTreeView('cjCatalogueView', { treeDataProvider: this, showCollapseAll: true, canSelectMany: true });
 		context.subscriptions.push(view);
 	}
 
-	getTreeItem(element: Cj): vscode.TreeItem {
+	getTreeItem(element: Cj): TreeItem {
 		return element;
 	}
 
@@ -45,7 +45,7 @@ export class CjProvider implements vscode.TreeDataProvider<Cj> {
 		cjs.forEach(cj => {
 			cj.label = cj.name;
 			if (cj.childrens.length === 0) { /* empty */ } else {
-				cj.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
+				cj.collapsibleState = TreeItemCollapsibleState.Collapsed;
 			}
 			this.initChapter(cj.childrens);
 		});
@@ -59,9 +59,9 @@ export class CjProvider implements vscode.TreeDataProvider<Cj> {
 
 		const headers = generateHmac('GET', this.PATH + this.CJ_ID);
 		const options: IRequestOptions = <IRequestOptions>{};
-		options.ignoreSslError = !(vscode.workspace.getConfiguration().get(config.BEELINE_CERT_VERIFICATION) as boolean);
-		const beelineApiUrl = C4Utils.removeTrailingSlash(vscode.workspace.getConfiguration().get(config.BEELINE_API_URL) as string);
-		const httpc = new httpm.HttpClient('vscode-c4-dsl-plugin', [], options);
+		options.ignoreSslError = !(workspace.getConfiguration().get(config.BEELINE_CERT_VERIFICATION) as boolean);
+		const beelineApiUrl = C4Utils.removeTrailingSlash(workspace.getConfiguration().get(config.BEELINE_API_URL) as string);
+		const httpc = new HttpClient('vscode-c4-dsl-plugin', [], options);
 
 		let path = beelineApiUrl + this.PATH + this.CJ_ID + this.PARAMS;
 		return httpc.get(path, headers).

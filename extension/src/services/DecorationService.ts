@@ -25,7 +25,7 @@ import {
 import { CommandResultTextDecorations, DecoratedRange } from "../types";
 
 class DecorationService {
-  private decorationType: TextEditorDecorationType;
+  private readonly decorationType: TextEditorDecorationType;
 
   constructor(decorationType: TextEditorDecorationType) {
     this.decorationType = decorationType;
@@ -35,13 +35,9 @@ class DecorationService {
     editor: TextEditor | undefined,
     document: TextDocument | undefined
   ) {
-    if (!editor) {
-      editor = window.activeTextEditor;
-    }
-    if (!document) {
-      document = editor?.document;
-    }
-    if (editor && document && document.languageId === "c4") {
+    editor ??= window.activeTextEditor;
+    document ??= editor?.document;
+    if (editor && document?.languageId === "c4") {
       commands.executeCommand("c4-server.text-decorations", { uri: document.uri.path, }).then((callback) => {
         editor?.setDecorations(
           this.decorationType,

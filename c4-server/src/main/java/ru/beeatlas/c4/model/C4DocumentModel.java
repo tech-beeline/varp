@@ -199,7 +199,7 @@ public class C4DocumentModel {
 	}
 
 	public List<DecoratorRange> calculateDecorations() {
-		return decorations;
+		return Stream.concat(decorations.stream(), Custom.getInstance().getDecorations(this)).toList();
 	}
 
 	public View findViewByKey(String viewKey) throws Exception {
@@ -249,6 +249,10 @@ public class C4DocumentModel {
 
 	public int getRelationshipsCount() {
 		return relationShipsToLineNumber.size();
+	}
+
+	public List<C4Property> getProperties() {
+		return properties;
 	}
 
 	public List<Integer> calculateTokens() {

@@ -15,6 +15,7 @@ async function main() {
     outfile: 'dist/extension.js',
     external: ['vscode'],
     logLevel: 'warning',
+    treeShaking: true,
     plugins: [
       /* add to the end of plugins array */
       esbuildProblemMatcherPlugin

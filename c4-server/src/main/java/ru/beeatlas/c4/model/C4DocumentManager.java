@@ -230,7 +230,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	@Override
 	public void onParsedProperty(String name, String value) {
 		if(context != null) {
-			context.model.addProperty(new C4Property(context.line.number(), name, value));
+			context.model.addProperty(new C4Property(context.line.number(), context.line.source(), name, value));
 		} else {
 			logger.error("onParsedProperty() - Context is null");
 		}

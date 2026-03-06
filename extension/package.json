@@ -9,7 +9,7 @@
   },
   "license": "Apache-2.0",
   "icon": "images/logo.png",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "engines": {
     "vscode": "^1.73.0"
   },
@@ -284,6 +284,7 @@
   "activationEvents": [
     "onLanguage:c4"
   ],
+  "browser": "./dist/extension",
   "main": "./dist/extension",
   "devDependencies": {
     "@hpcc-js/wasm-graphviz": "^1.10.0",
@@ -303,7 +304,7 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "prepare": "yarn run clean && yarn run build",
-    "clean": "rimraf lib pack",
+    "clean": "rimraf --glob \"*.jar\"",
     "build": "npm run check-types && node esbuild.js --production",
     "build-server": "cd ../c4-server && mvnw package -f ./pom.xml -Djps.track.ap.dependencies=false -DassembleDirectory=../extension/server -DoutputDirectory=../extension/",
     "clean-server": "cd ../c4-server && mvnw clean -f ./pom.xml",

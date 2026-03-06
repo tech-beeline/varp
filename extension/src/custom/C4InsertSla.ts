@@ -22,20 +22,21 @@ import {
   workspace
 } from "vscode";
 
-import * as fs from 'node:fs';
-import * as httpm from 'typed-rest-client/HttpClient';
 import { IRequestOptions } from "typed-rest-client/Interfaces";
 import { BEELINE_API_URL, BEELINE_CERT_VERIFICATION } from "../config";
 import { generateHmac } from "./hmac";
 import { CodeLensCommandArgs } from "../types/CodeLensCommandArgs";
 import { dirname, join } from 'node:path';
 import { C4Utils } from "../utils/c4-utils";
+import { HttpClient } from "typed-rest-client/HttpClient";
+import { existsSync, readFile } from "node:fs";
+import { EOL } from "node:os";
 
 export function c4InsertSla() {
   commands.registerCommand("c4.insert.sla", async (args : CodeLensCommandArgs) => {
     const options: IRequestOptions = <IRequestOptions>{};
     options.ignoreSslError = !(workspace.getConfiguration().get(BEELINE_CERT_VERIFICATION) as boolean);
-    const httpc = new httpm.HttpClient('vscode-c4-dsl-plugin', [], options);
+    const httpc = new HttpClient('vscode-c4-dsl-plugin', [], options);
 
     window.withProgress({
       location: ProgressLocation.Notification,
@@ -54,7 +55,7 @@ export function c4InsertSla() {
           progress.report({ message: "Формирование SLA..." });
           httpc.post(beelineApiUrl + path, content, headers)
             .then((result) => { return result.readBody() }).then((body) => {
-              var lines = body.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0).map((line) => " ".repeat(args.padding) + line);
+              let lines = body.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0).map((line) => " ".repeat(args.padding) + line);
               const editor = window.activeTextEditor;
               if (editor) {
                 editor.edit(editBuilder => {
@@ -72,8 +73,7 @@ export function c4InsertSla() {
                       return;
                     }
                   }
-                  var os = require('os');
-                  editBuilder.insert(new Position(args.lastLine, 0), lines.join(os.EOL) + os.EOL);
+                  editBuilder.insert(new Position(args.lastLine, 0), lines.join(EOL) + EOL);
                 });
               }
             })
@@ -98,8 +98,8 @@ export function c4InsertSla() {
           if(fileName !== undefined) {
             const directoryPath = dirname(fileName);
             const fullPath = join(directoryPath, args.apiUrl);
-            if(fs.existsSync(fullPath)) {
-              fs.readFile(fullPath, 'utf8', (error, data) => {
+            if(existsSync(fullPath)) {
+              readFile(fullPath, 'utf8', (error, data) => {
                 if (error) {
                   window.showErrorMessage(error.message);
                 } else {

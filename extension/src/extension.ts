@@ -111,7 +111,7 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
 
   const jarPath = context.asAbsolutePath('server.jar');
   
-  const args = ["-XX:+UseParallelGC", "-XX:TieredStopAtLevel=1", "-Dfile.encoding=UTF8", "-jar", jarPath];
+  const args = ["-XX:+UseParallelGC", "-XX:TieredStopAtLevel=1", "-Dfile.encoding=UTF8", "-jar", `"${jarPath}"`];
   const opts = (workspace.workspaceFolders) ? { cwd: workspace.workspaceFolders[0].uri.fsPath, shell: true, env : env } : { shell: true, env : env };
 
   const serverOptions: ServerOptions = {

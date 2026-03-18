@@ -9,7 +9,7 @@
   },
   "license": "Apache-2.0",
   "icon": "images/logo.png",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "engines": {
     "vscode": "^1.73.0"
   },
@@ -284,7 +284,6 @@
   "activationEvents": [
     "onLanguage:c4"
   ],
-  "browser": "./dist/extension",
   "main": "./dist/extension",
   "devDependencies": {
     "@hpcc-js/wasm-graphviz": "^1.10.0",

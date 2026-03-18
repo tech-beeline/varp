@@ -1,5 +1,11 @@
 # Change Log
 
+## 1.0.17
+
+- Fixed bug for .md files
+- Fixed an error running when the installation path contains a space
+- Definition provider refactor
+
 ## 1.0.16
 
 - Using stdin/stdout instead of sockets (during iteraction with lang server)

@@ -16,6 +16,8 @@
 
 package ru.beeatlas.c4.provider;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -47,13 +49,13 @@ public class C4DefinitionProvider {
 
 		int currentLineNumner = params.getPosition().getLine() + 1;
 
-		List<Location> locations = new ArrayList<>();
+		List<LocationLink> locations = new ArrayList<>();
 		logger.debug("calcDefinitions for line {}", currentLineNumner);
 
 		// search for references in views
-		c4Model.getViewAtLineNumber(currentLineNumner).ifPresent( v -> {
-			findModelElementById(c4Model, C4Utils.getIdentifierOfView(v), params).ifPresent( locations::add);
-		});
+		c4Model.getViewAtLineNumber(currentLineNumner).ifPresent( v -> 
+			findModelElementById(c4Model, C4Utils.getIdentifierOfView(v), params).ifPresent( locations::add)
+		);
 
 		c4Model.getRelationshipAtLineNumber(currentLineNumner).ifPresent( r -> {
 			findModelElementById(c4Model, r.getObject().getSourceId(), params).ifPresent( locations::add);
@@ -68,95 +70,86 @@ public class C4DefinitionProvider {
 			}
 		});
 
-		c4Model.getIncludeAtLineNumber(currentLineNumner).ifPresent( path -> {
-			final int startPos = C4Utils.getStartPosition(c4Model.getLineAt(params.getPosition().getLine()), path);
-			final int endPos = startPos + path.length();
-			if(params.getPosition().getCharacter() >= startPos && params.getPosition().getCharacter() <= endPos) {
-				C4DocumentModel ref = c4Model.getReferencedModelByPath(path);
-				final Location location = new Location();
-				location.setRange(new Range(new Position(0,0), new Position(0,0)));
-				location.setUri(ref.getUri());
-				locations.add(location);
+		c4Model.getIncludeAtLineNumber(currentLineNumner).ifPresent(path -> {
+			final String lineText = c4Model.getLineAt(params.getPosition().getLine());
+			Path fullPath = Paths.get(path);
+			Path fileNamePath = fullPath.getFileName();
+			final int startPos = C4Utils.getStartPosition(lineText, fileNamePath.toString());
+			path = fileNamePath.toString();
+			if (startPos != C4Utils.NOT_FOUND_WITHIN_STRING) {
+				final int endPos = startPos + path.length();
+				int cursorChar = params.getPosition().getCharacter();
+				if (cursorChar >= startPos && cursorChar <= endPos) {
+					C4DocumentModel ref = c4Model.getReferencedModelByPath(path);
+					if (ref != null) {
+						LocationLink link = new LocationLink();
+						link.setOriginSelectionRange(new Range(
+							new Position(params.getPosition().getLine(), startPos),
+							new Position(params.getPosition().getLine(), endPos)
+						));
+						link.setTargetUri(ref.getUri());
+						Range fullFileRange = new Range(new Position(0, 0), new Position(0, 0));
+						link.setTargetRange(fullFileRange);
+						link.setTargetSelectionRange(fullFileRange);
+						locations.add(link);
+					}
+				}
 			}
-			logger.debug("**** START_POS INCLUDE "+startPos);
+			logger.debug("**** START_POS INCLUDE " + startPos);
 		});
 
-		return Either.forLeft(locations);
+		return Either.forRight(locations);
 	}
 
-	private Optional<Location> findModelElementById(C4DocumentModel hostModel, String id, DefinitionParams params) {
-
-		if(id == null || id.equals(IDENTIFIER_WILDCARD)) {
+	private Optional<LocationLink> findModelElementById(C4DocumentModel hostModel, String id, DefinitionParams params) {
+		if (id == null || id.equals(IDENTIFIER_WILDCARD)) {
 			return Optional.empty();
 		}
 
-		Optional<Location> result = Optional.empty();
 		List<Entry<Integer, C4ObjectWithContext<Element>>> refs = hostModel.findElementsById(id);
-		if(refs.isEmpty()) {
-			C4DocumentModel extendsBy = hostModel.getExtendsBy();
-			if(extendsBy != null) {
-				refs = extendsBy.findElementsById(id);
-			}
+		if (refs.isEmpty() && hostModel.getExtendsBy() != null) {
+			refs = hostModel.getExtendsBy().findElementsById(id);
 		}
-		logger.info(id + " -> " + refs.size());
-		if(refs.size() == 1) {
-			C4DocumentModel refModel = refs.get(0).getValue().getContainer();
+
+		if (refs.size() == 1) {
 			int refLineNumber = refs.get(0).getKey();
+			C4DocumentModel refModel = refs.get(0).getValue().getContainer();
 			Optional<C4ObjectWithContext<Element>> optionalElement = refModel.getElementAtLineNumber(refLineNumber);
-			if(optionalElement.isPresent()) {
+
+			if (optionalElement.isPresent()) {
 				C4ObjectWithContext<Element> element = optionalElement.get();
-				logger.debug("Found referenced element in line {} for usage in line {}", refLineNumber, params.getPosition().getLine());
-				logger.debug("    Details: {}",element.getIdentifier());
-				int startPos = C4Utils.getStartPosition(hostModel.getLineAt(params.getPosition().getLine()), element.getIdentifier());
-				if(startPos == C4Utils.NOT_FOUND_WITHIN_STRING) {
-					logger.error("Identifier {} not found in line {} ", element.getIdentifier(), params.getPosition().getLine());
-				} else {
-					int endPos = startPos + element.getIdentifier().length();
-					if(params.getPosition().getCharacter() >= startPos && params.getPosition().getCharacter() <= endPos) {
-						logger.debug("    Cursor {} within range [{}, {}]", params.getPosition().getCharacter(), startPos, endPos);
-						result = Optional.of(createLocation(refModel, refLineNumber-1, element.getIdentifier()));
-					} else {
-						String fullIdentifier = element.getIdentifier();
-						Element parent = element.getObject().getParent();
-						while(parent != null) {
-							refs = hostModel.findElementsById(parent.getId());
-							if(refs.isEmpty()) {
-								C4DocumentModel extendsBy = hostModel.getExtendsBy();
-								if(extendsBy != null) {
-									refs = extendsBy.findElementsById(parent.getId());
-								}
-							}
-							if(refs.size() == 1) {
-								fullIdentifier = refs.get(0).getValue().getIdentifier() + "." + fullIdentifier;
-							}
-							parent = parent.getParent();
-						}
-						startPos = C4Utils.getStartPosition(hostModel.getLineAt(params.getPosition().getLine()), fullIdentifier);
-						if(startPos == C4Utils.NOT_FOUND_WITHIN_STRING) {
-							logger.error("Identifier {} not found in line {} ", element.getIdentifier(), params.getPosition().getLine());
-						} else {
-							endPos = startPos + fullIdentifier.length();
-							if(params.getPosition().getCharacter() >= startPos && params.getPosition().getCharacter() <= endPos) {
-								logger.debug("    Cursor {} within range [{}, {}]", params.getPosition().getCharacter(), startPos, endPos);
-								result = Optional.of(createLocation(refModel, refLineNumber - 1, element.getIdentifier()));
-							} else {
-								logger.debug("    Cursor {} out of range [{}, {}]", params.getPosition().getCharacter(), startPos, endPos);
-							}
-						}
+				String currentLineText = hostModel.getLineAt(params.getPosition().getLine());
+				String fullIdentifier = element.getIdentifier(); 
+				int startPos = C4Utils.getStartPosition(currentLineText, fullIdentifier);
+				if (startPos != C4Utils.NOT_FOUND_WITHIN_STRING) {
+					int endPos = startPos + fullIdentifier.length();
+					int cursorChar = params.getPosition().getCharacter();
+					if (cursorChar >= startPos && cursorChar <= endPos) {
+						Range originRange = new Range(
+							new Position(params.getPosition().getLine(), startPos),
+							new Position(params.getPosition().getLine(), endPos)
+						);
+						return Optional.of(createLocationLink(refModel, refLineNumber - 1, element.getIdentifier(), originRange));
 					}
 				}
 			}
 		}
-
-		return result;
+		return Optional.empty();
 	}
 
-	private Location createLocation(C4DocumentModel c4Model, int lineNumber, String referencedId) {
-		final int refStartPos = c4Model.getLineAt(lineNumber).indexOf(referencedId);
-		final int refEndPos = refStartPos + referencedId.length();
-		logger.debug("    Reference Found at linenumber {}, in range [{}, {}]", lineNumber, refStartPos, refEndPos);
-		return new Location(c4Model.getUri(),
-				new Range(new Position(lineNumber, refStartPos), new Position(lineNumber, refEndPos)));
-	}
+	private LocationLink createLocationLink(C4DocumentModel targetModel, int targetLine, String targetId, Range originRange) {
+		String lineText = targetModel.getLineAt(targetLine);
+		int startPos = lineText.indexOf(targetId);
+		if (startPos == -1) startPos = 0;
+		int endPos = startPos + targetId.length();
+		Range selectionRange = new Range(new Position(targetLine, startPos), new Position(targetLine, endPos));
+		Range targetRange = new Range(new Position(targetLine, 0), new Position(targetLine, lineText.length()));
+		LocationLink link = new LocationLink();
+		link.setOriginSelectionRange(originRange);
+		link.setTargetUri(targetModel.getUri());
+		link.setTargetRange(targetRange);
+		link.setTargetSelectionRange(selectionRange);
+		return link;
+	}	
 
 }

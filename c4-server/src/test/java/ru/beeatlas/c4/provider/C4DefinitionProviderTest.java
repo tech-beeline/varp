@@ -88,9 +88,9 @@ public class C4DefinitionProviderTest {
 
         Either<List<? extends Location>, List<? extends LocationLink>> result = definitionProvider.calcDefinitions(model, params);
 
-        assertEquals(1, result.getLeft().size());
+        assertEquals(1, result.getRight().size());
 
-        assertEquals(new Range(new Position(p3, p4), new Position(p5, p6)), result.getLeft().get(0).getRange());
+        assertEquals(new Range(new Position(p3, p4), new Position(p5, p6)), result.getRight().get(0).getTargetSelectionRange());
     }
 
     @Test
@@ -100,7 +100,7 @@ public class C4DefinitionProviderTest {
 
         Either<List<? extends Location>, List<? extends LocationLink>> result = definitionProvider.calcDefinitions(model, params);
 
-        assertEquals(0, result.getLeft().size());
+        assertEquals(0, result.getRight().size());
     }
 
 }

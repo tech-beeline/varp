@@ -1063,6 +1063,11 @@ public class Custom {
             outStreamWriter.flush();
             outStreamWriter.close();
             outStream.close();
+            if(conn instanceof HttpURLConnection httpURLConnection) {
+                logger.debug("Telemetry response code {}", httpURLConnection.getResponseCode());
+            } else if (conn instanceof HttpsURLConnection httpsURLConnection) {
+                logger.debug("Telemetry response code {}", httpsURLConnection.getResponseCode());
+            }
             return true;
         } catch (Exception e) {
             logger.debug(e.getMessage());

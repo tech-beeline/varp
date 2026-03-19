@@ -418,7 +418,6 @@ public class C4DocumentModel {
 		} catch (Exception e) {
 			return Collections.emptyList();
 		}
-
 	}
 
 	public String getSurroundingScope(int lineNumber) {

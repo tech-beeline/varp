@@ -130,17 +130,15 @@ public class C4TextDocumentService implements TextDocumentService {
 	public CompletableFuture<Hover> hover(HoverParams params) {
 		return params.getTextDocument().getUri().toLowerCase().endsWith(".dsl") ? CompletableFuture.supplyAsync(() -> {
 			C4DocumentModel model = getDocument(params.getTextDocument());
-			if (model == null) {
-				return null;
-			}
-			if (!model.isValid()) {
+			if (model == null || !model.isValid()) {
 				return null;
 			}
 			try {
 				return hoverProvider.calcHover(model, params);
-			} finally {
+			} catch (RuntimeException rte) {
+				return null;
 			}
-		}) : null;
+		}) : CompletableFuture.completedFuture(null);
 	}
 
 	@Override
@@ -148,24 +146,21 @@ public class C4TextDocumentService implements TextDocumentService {
 		return CompletableFuture.supplyAsync(() -> {
 			String uri = params.getTextDocument().getUri();
 			if (uri.length() < 3) {
-				return Either.forLeft(Collections.emptyList());	
+				return Either.forLeft(Collections.emptyList());
 			}
 			if(uri.substring(uri.length() - 3).equalsIgnoreCase(".md")) {
 				return Either.forLeft(Custom.getInstance().calcCompletionsAdr(uri, params.getPosition()));
 			}			
 			C4DocumentModel model = getDocument(params.getTextDocument());
-			if(model == null) {
-				return Either.forLeft(Collections.emptyList());	
-			}
-			if(!model.isValid()) {
+			if(model == null || !model.isValid()) {
 				return Either.forLeft(Collections.emptyList());	
 			}
 			try {
 				return Either.forLeft(completionProvider.calcCompletions(model, params.getPosition(), getElements()));
-			} finally {
+			} catch (RuntimeException rte) {
+				return Either.forLeft(Collections.emptyList());
 			}
 		});
-
 	}
 
 	@Override
@@ -181,7 +176,7 @@ public class C4TextDocumentService implements TextDocumentService {
 
 		return CompletableFuture.supplyAsync(() -> {
 			C4DocumentModel model = getDocument(params.getTextDocument());
-			if (!model.isValid()) {
+			if (model == null || !model.isValid()) {
 				return Collections.emptyList();
 			}
 			return model.getColorInformation();
@@ -195,22 +190,20 @@ public class C4TextDocumentService implements TextDocumentService {
 		String uri = params.getTextDocument().getUri();
 
 		if (uri.length() < 3 || uri.substring(uri.length() - 3).equalsIgnoreCase(".md")) {
-			return CompletableFuture.completedFuture(Either.forLeft(Collections.emptyList()));
+			return CompletableFuture.completedFuture(Either.forRight(Collections.emptyList()));
 		}
 
 		logger.info("definition");
 
 		return CompletableFuture.supplyAsync(() -> {
 			C4DocumentModel model = getDocument(params.getTextDocument());
-			if(model == null) {
-				return Either.forLeft(Collections.emptyList());	
-			}
-			if(!model.isValid()) {
-				return Either.forLeft(Collections.emptyList());	
+			if(model == null || !model.isValid()) {
+				return Either.forRight(Collections.emptyList());	
 			}
 			try {
 				return definitionProvider.calcDefinitions(model, params);
-			} finally {
+			} catch (RuntimeException rte) {
+				return Either.forRight(Collections.emptyList());
 			}
 		});
 	}
@@ -233,7 +226,8 @@ public class C4TextDocumentService implements TextDocumentService {
 		return CompletableFuture.supplyAsync(() -> {
 			try {
 				return Collections.singletonList(new ColorPresentation(colorToHex(params.getColor())));
-			} finally {
+			} catch (RuntimeException rte) {
+				return Collections.emptyList();
 			}
 		});
 	}
@@ -250,15 +244,13 @@ public class C4TextDocumentService implements TextDocumentService {
 
 		return CompletableFuture.supplyAsync(() -> {
 			C4DocumentModel model = getDocument(params.getTextDocument());
-			if (model == null) {
-				return new SemanticTokens(Collections.emptyList());
-			}
-			if (!model.isValid()) {
+			if (model == null || !model.isValid()) {
 				return new SemanticTokens(Collections.emptyList());
 			}
 			try {
 				return new SemanticTokens(model.calculateTokens());
-			} finally {
+			} catch (RuntimeException rte) {
+				return new SemanticTokens(Collections.emptyList());
 			}
 		});
 	}
@@ -267,14 +259,15 @@ public class C4TextDocumentService implements TextDocumentService {
 	public CompletableFuture<List<? extends CodeLens>> codeLens(CodeLensParams params) {
 		return params.getTextDocument().getUri().toLowerCase().endsWith(".dsl") ? CompletableFuture.supplyAsync(() -> {
 			C4DocumentModel model = getDocument(params.getTextDocument());
-			if (!model.isValid()) {
+			if (model == null || !model.isValid()) {
 				return Collections.emptyList();
 			}
 			try {
 				return model.calcCodeLenses();
-			} finally {
+			} catch (RuntimeException rte) {
+				return Collections.emptyList();
 			}
-		}) : null;
+		}) : CompletableFuture.completedFuture(Collections.emptyList());
 	}
 
 	@Override
@@ -290,15 +283,13 @@ public class C4TextDocumentService implements TextDocumentService {
 
 		return CompletableFuture.supplyAsync(() -> {
 			C4DocumentModel model = getDocument(params.getTextDocument());
-			if (model == null) {
-				return Collections.emptyList();
-			}
-			if (!model.isValid()) {
+			if (model == null || !model.isValid()) {
 				return Collections.emptyList();
 			}
 			try {
 				return formatterProvider.calculateFormattedTextEdits(model);
-			} finally {
+			} catch (RuntimeException rte) {
+				return Collections.emptyList();
 			}
 		});
 	}
@@ -392,10 +383,8 @@ public class C4TextDocumentService implements TextDocumentService {
 		try {
 			return documentManager.getElements();
 		} catch (Exception e) {
-			return null;
-		}
-
-		finally {
+			return Collections.emptySet();
+		} finally {
 			logger.info("<-- getElements");
 		}
 	}
@@ -408,8 +397,7 @@ public class C4TextDocumentService implements TextDocumentService {
 			return documentManager.getDocument(documentId);
 		} catch (URISyntaxException e) {
 			return null;
-		}
-		finally {
+		} finally {
 			logger.info("<-- getDocument");
 		}
 	}

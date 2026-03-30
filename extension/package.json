@@ -9,7 +9,7 @@
   },
   "license": "Apache-2.0",
   "icon": "images/logo.png",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "engines": {
     "vscode": "^1.73.0"
   },
@@ -38,7 +38,11 @@
       {
         "language": "yaml",
         "path": "./yaml.json"
-      }
+      },
+      {
+        "language": "json",
+        "path": "./styles.json"
+      }      
     ],
     "viewsContainers": {
       "activitybar": [

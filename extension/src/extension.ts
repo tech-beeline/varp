@@ -114,6 +114,9 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
   const args = ["-XX:+UseParallelGC", "-XX:TieredStopAtLevel=1", "-Dfile.encoding=UTF8", "-jar", `"${jarPath}"`];
   const opts = (workspace.workspaceFolders) ? { cwd: workspace.workspaceFolders[0].uri.fsPath, shell: true, env : env } : { shell: true, env : env };
 
+  const debugArgs = ["-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:5005,quiet=y", "-XX:+UseParallelGC", "-XX:TieredStopAtLevel=1", "-Dfile.encoding=UTF8", "-jar", `${jarPath}`];
+  const debugOpts = (workspace.workspaceFolders) ? { cwd: workspace.workspaceFolders[0].uri.fsPath, shell: false, env : env } : { shell: false, env : env };
+
   const serverOptions: ServerOptions = {
       run: { 
           command: 'java', 
@@ -122,8 +125,8 @@ function initExtension(context: ExtensionContext, env: NodeJS.ProcessEnv) {
       },
       debug: { 
           command: 'java', 
-          args: args,
-          options : opts
+          args: debugArgs,
+          options : debugOpts
       }
   };
 

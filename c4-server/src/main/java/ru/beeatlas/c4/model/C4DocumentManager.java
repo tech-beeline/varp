@@ -93,8 +93,16 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 
 	private Map<File, String> fileContent = new HashMap<>();
 
-	private int nextLeadingSpace = 0; 
+	private int nextLeadingSpace = 0;
 	private Workspace lastParsedWorkspace = null;
+
+	// Для создание кэша хэшей контента — пропускаем парсинг если файл не менялся
+	private Map<String, Integer> contentHashes = new ConcurrentHashMap<>();
+	private Map<String, PublishDiagnosticsParams> cachedDiagnostics = new ConcurrentHashMap<>();
+
+	// Для двойного буфера — новые модели парсятся в отдельную карту,
+	// чтобы hover/definition во время парсинга видели старую валидную модель
+	private Map<String, C4DocumentModel> pendingModels = new ConcurrentHashMap<>();
 
 	public Workspace getLastParsedWorkspace() {
 		return lastParsedWorkspace;
@@ -236,14 +244,30 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 		}
 	}
 
+	// Получает модель для файла во время парсинга.
+	// Сначала ищем в pendingModels (модели текущего цикла парсинга),
+	// если нет — создаём новую там же. Старые модели в c4Models не затрагиваются,
+	// поэтому hover/definition продолжают работать с валидными данными.
 	private C4DocumentModel getModel(File _file) {
 		String file = _file.getAbsolutePath();
-		return c4Models.computeIfAbsent(file, key -> new C4DocumentModel(file, true));
+		return pendingModels.computeIfAbsent(file, key -> new C4DocumentModel(file, true));
 	}
 
+	// Создаёт новую модель с контентом файла в pendingModels.
+	// Модель попадет в основной кэш c4Models только после успешного завершения парсинга
+	// (через commitPendingModels), обеспечивая атомарную подмену.
 	private C4DocumentModel createModel(File file, String content) {
 		C4DocumentModel model = new C4DocumentModel(content, file.getAbsolutePath());
-		return c4Models.compute(file.getAbsolutePath(), (k, v) -> model);	
+		pendingModels.put(file.getAbsolutePath(), model);
+		return model;
+	}
+
+	// Атомарно переносит все модели из pendingModels в основной кэш c4Models.
+	// Вызывается только после успешного завершения парсинга — до этого момента
+	// hover/definition видят предыдущую валидную версию моделей.
+	private void commitPendingModels() {
+		c4Models.putAll(pendingModels);
+		pendingModels.clear();
 	}
 
 	private static File findWorksapce(String currentDirectory, String fileName) {
@@ -271,11 +295,30 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	}
 
 	private PublishDiagnosticsParams calcDiagnosticsForFile(File file, String content) {
+
+		String filePath = file.getAbsolutePath();
 		
+		// Проверяем хэш контента — если файл не менялся, возвращаем
+		// кэшированную диагностику без повторного парсинга
+		logger.info("Check content changes for {}", filePath);
+		int newHash = content.hashCode();
+		Integer oldHash = contentHashes.get(filePath);
+		if (oldHash != null && oldHash.equals(newHash)) {
+			PublishDiagnosticsParams cached = cachedDiagnostics.get(filePath);
+			if (cached != null) {
+				logger.info("Content unchanged, skipping parse for {}", filePath);
+				return cached;
+			}
+		}
+		logger.info("Content changed, parsing for {}", filePath);
+
 		String currentDirectory = file.getParent();
 		CompletableFuture<ViewSet> layouts = null;
 
 		fileContent.put(file, content);
+
+		// Очищаем staging-область перед началом нового цикла парсинга
+		pendingModels.clear();
 
 		File worksapceJson = findWorksapce(currentDirectory, "workspace.json");
 		if(worksapceJson.exists() && worksapceJson.canRead()) {
@@ -327,7 +370,13 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 					model.setValid(true);
 				}
 			}
-			return new PublishDiagnosticsParams(file.toURI().toString(), errors);
+			// Парсинг завершен — фиксируем хэш контента и переносим модели
+			// из staging (pendingModels) в основной кэш (c4Models)
+			PublishDiagnosticsParams result = new PublishDiagnosticsParams(file.toURI().toString(), errors);
+			contentHashes.put(filePath, newHash);
+			cachedDiagnostics.put(filePath, result);
+			commitPendingModels();
+			return result;
 		}
 
 		C4DocumentModel model = createModel(file, content);
@@ -369,7 +418,12 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 							model.setValid(true);
 						}
 					}
-					return new PublishDiagnosticsParams(worksapceFile.toURI().toString(), errors);
+					// Парсинг workspace.dsl (fallback) завершен — фиксируем и переносим модели
+					PublishDiagnosticsParams result0 = new PublishDiagnosticsParams(worksapceFile.toURI().toString(), errors);
+					contentHashes.put(filePath, newHash);
+					cachedDiagnostics.put(filePath, result0);
+					commitPendingModels();
+					return result0;
 				}
 			} else {
 				logger.info("ParserException {}", e.getMessage());
@@ -389,7 +443,12 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 				model.setValid(true);
 			}
 		}
-		return new PublishDiagnosticsParams(file.toURI().toString(), errors);
+		// Парсинг обычного .dsl файла завершен — фиксируем и переносим модели
+		PublishDiagnosticsParams result = new PublishDiagnosticsParams(file.toURI().toString(), errors);
+		contentHashes.put(filePath, newHash);
+		cachedDiagnostics.put(filePath, result);
+		commitPendingModels();
+		return result;
 	}
 
 	public List<PublishDiagnosticsParams> calcDiagnostics(File file, String content) {

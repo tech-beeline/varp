@@ -13,8 +13,8 @@
                 {
                 "label": "Default Workspace",
                 "langId": "c4",
-                "snippetName": "Microservice",
-                "hover": ["Пример простой архитектуры сервиса с доступом в Интренет"],
+                "snippetName": "Default",
+                "hover": ["Пример простой архитектуры сервиса"],
                 "childrens": []
                 },
                 {
@@ -139,6 +139,21 @@
                     "childrens": []
                 }
             ]  
-        }
+        },
+        {
+            "label": "Styles",
+            "langId": "json",
+            "snippetName": "",
+            "hover": [],
+            "childrens": [
+                {
+                    "label": "Beeline style",
+                    "langId": "json",
+                    "snippetName": "BeelineStyle",
+                    "hover": ["Custom Beeline style"],
+                    "childrens": []
+                }
+            ]  
+        }        
     ]
 }

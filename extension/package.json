@@ -42,7 +42,7 @@
       {
         "language": "json",
         "path": "./styles.json"
-      }      
+      }
     ],
     "viewsContainers": {
       "activitybar": [

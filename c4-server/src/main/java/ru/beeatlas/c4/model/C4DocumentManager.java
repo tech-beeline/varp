@@ -297,10 +297,23 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 	private PublishDiagnosticsParams calcDiagnosticsForFile(File file, String content) {
 
 		String filePath = file.getAbsolutePath();
-		
+		String currentDirectory = file.getParent();
+
+		// Find workspace.dsl early — needed for combined cache key
+		File worksapceFile = findWorksapce(currentDirectory, "workspace.dsl");
+		boolean isWorkspace = worksapceFile.getAbsolutePath().equals(file.getAbsolutePath());
+
 		// Check content hash — if file unchanged, return cached diagnostics without re-parsing.
+		// For fragment files, combine hash with workspace.dsl content to detect changes in either file.
 		logger.info("Check content changes for {}", filePath);
-		int newHash = content.hashCode();
+		int fileHash = content.hashCode();
+		int newHash = fileHash;
+		if (!isWorkspace && worksapceFile.exists()) {
+			String wsContent = fileContent.get(worksapceFile);
+			if (wsContent != null) {
+				newHash = 31 * newHash + wsContent.hashCode();
+			}
+		}
 		Integer oldHash = contentHashes.get(filePath);
 		if (oldHash != null && oldHash.equals(newHash)) {
 			PublishDiagnosticsParams cached = cachedDiagnostics.get(filePath);
@@ -310,8 +323,6 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 			}
 		}
 		logger.info("Content changed, parsing for {}", filePath);
-
-		String currentDirectory = file.getParent();
 		CompletableFuture<ViewSet> layouts = null;
 
 		fileContent.put(file, content);
@@ -344,9 +355,6 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 		StructurizrDslParser parser = new StructurizrDslParser();
 		List<Diagnostic> errors = new ArrayList<>();
 
-		File worksapceFile = findWorksapce(currentDirectory, "workspace.dsl");
-		boolean isWorkspace = worksapceFile.getAbsolutePath().equals(file.getAbsolutePath());
-
 		if (isWorkspace) {
 			C4DocumentModel model = createModel(file, content);
 			try {
@@ -364,9 +372,6 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 					if(errors.isEmpty()) {
 						updateModel(model, layouts);
 					}
-				} else {
-					errors.clear();
-					model.setValid(true);
 				}
 			}
 			// Parsing complete — commit content hash and
@@ -384,7 +389,11 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 			parser.parse(content, file);
 		} catch (StructurizrDslParserException e) {
 			logger.info("Got structurizr exception {}", e.getMessage());
-			if (worksapceFile.exists()) {
+			if (parser.getWorkspace() != null || !worksapceFile.exists()) {
+				// File has workspace {} (real error) or no workspace.dsl to fall back to
+				errors.add(createError(e));
+			} else {
+				// File is a fragment (no workspace created) — try parsing via workspace.dsl
 				logger.info("try to parse workspace {}", worksapceFile.getAbsolutePath());
 				String content0 = fileContent.get(worksapceFile);
 				if (content0 == null) {
@@ -397,6 +406,7 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 				if (content0 != null) {
 					model = createModel(worksapceFile, content0);
 					createModel(file, content);
+					parser = new StructurizrDslParser();
 					try {
 						model.clear();
 						parser.parse(content0, worksapceFile);
@@ -412,21 +422,19 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 							if(errors.isEmpty()) {
 								updateModel(model, layouts);
 							}
-						} else {
-							errors.clear();
-							model.setValid(true);
 						}
 					}
-					// Parsing workspace.dsl (fallback) complete — commit and move models
+					// Parsing workspace.dsl (fallback) complete — commit and move models.
+					// Cache with combined hash (fragment + workspace) so changes in either file invalidate it
 					PublishDiagnosticsParams result0 = new PublishDiagnosticsParams(worksapceFile.toURI().toString(), errors);
-					contentHashes.put(filePath, newHash);
+					int combinedHash = 31 * fileHash + content0.hashCode();
+					contentHashes.put(filePath, combinedHash);
 					cachedDiagnostics.put(filePath, result0);
 					commitPendingModels();
 					return result0;
+				} else {
+					errors.add(createError(e));
 				}
-			} else {
-				logger.info("ParserException {}", e.getMessage());
-				errors.add(createError(e));
 			}
 		} catch (Exception e) {
 			logger.error("calcDiagnostics {}", e.getMessage());
@@ -437,9 +445,6 @@ public class C4DocumentManager implements StructurizrDslParserListener {
 				if(errors.isEmpty()) {
 					updateModel(model, layouts);
 				}
-			} else {
-				errors.clear();
-				model.setValid(true);
 			}
 		}
 		// Parsing regular .dsl file complete — commit and move models

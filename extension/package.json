@@ -326,5 +326,5 @@
     "dependencies": false,
     "yarn": true
   },
-  "packageManager": "yarn@4.9.4"
+  "packageManager": "yarn@4.16.0"
 }

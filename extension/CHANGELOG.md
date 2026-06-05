@@ -1,9 +1,13 @@
 # Change Log
 
+## 1.0.20
+
+- Added escapeHTML for some DrawIO elements
+
 ## 1.0.19
 
 - Added dsl-content caching: skip parsing if file unchanged
-- Fixed error output for include & extended DSL 
+- Fixed error output for include & extended DSL
 
 ## 1.0.17
 

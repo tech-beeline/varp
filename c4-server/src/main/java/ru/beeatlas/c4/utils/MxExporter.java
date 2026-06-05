@@ -133,7 +133,7 @@ public class MxExporter extends AbstractDiagramExporter {
         writer.indent();
         Map<String, String> values = new HashMap<>();
         values.put("id", view.getKey());
-        values.put("name", view.getName());
+        values.put("name", escapeHtml4(view.getName()));
         values.put("pageWidth", String.valueOf(view.getDimensions().getWidth()));
         values.put("pageHeight", String.valueOf(view.getDimensions().getHeight()));
         values.put("rootId", rootId);
@@ -223,7 +223,7 @@ public class MxExporter extends AbstractDiagramExporter {
 
         Map<String, String> values = new HashMap<>();
         values.put("id", String.valueOf(UUID.randomUUID()));
-        values.put("c4Name", group.name);
+        values.put("c4Name", escapeHtml4(group.name));
         values.put("fontSize", String.valueOf(fontSize));
         String label = new StringSubstitutor(values).replace("<font style=\"font-size:${fontSize}px\"><b><div style=\"text-align: left\">%c4Name%</div></b></font><div style=\"text-align: left\">[%c4Application%]</div>");
         values.put("label", escapeHtml4(label));
@@ -300,7 +300,7 @@ public class MxExporter extends AbstractDiagramExporter {
         
         Map<String, String> values = new HashMap<>();
         values.put("id", softwareSystemBoundary.softwareSystem.getId());
-        values.put("c4Name", softwareSystemBoundary.softwareSystem.getName());
+        values.put("c4Name", escapeHtml4(softwareSystemBoundary.softwareSystem.getName()));
         values.put("fontSize", String.valueOf(fontSize));
         values.put("metadataFontSize", String.valueOf(metadataFontSize));
         values.put("stroke", stroke);
@@ -377,7 +377,7 @@ public class MxExporter extends AbstractDiagramExporter {
 
         Map<String, String> values = new HashMap<>();
         values.put("id", containerBoundary.container.getId());
-        values.put("c4Name", containerBoundary.container.getName());
+        values.put("c4Name", escapeHtml4(containerBoundary.container.getName()));
         values.put("fontSize", String.valueOf(fontSize));
         String label = new StringSubstitutor(values).replace("<font style=\"font-size:${fontSize}px\"><b><div style=\"text-align: left\">%c4Name%</div></b></font><div style=\"text-align: left\">[%c4Application%]</div>");
         values.put("label", escapeHtml4(label));
@@ -568,7 +568,7 @@ public class MxExporter extends AbstractDiagramExporter {
 
         Map<String, String> values = new HashMap<>();
         values.put("id", deploymentNodeBoundary.deploymentNode.getId());
-        values.put("c4Name", deploymentNodeBoundary.deploymentNode.getName());
+        values.put("c4Name", escapeHtml4(deploymentNodeBoundary.deploymentNode.getName()));
         values.put("fontSize", String.valueOf(fontSize));
         values.put("metadataFontSize", String.valueOf(metadataFontSize));
         values.put("stroke", stroke);
@@ -749,7 +749,7 @@ public class MxExporter extends AbstractDiagramExporter {
 
     private String propertiesToString(Map<String, String> properties) {
         return properties.entrySet().stream()
-            .map(entry -> entry.getKey() + "='" + entry.getValue() + "'")
+            .map(entry -> entry.getKey() + "='" + escapeHtml4(entry.getValue()) + "'")
             .collect(Collectors.joining(" "));
     }
 

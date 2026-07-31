@@ -1,5 +1,5 @@
 name: Push
-run-name: ${{ github.actor }} is running build on push event🚀
+run-name: ${{ github.actor }} is running build on push event 🚀
 on:
   push:
     branches:
@@ -9,31 +9,17 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./extension
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set Java 17.x
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Set Node.js 20.x
+      - name: Set Node.js (latest LTS)
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Set Yarn version
-        run: yarn set version stable
+          node-version: 'lts/*'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: yarn install --immutable
+        run: npm ci
 
-      - name: Build
-        run: yarn package-github
+      - name: Build, test and package
+        run: npm run build:ci

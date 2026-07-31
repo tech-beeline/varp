@@ -1,0 +1,14 @@
+{
+  "projectName": "C4",
+  "languages": [
+    {
+      "id": "c4",
+      "fileExtensions": [".dsl"],
+      "grammar": "src/language/c4.langium",
+      "textMate": {
+        "out": "syntaxes/c4.tmLanguage.json"
+      }
+    }
+  ],
+  "out": "src/generated"
+}

@@ -1,0 +1,216 @@
+{
+  "name": "c4-varp",
+  "displayName": "C4 Architecture As A Code",
+  "description": "Extension for working with Architecture As A Code in the C4 model. Includes syntax highlighting, diagram preview, and tools for working with IaaC.",
+  "version": "2.0.0-alpha",
+  "publisher": "vimpelcom",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tech-beeline/varp"
+  },
+  "license": "Apache-2.0",
+  "icon": "images/logo.png",  
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "configurationDefaults": {
+      "[c4]": {
+        "editor.bracketPairColorization.enabled": true,
+        "editor.formatOnType": true
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "varp-sidebar",
+          "title": "C4 Architecture As A Code",
+          "icon": "images/logo.svg"
+        }
+      ]
+    },
+    "views": {
+      "varp-sidebar": [
+        {
+          "id": "s4-snippets",
+          "name": "C4 DSL Snippents",
+          "when": "extension:c4",
+          "icon": "$(book)"
+        },
+        {
+          "id": "patterns-catalogue",
+          "name": "Patterns Catalogue",
+          "when": "extension:c4",
+          "icon": "$(book)"
+        },
+        {
+          "id": "capabilities-catalogue",
+          "name": "Capabilities Catalogue",
+          "when": "extension:c4",
+          "icon": "$(book)"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "varp.refresh-patterns",
+          "when": "view == patterns-catalogue",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "varp.copy-capability-code",
+          "when": "view == capabilities-catalogue",
+          "group": "inline"
+        },
+        {
+          "command": "varp.get-pattern-dsl",
+          "when": "view == patterns-catalogue && viewItem == leaf",
+          "group": "inline"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "when": "activeWebviewPanelId == structurizrPreview",
+          "command": "varp.export-svg",
+          "group": "navigation"
+        },
+        {
+          "when": "activeWebviewPanelId == structurizrPreview",
+          "command": "varp.export-drawio",
+          "group": "navigation"
+        }
+      ]      
+    },
+    "semanticTokenColors": {
+      "[c4]": {
+        "macro": {
+          "foreground": "#C586C0",
+          "fontStyle": "bold"
+        },
+        "class": {
+          "foreground": "#4EC9B0"
+        },
+        "property": {
+          "foreground": "#9CDCFE",
+          "fontStyle": "italic"
+        },
+        "variable.declaration": {
+          "foreground": "#DCDCAA",
+          "fontStyle": "underline"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "varp.diagram-preview",
+        "title": "Show As Structurizr Diagram"
+      },
+      {
+        "command": "varp.copy-capability-code",
+        "title": "Copy capability code",
+        "shortTitle": "Copy capability code",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "varp.get-pattern-dsl",
+        "title": "Get pattern C4 DSL",
+        "shortTitle": "Get pattern C4 DSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "varp.refresh-patterns",
+        "title": "Refresh patterns catalogue",
+        "shortTitle": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "varp.export-drawio",
+        "title": "Export to DrawIO (.drawio)",
+        "shortTitle": "Export to DrawIO"
+      },
+      {
+        "command": "varp.export-svg",
+        "title": "Export to SVG (.svg)",
+        "shortTitle": "Export to SVG"
+      }
+    ],
+    "languages": [
+      {
+        "id": "c4",
+        "aliases": [
+          "C4",
+          "c4"
+        ],
+        "extensions": [
+          ".dsl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "c4",
+        "scopeName": "source.c4",
+        "path": "./syntaxes/c4.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "properties": {
+        "archops.api.secret": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Workspace API Secret"
+        },
+        "archops.api.key": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Workspace API Key"
+        },
+        "archops.api.url": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Archops automation server URL"
+        }
+      }
+    }
+  },
+  "browser": "./dist/extension.browser.js",
+  "main": "./dist/extension.js",
+    "scripts": {
+        "vscode:prepublish": "langium generate && tsc -b && node esbuild.mjs",
+        "build": "langium generate && tsc -b && node esbuild.mjs && vitest run",
+        "build:ci": "langium generate && tsc -b && node esbuild.mjs && vitest run && vsce package --no-dependencies",
+        "test": "vitest run",
+        "package": "vsce package --no-dependencies",
+        "dev": "npm run build && node -e \"require('http').createServer((req, res) => { res.writeHead(200, {'Content-Type': 'text/html'}); res.end('<h1>c4varp VS Code Extension</h1><p>This is a VS Code extension project.</p>'); }).listen(3000, '0.0.0.0');\""
+    },
+  "dependencies": {
+    "langium": "~4.2.0",
+    "vscode-languageclient": "~9.0.1",
+    "vscode-languageserver": "~9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "@vscode/test-web": "^0.0.80",
+    "@vscode/vsce": "^3.0.0",
+    "@xmldom/xmldom": "^0.9.10",
+    "ovsx": "^0.10.0",
+    "crypto-browserify": "3.12.1",
+    "esbuild": "^0.28.0",
+    "events": "^3.3.0",
+    "langium-cli": "~4.2.0",
+    "stream-browserify": "^3.0.0",
+    "typescript": "~5.5.4",
+    "vitest": "^4.1.10"
+  }
+}

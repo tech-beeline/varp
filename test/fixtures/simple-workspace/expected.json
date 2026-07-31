@@ -1,0 +1,149 @@
+{
+    "configuration": {},
+    "description": "Description",
+    "documentation": {},
+    "id": 0,
+    "model": {
+        "people": [
+            {
+                "id": "1",
+                "location": "Unspecified",
+                "name": "User",
+                "properties": {
+                    "structurizr.dsl.identifier": "user"
+                },
+                "relationships": [
+                    {
+                        "description": "Uses",
+                        "destinationId": "2",
+                        "id": "6",
+                        "sourceId": "1",
+                        "tags": "Relationship"
+                    }
+                ],
+                "tags": "Element,Person"
+            }
+        ],
+        "softwareSystems": [
+            {
+                "containers": [
+                    {
+                        "documentation": {},
+                        "id": "3",
+                        "name": "Web Application",
+                        "properties": {
+                            "structurizr.dsl.identifier": "webapp"
+                        },
+                        "relationships": [
+                            {
+                                "description": "Reads/Writes",
+                                "destinationId": "4",
+                                "id": "5",
+                                "sourceId": "3",
+                                "tags": "Relationship"
+                            }
+                        ],
+                        "tags": "Element,Container,Tag1,Tag2"
+                    },
+                    {
+                        "documentation": {},
+                        "id": "4",
+                        "name": "Database",
+                        "properties": {
+                            "structurizr.dsl.identifier": "db"
+                        },
+                        "tags": "Element,Container"
+                    }
+                ],
+                "documentation": {},
+                "id": "2",
+                "location": "Unspecified",
+                "name": "Software System",
+                "properties": {
+                    "structurizr.dsl.identifier": "softwaresystem"
+                },
+                "tags": "Element,Software System"
+            }
+        ]
+    },
+    "name": "Name",
+    "properties": {
+    },
+    "views": {
+        "configuration": {
+            "branding": {},
+            "styles": {},
+            "terminology": {}
+        },
+        "containerViews": [
+            {
+                "automaticLayout": {
+                    "applied": false,
+                    "edgeSeparation": 0,
+                    "implementation": "Graphviz",
+                    "nodeSeparation": 300,
+                    "rankDirection": "TopBottom",
+                    "rankSeparation": 300,
+                    "vertices": false
+                },
+                "elements": [
+                    {
+                        "id": "3",
+                        "x": 0,
+                        "y": 0
+                    },
+                    {
+                        "id": "4",
+                        "x": 0,
+                        "y": 0
+                    }
+                ],
+                "externalSoftwareSystemBoundariesVisible": false,
+                "generatedKey": true,
+                "key": "Container-001",
+                "order": 2,
+                "relationships": [
+                    {
+                        "id": "5"
+                    }
+                ],
+                "softwareSystemId": "2"
+            }
+        ],
+        "systemContextViews": [
+            {
+                "automaticLayout": {
+                    "applied": false,
+                    "edgeSeparation": 0,
+                    "implementation": "Graphviz",
+                    "nodeSeparation": 300,
+                    "rankDirection": "TopBottom",
+                    "rankSeparation": 300,
+                    "vertices": false
+                },
+                "elements": [
+                    {
+                        "id": "1",
+                        "x": 0,
+                        "y": 0
+                    },
+                    {
+                        "id": "2",
+                        "x": 0,
+                        "y": 0
+                    }
+                ],
+                "enterpriseBoundaryVisible": true,
+                "generatedKey": true,
+                "key": "SystemContext-001",
+                "order": 1,
+                "relationships": [
+                    {
+                        "id": "6"
+                    }
+                ],
+                "softwareSystemId": "2"
+            }
+        ]
+    }
+}

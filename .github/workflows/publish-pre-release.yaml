@@ -1,5 +1,5 @@
-name: Publish Extension to Marketplace
-run-name: ${{ github.actor }} is running publish 🚀
+name: Publish Pre-Release Extension to Marketplace
+run-name: ${{ github.actor }} is running pre-release publish 🚀
 on:
   workflow_dispatch:
 jobs:
@@ -20,12 +20,7 @@ jobs:
       - name: Build, test and package
         run: npm run build:ci
 
-      - name: Publish to VSCode Marketplace
+      - name: Publish pre-release to VSCode Marketplace
         env:
           VSCODE_MARKETPLACE_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_TOKEN }}
-        run: npx vsce publish -p "$VSCODE_MARKETPLACE_TOKEN" --packagePath ./*.vsix
-
-      - name: Publish to Open VSX
-        env:
-          OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
-        run: npx ovsx publish -p "$OPEN_VSX_TOKEN" ./*.vsix
+        run: npx vsce publish --pre-release -p "$VSCODE_MARKETPLACE_TOKEN" --packagePath ./*.vsix

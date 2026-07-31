@@ -1,0 +1,130 @@
+/*
+	Copyright 2026 VimpelCom PJSC
+
+	Licensed under the Apache License, Version 2.0 (the "License");
+	you may not use this file except in compliance with the License.
+	You may obtain a copy of the License at
+
+		http://www.apache.org/licenses/LICENSE-2.0
+
+	Unless required by applicable law or agreed to in writing, software
+	distributed under the License is distributed on an "AS IS" BASIS,
+	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+	See the License for the specific language governing permissions and
+	limitations under the License.
+*/
+
+import { COPY_CAPABILITY_CODE } from './config';
+import { generateHmac } from './hmac';
+import { EventEmitter, ExtensionContext, MarkdownString, ThemeIcon, TreeDataProvider, TreeItem, TreeItemCollapsibleState, window, workspace, Event, commands, env } from 'vscode';
+
+class CapabilityItem extends TreeItem {
+	name: string = '';
+	bcid: string | undefined;
+	hasChildren: boolean | undefined;
+	istc: boolean = false;
+	code: string = '';
+	businessCapabilities: CapabilityItem[] = [];
+}
+
+class CapabilityChild {
+	techCapabilities: CapabilityItem[] = [];
+	businessCapabilities: CapabilityItem[] = [];
+}
+
+export class CapabilityProvider implements TreeDataProvider<CapabilityItem> {
+	private readonly PARAMS = '?findBy=CORE';
+	private readonly ROOT_ID: string = '/business-capability';
+	private readonly PATH = '/capability/api/v1';
+
+	private readonly createCapabilityItem: (items: CapabilityItem[], istc: boolean) => CapabilityItem[];
+	private readonly createCapabilityChild: (items: CapabilityItem) => Promise<CapabilityItem[]>;
+	private readonly createCapabilityRoot: () => Promise<CapabilityItem[]>;
+
+	constructor(context: ExtensionContext) {
+		const view = window.createTreeView('capabilities-catalogue', { treeDataProvider: this, showCollapseAll: true, canSelectMany: true });
+		context.subscriptions.push(view);
+  		const archopsApiUrl = workspace.getConfiguration().get<string>('archops.api.url')?.replace(/\/+$/, '');
+		this.createCapabilityChild = async (chapter: CapabilityItem): Promise<CapabilityItem[]> => {
+			const children: string = `/${chapter.bcid}/children`;
+			const path = this.PATH + this.ROOT_ID + children;
+			const headers = generateHmac('GET', path);
+			try {
+				const response = await fetch(archopsApiUrl + path, { headers });
+				if (!response.ok) {
+					return [];
+				}
+				const data = await response.json() as CapabilityChild;
+				if (data.businessCapabilities.length > 0) {
+					return this.createCapabilityItem(data.businessCapabilities, false);
+				} else if (data.techCapabilities.length > 0) {
+					return this.createCapabilityItem(data.techCapabilities, true);
+				}
+			} catch(error) {
+			}
+			return [];
+		}
+
+		this.createCapabilityItem = (items: CapabilityItem[], istc: boolean): CapabilityItem[] => {
+			items.forEach(item => {
+				if (item.hasChildren) {
+					item.collapsibleState = TreeItemCollapsibleState.Collapsed;
+				}
+				if (typeof item.description === 'string') {
+					item.tooltip = new MarkdownString(item.description);
+				}
+				item.iconPath = (istc) ? ThemeIcon.File : ThemeIcon.Folder;
+				item.label = item.name;
+				item.description = item.code;
+				item.bcid = item.id;
+				item.istc = istc;
+				item.id = undefined;
+			});
+			return items;
+		};
+
+		this.createCapabilityRoot = async (): Promise<CapabilityItem[]> => {
+			const headers = generateHmac('GET', this.PATH + this.ROOT_ID);
+			try {
+				const response = await fetch(archopsApiUrl + this.PATH + this.ROOT_ID + this.PARAMS, { headers });
+				if (!response.ok) {
+					return [];
+				}
+				const data = await response.json() as CapabilityItem[];
+				const root = Array.isArray(data) ? data : [data];
+				return this.createCapabilityItem(root, false);
+			} catch (error) {
+			}
+			return [];
+		};
+
+		commands.registerCommand(COPY_CAPABILITY_CODE, async (element: CapabilityItem) => {
+			env.clipboard.writeText(element.code).then(() => {
+				window.showInformationMessage(`Capability code ${element.code} copied to clipboard!`);
+			}, (error) => {
+				window.showErrorMessage(`Failed to copy capability code: ${error.message}`);
+			});			
+		});
+	}
+
+	private readonly _onDidChangeTreeData: EventEmitter<CapabilityItem | undefined | null | void> = new EventEmitter<CapabilityItem | undefined | null | void>();
+	readonly onDidChangeTreeData: Event<CapabilityItem | undefined | null | void> = this._onDidChangeTreeData.event;
+
+	getTreeItem(element: CapabilityItem): TreeItem {
+		return element;
+	}
+
+	async getChildren(element?: CapabilityItem): Promise<CapabilityItem[]> {
+		if (element) {
+			return this.createCapabilityChild(element);
+		}
+		const root = await this.createCapabilityRoot();
+		if (root.length === 1) {
+			const child = root.at(0);
+			if (child !== undefined) {
+				return this.createCapabilityChild(child);
+			}
+		}
+		return root;
+	}
+}

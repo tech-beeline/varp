@@ -17,8 +17,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build, test and package
-        run: npm run build:ci
+      - name: Build and test
+        run: npm run build
+
+      - name: Package pre-release VSIX
+        run: npx vsce package --pre-release --no-dependencies
 
       - name: Publish pre-release to VSCode Marketplace
         env:

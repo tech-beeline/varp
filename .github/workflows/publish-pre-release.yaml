@@ -1,0 +1,26 @@
+name: Publish Pre-Release Extension to Marketplace
+run-name: ${{ github.actor }} is running pre-release publish 🚀
+on:
+  workflow_dispatch:
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set Node.js (latest LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build, test and package
+        run: npm run build:ci
+
+      - name: Publish pre-release to VSCode Marketplace
+        env:
+          VSCODE_MARKETPLACE_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_TOKEN }}
+        run: npx vsce publish --pre-release -p "$VSCODE_MARKETPLACE_TOKEN" --packagePath ./*.vsix

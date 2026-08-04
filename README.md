@@ -6,8 +6,8 @@
 architecture diagrams directly from code. Powered by [Langium](https://langium.org/).
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/vimpelcom.c4varp.svg?label=VS%20Code%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=vimpelcom.c4varp)
-[![Open VSX](https://img.shields.io/open-vsx/v/vimpelcom/c4varp.svg?label=Open%20VSX)](https://open-vsx.org/extension/vimpelcom/c4varp)
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/vimpelcom.c4varp.svg?label=VS%20Code%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=vimpelcom.c4-varp)
+[![Open VSX](https://img.shields.io/open-vsx/v/vimpelcom/c4varp.svg?label=Open%20VSX)](https://open-vsx.org/extension/vimpelcom/c4-varp)
 [![Node.js LTS](https://img.shields.io/badge/Node.js-%3E%3D%2020-339933.svg)](package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6.svg)](package.json)
 

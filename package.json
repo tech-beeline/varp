@@ -2,7 +2,7 @@
   "name": "c4-varp",
   "displayName": "C4 Architecture As A Code",
   "description": "Extension for working with Architecture As A Code in the C4 model. Includes syntax highlighting, diagram preview, and tools for working with IaaC.",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "publisher": "vimpelcom",
   "repository": {
     "type": "git",

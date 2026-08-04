@@ -11,5 +11,6 @@ language-configuration.json
 *.vsix
 **/*.map
 test/**
+plans/**
 vitest.config.ts
 .github/**

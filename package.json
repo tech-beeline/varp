@@ -179,6 +179,13 @@
           "default": "",
           "scope": "application",
           "description": "Archops automation server URL"
+        },
+        "varp.diagram.autoRefresh": {
+          "type": "string",
+          "enum": ["onChange", "onSave"],
+          "default": "onSave",
+          "scope": "resource",
+          "description": "When to automatically refresh the diagram preview: on every change of the open document (onChange) or when the document is saved to disk (onSave)"
         }
       }
     }

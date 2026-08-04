@@ -28,6 +28,14 @@ export class C4GeneratorHandler {
     private jsonCache: WorkspaceCache<string, any>;
     private services: LangiumServices;
 
+    /**
+     * Optional callback invoked after a workspace's JSON has been successfully
+     * generated and cached. Used by the language server entry points to notify
+     * the client (e.g., custom/contentUpdated) so the diagram preview refreshes
+     * only once fresh JSON is actually available.
+     */
+    public onJsonGenerated?: (uri: string, json: any) => void;
+
     constructor(services: LangiumServices) {
         this.services = services;
         this.jsonCache = new WorkspaceCache<string, any>(services.shared);
@@ -103,6 +111,8 @@ export class C4GeneratorHandler {
             const generator = (this.services as any).generation.C4JsonGenerator;
             const json = generator.generate(workspace);
             this.jsonCache.set(uri, json);
+            // Notify the client only after the JSON was generated successfully.
+            this.onJsonGenerated?.(uri, json);
         } catch (err) {
             console.error(`[C4 Build] Generation failed for ${uri}:`, err);
         }
@@ -151,18 +161,24 @@ export class C4GeneratorHandler {
     }
 
     /**
+     * Resolves the root workspace document URI for the given URI.
+     * Walks up !include / extendsUri chains so that fragment files resolve
+     * to the workspace document that owns the generated JSON.
+     */
+    public getRootUri(uri: string): string {
+        const rootDoc = this.findRootWorkspace(uri);
+        return rootDoc ? rootDoc.uri.toString() : uri;
+    }
+
+    /**
      * Public API: retrieves cached JSON for a given document URI.
      * Finds the root workspace for the URI and returns its cached JSON content.
      * Returns null if no cached content is found.
      */
     public getContentForUri(uri: string) : any {
-        // Find which workspace this file belongs to
-        const rootDoc = this.findRootWorkspace(uri);
-        const rootUri = rootDoc ? rootDoc.uri.toString() : uri;
-
-        // Return content specifically for that workspace
+        const rootUri = this.getRootUri(uri);
         const json = this.jsonCache.get(rootUri);
-        
+
         if (!json) {
             console.warn(`[C4 Build] No cached content found for root: ${rootUri}`);
         }

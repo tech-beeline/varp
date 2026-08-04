@@ -16,7 +16,7 @@
 
 import * as vscode from 'vscode';
 import { LanguageClient, type LanguageClientOptions } from 'vscode-languageclient/browser';
-import { init } from './init';
+import { init, setLanguageClient } from './init';
 
 let client: LanguageClient;
 
@@ -32,7 +32,9 @@ export function activate(context: vscode.ExtensionContext): void {
     };
 
     client = new LanguageClient('c4', 'C4', clientOptions, worker);
-    client.start();
+    client.start().then(() => {
+        setLanguageClient(client);
+    });
 }
 
 export function deactivate(): Thenable<void> | undefined {

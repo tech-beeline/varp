@@ -95,6 +95,15 @@ const { shared, C4 } = createC4Services({
     fileSystemProvider: () => baseProvider as any
 });
 
+// ─── JSON Generated Notification ───────────────────────────────────────────
+// When a workspace's JSON is successfully generated and cached, notify the
+// client (extension host) so it can refresh the open diagram preview. This
+// avoids the race where the client pulls JSON on save before the language
+// server has finished rebuilding/generating.
+C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json) => {
+    connection.sendNotification('custom/contentUpdated', { uri, json });
+};
+
 // ─── Custom LSP Request Handler ────────────────────────────────────────────
 // Register the same custom request as the Node.js version so the extension
 // can retrieve cached JSON for diagram preview refresh on file save.

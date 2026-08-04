@@ -93,10 +93,19 @@ const originalReadFile = (baseProvider as any).readFile.bind(baseProvider);
 // The monkey-patched fileSystemProvider is passed as the context,
 // so all file reads (including workspace initialization) go through our
 // URL-aware readFile wrapper.
-const { shared, C4 } = createC4Services({ 
-    connection, 
+const { shared, C4 } = createC4Services({
+    connection,
     fileSystemProvider: () => baseProvider as any
 });
+
+// ─── JSON Generated Notification ───────────────────────────────────────────
+// When a workspace's JSON is successfully generated and cached, notify the
+// client (extension host) so it can refresh the open diagram preview. This
+// avoids the race where the client pulls JSON on save before the language
+// server has finished rebuilding/generating.
+C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json) => {
+    connection.sendNotification('custom/contentUpdated', { uri, json });
+};
 
 // ─── Custom LSP Request Handler ────────────────────────────────────────────
 // Register a custom LSP request that the extension calls when it needs

@@ -46,6 +46,10 @@ export class C4CodeLensProvider implements CodeLensProvider {
         // Get cached JSON for the current document
         const json = this.services.generation.C4GeneratorHandler.getContentForUri(document.uri.toString());
 
+        // Resolve the root workspace document URI so the open preview can be matched
+        // against fresh-JSON notifications (custom/contentUpdated) for auto-refresh.
+        const rootUri = this.services.generation.C4GeneratorHandler.getRootUri(document.uri.toString());
+
         for (const node of AstUtils.streamAst(root)) {
             if (isRenderedView(node)) {
                 const cstNode = node.$cstNode;
@@ -84,7 +88,8 @@ export class C4CodeLensProvider implements CodeLensProvider {
                         '$(link-external) Show As Structurizr Diagram',
                         DIAGRAM_PREVIEW,
                         json,
-                        viewKey
+                        viewKey,
+                        rootUri
                     );
                     
                     lenses.push(lens);

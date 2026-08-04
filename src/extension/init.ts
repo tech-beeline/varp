@@ -15,22 +15,111 @@
 */
 
 import { commands, ExtensionContext, ViewColumn, workspace, window, Uri } from "vscode";
-import { LanguageClient } from "vscode-languageclient/node";
 import { C4Snippets } from "./c4-snippets";
 import { CapabilityProvider } from "./capabilities";
 import { DIAGRAM_PREVIEW } from "./config";
 import { DiagramPreview } from "./diagram-preview";
 import { PatternProvider } from "./patterns";
 
+/**
+ * Minimal shape of the language client (node or browser) used by the extension.
+ * Both vscode-languageclient/node and vscode-languageclient/browser implement it.
+ */
+export interface C4LanguageClient {
+    onNotification(method: string, handler: (params: any) => void): void;
+    sendRequest(method: string, params: any): Promise<any>;
+}
+
 // Holds the Language Client reference for backend communication
-let languageClient: LanguageClient | undefined;
+let languageClient: C4LanguageClient | undefined;
+
+// Diagram preview panel instance, created in init() and used by the
+// auto-refresh notification handler registered in setLanguageClient().
+let diagramPreview: DiagramPreview | undefined;
+
+// Latest generated JSON per root document URI (fed by custom/contentUpdated).
+// Lets the onSave mode render the freshest data on the save event even if the
+// server does not emit another notification for that save.
+const latestJsonByUri = new Map<string, any>();
+
+// Guards against registering the notification handler more than once.
+let refreshNotificationRegistered = false;
 
 /**
  * Sets the Language Client used for communicating with the language server backend.
  * Called after the language server starts successfully.
  */
-export function setLanguageClient(client: LanguageClient): void {
+export function setLanguageClient(client: C4LanguageClient): void {
     languageClient = client;
+    registerAutoRefreshNotification(client);
+}
+
+/**
+ * Registers the LSP notification listener that refreshes the open diagram preview
+ * whenever the language server successfully generates fresh JSON (push model).
+ * The client only updates once the JSON is actually ready, which avoids the race
+ * of pulling on save before the server finishes generation.
+ *
+ * Refresh policy is controlled by the `varp.diagram.autoRefresh` setting:
+ *  - "onChange" — update on every generated JSON (live while editing);
+ *  - "onSave"   — update only once the document is clean (saved).
+ */
+function registerAutoRefreshNotification(client: C4LanguageClient): void {
+    if (refreshNotificationRegistered) {
+        return;
+    }
+    refreshNotificationRegistered = true;
+
+    client.onNotification('custom/contentUpdated', async (params: { uri: string; json: any }) => {
+        const uri = params?.uri;
+        const json = params?.json;
+        if (!uri || !json) {
+            return;
+        }
+        // Remember the latest JSON so onSave mode can render it on the save event.
+        latestJsonByUri.set(uri, json);
+
+        const preview = diagramPreview;
+        if (!preview || !preview.isOpen()) {
+            return;
+        }
+        if (preview.getCurrentDocUri() !== uri) {
+            // The fresh JSON belongs to a different workspace document.
+            return;
+        }
+
+        const mode = getAutoRefreshMode();
+        // onChange: render on every update; onSave: render only when the document
+        // is clean (saved) — the save event handles the actual render.
+        if (mode === 'onChange' || !isDocumentDirty(uri)) {
+            await refreshDiagram(uri, json);
+        }
+    });
+}
+
+/** Returns the configured auto-refresh mode (defaults to onSave). */
+function getAutoRefreshMode(): 'onChange' | 'onSave' {
+    const value = workspace.getConfiguration('varp.diagram').get<string>('autoRefresh', 'onSave');
+    return value === 'onChange' ? 'onChange' : 'onSave';
+}
+
+/** Whether the given document has unsaved changes (is dirty). */
+function isDocumentDirty(uri: string): boolean {
+    const doc = workspace.textDocuments.find(d => d.uri.toString() === uri);
+    return doc ? doc.isDirty : false;
+}
+
+/** Renders fresh JSON into the open preview bound to the given root document URI. */
+async function refreshDiagram(uri: string, json: any): Promise<void> {
+    const preview = diagramPreview;
+    if (!preview || !preview.isOpen()) {
+        return;
+    }
+    const viewKey = preview.getCurrentViewKey();
+    if (!viewKey) {
+        return;
+    }
+    await preview.updateWebView(json, viewKey, uri);
 }
 
 /**
@@ -39,7 +128,7 @@ export function setLanguageClient(client: LanguageClient): void {
  * Sets up:
  * - Tree views (snippets, capabilities, patterns)
  * - Diagram preview webview panel
- * - Auto-refresh on DSL file save (re-fetches JSON from language server)
+ * - Auto-refresh via custom/contentUpdated push notifications (onChange/onSave, see c4.autoRefresh)
  * - DIAGRAM_PREVIEW command (opens diagram in webview)
  * - Export commands (DrawIO, SVG)
  */
@@ -49,57 +138,54 @@ export function init(context: ExtensionContext): void {
     new CapabilityProvider(context);
     new PatternProvider(context);
 
-    const diagramPreview = new DiagramPreview(context);
+    diagramPreview = new DiagramPreview(context);
+    // Local, non-undefined alias used by the command handlers below.
+    const preview = diagramPreview;
 
     /**
-     * Auto-refresh handler: when a .c4/.dsl file is saved, automatically
-     * updates the open diagram preview with the latest generated JSON data.
-     * 
-     * Flow:
-     * 1. Check if the saved file is a C4 DSL file
-     * 2. Check if a diagram preview is currently open
-     * 3. Request fresh JSON/dot data from the language server via custom LSP request
-     * 4. Send the new data to the webview for re-rendering
+     * Auto-refresh (onSave mode): when a .c4/.dsl file is saved, render the latest
+     * generated JSON for the document the open preview is bound to. Live updates
+     * (onChange mode) arrive via the custom/contentUpdated notification and do not
+     * need the save event.
      */
     context.subscriptions.push(
         workspace.onDidSaveTextDocument(async (document) => {
-            // Only process C4/DSL files
             if (document.languageId !== 'c4') {
                 return;
             }
-
-            // Skip refresh if no diagram is open
-            if (!diagramPreview.isOpen()) {
-                console.log(`[C4 AutoRefresh] Diagram is not open, skipping refresh`);
+            if (getAutoRefreshMode() !== 'onSave') {
+                return;
+            }
+            const currentDocUri = preview.getCurrentDocUri();
+            if (!currentDocUri || document.uri.toString() !== currentDocUri) {
                 return;
             }
 
-            // Get the current view key for the open diagram
-            const currentViewKey = diagramPreview.getCurrentViewKey();
-            if (!currentViewKey || !languageClient) {
-                console.log(`[C4 AutoRefresh] Missing viewKey or languageClient`);
+            const uri = document.uri.toString();
+            const json = latestJsonByUri.get(uri);
+            if (json) {
+                await refreshDiagram(uri, json);
                 return;
             }
-
+            // Fallback: pull fresh JSON from the language server (best effort) if no
+            // push notification has been received yet for this document.
             try {
-                console.log(`[C4 AutoRefresh] File saved, fetching fresh content for view: ${currentViewKey}`);
-                
-                // Request the latest JSON/dot data from the language server
-                // The C4GeneratorHandler has already updated the cache on save
-                const response: any = await languageClient.sendRequest('custom/getContentForUri', {
-                    uri: document.uri.toString()
-                });
-
-                if (response && response.json) {
-                    console.log(`[C4 AutoRefresh] Received fresh data, processing styles and SVG`);
-                    // Send the new data to the webview for re-rendering
-                    await diagramPreview.updateWebView(response.json, currentViewKey);
-                    console.log(`[C4 AutoRefresh] Diagram updated successfully for view: ${currentViewKey}`);
-                } else {
-                    console.warn(`[C4 AutoRefresh] No content received from backend`);
+                const response: any = await languageClient?.sendRequest('custom/getContentForUri', { uri });
+                if (response?.json) {
+                    latestJsonByUri.set(uri, response.json);
+                    await refreshDiagram(uri, response.json);
                 }
             } catch (err) {
-                console.error(`[C4 AutoRefresh] Error updating diagram:`, err);
+                console.error(`[C4 AutoRefresh] Error fetching content on save:`, err);
+            }
+        })
+    );
+
+    // Apply the auto-refresh setting live without restarting VS Code.
+    context.subscriptions.push(
+        workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('varp.diagram.autoRefresh')) {
+                console.log(`[C4 AutoRefresh] Refresh mode: ${getAutoRefreshMode()}`);
             }
         })
     );
@@ -110,31 +196,25 @@ export function init(context: ExtensionContext): void {
      * Triggered by the CodeLens "Show As Structurizr Diagram" button in the editor.
      */
     context.subscriptions.push(
-        commands.registerCommand(DIAGRAM_PREVIEW, async (json: any, viewKey: string) => {
+        commands.registerCommand(DIAGRAM_PREVIEW, async (json: any, viewKey: string, docUri?: string) => {
             // Guard clause: skip if no JSON data provided
             if (!json) {
                 return;
             }
+            if (docUri) {
+                latestJsonByUri.set(docUri, json);
+            }
 
             // Update the diagram preview webview
-            diagramPreview.updateWebView(json, viewKey);
-
-            // Open a side-panel with the raw JSON for debugging
-            const content = JSON.stringify(json, null, 2);
-            const doc = await workspace.openTextDocument({ content, language: 'json' });
-            
-            await window.showTextDocument(doc, {
-                viewColumn: ViewColumn.Beside,
-                preview: true
-            });
+            await preview.updateWebView(json, viewKey, docUri);
         })
     );
 
     // ===== Command: Export to DrawIO =====
     context.subscriptions.push(
         commands.registerCommand('varp.export-drawio', async () => {
-            const currentJson = diagramPreview.getCurrentJson();
-            const currentViewKey = diagramPreview.getCurrentViewKey();
+            const currentJson = preview.getCurrentJson();
+            const currentViewKey = preview.getCurrentViewKey();
 
             if (!currentJson) {
                 window.showErrorMessage('No diagram data available. Please open a diagram preview first.');
@@ -142,13 +222,13 @@ export function init(context: ExtensionContext): void {
             }
 
             // Ensure webview is open
-            if (!diagramPreview.isOpen()) {
-                diagramPreview.updateWebView(currentJson, currentViewKey || '');
+            if (!preview.isOpen()) {
+                preview.updateWebView(currentJson, currentViewKey || '');
             }
 
             // Wait for the webview to export to DrawIO format via postMessage
             const drawioResult = await new Promise<any>((resolve) => {
-                const panel = (diagramPreview as any).panel;
+                const panel = (preview as any).panel;
                 if (!panel) {
                     resolve(null);
                     return;
@@ -196,21 +276,21 @@ export function init(context: ExtensionContext): void {
     // ===== Command: Export to SVG =====
     context.subscriptions.push(
         commands.registerCommand('varp.export-svg', async () => {
-            const currentJson = diagramPreview.getCurrentJson();
-            const currentViewKey = diagramPreview.getCurrentViewKey();
+            const currentJson = preview.getCurrentJson();
+            const currentViewKey = preview.getCurrentViewKey();
 
             if (!currentJson) {
                 window.showErrorMessage('No diagram data available. Please open a diagram preview first.');
                 return;
             }
 
-            if (!diagramPreview.isOpen()) {
-                diagramPreview.updateWebView(currentJson, currentViewKey || '');
+            if (!preview.isOpen()) {
+                preview.updateWebView(currentJson, currentViewKey || '');
             }
 
             // Wait for the webview to render and export SVG via postMessage
             const svgResult = await new Promise<string | null>((resolve) => {
-                const panel = (diagramPreview as any).panel;
+                const panel = (preview as any).panel;
                 if (!panel) { resolve(null); return; }
 
                 const disposable = panel.webview.onDidReceiveMessage((message: any) => {

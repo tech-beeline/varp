@@ -26,6 +26,7 @@ export class DiagramPreview {
   private panel: WebviewPanel | undefined;
   private currentViewKey: string | undefined;
   private currentJson: any | undefined;
+  private currentDocUri: string | undefined;
 
   private readonly title: string = 'Diagram Preview';
   private readonly id: string = 'structurizrPreview';
@@ -66,16 +67,23 @@ export class DiagramPreview {
     this.localResourceRoots = [Uri.joinPath(context.extensionUri, 'css'), Uri.joinPath(context.extensionUri, 'js')];
   }
 
-  public async updateWebView(json : any, viewKey : string) {
+  public async updateWebView(json : any, viewKey : string, docUri? : string) {
         console.log(`[C4 Gen] View Key: ${viewKey}`);
         this.currentViewKey = viewKey;
         this.currentJson = json;
+        if (docUri) {
+          this.currentDocUri = docUri;
+        }
         this.panel ??= this.createPanel();
         this.panel.webview.postMessage( { 'json' : json, 'viewKey' : viewKey });
   }
 
   public getCurrentViewKey(): string | undefined {
         return this.currentViewKey;
+  }
+
+  public getCurrentDocUri(): string | undefined {
+        return this.currentDocUri;
   }
 
   public getCurrentJson(): any | undefined {

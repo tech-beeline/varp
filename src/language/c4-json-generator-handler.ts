@@ -27,6 +27,7 @@ import { URI, Utils } from 'vscode-uri';
 export class C4GeneratorHandler {
     private jsonCache: WorkspaceCache<string, any>;
     private services: LangiumServices;
+    private cachedUris: Set<string> = new Set();
 
     /**
      * Optional callback invoked after a workspace's JSON has been successfully
@@ -69,7 +70,7 @@ export class C4GeneratorHandler {
             }
 
             if (workspaceNode) {
-                this.generateAndCache(doc.uri.toString(), workspaceNode);
+                void this.generateAndCache(doc.uri.toString(), workspaceNode);
             } else {
                 // Include problem: this file is part of a larger workspace.
                 // Find and rebuild the main workspace document that includes this file.
@@ -97,7 +98,7 @@ export class C4GeneratorHandler {
                 }
             }
             if (workspaceNode) {
-                this.generateAndCache(doc.uri.toString(), workspaceNode);
+                void this.generateAndCache(doc.uri.toString(), workspaceNode);
             }
         }
     }
@@ -106,11 +107,12 @@ export class C4GeneratorHandler {
      * Generates Structurizr-compatible JSON for a workspace node and stores it in the cache.
      * Logs errors if generation fails but does not throw (non-critical for the build pipeline).
      */
-    private generateAndCache(uri: string, workspace: any) {
+    private async generateAndCache(uri: string, workspace: any) {
         try {
             const generator = (this.services as any).generation.C4JsonGenerator;
-            const json = generator.generate(workspace);
+            const json = await generator.generate(workspace);
             this.jsonCache.set(uri, json);
+            this.cachedUris.add(uri);
             // Notify the client only after the JSON was generated successfully.
             this.onJsonGenerated?.(uri, json);
         } catch (err) {
@@ -158,6 +160,14 @@ export class C4GeneratorHandler {
         }
 
         return undefined;
+    }
+
+    /**
+     * Returns the root workspace document URIs that currently have cached JSON.
+     * Used by MCP to enumerate the available projects/workspaces.
+     */
+    public getCachedUris(): string[] {
+        return Array.from(this.cachedUris);
     }
 
     /**

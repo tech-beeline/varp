@@ -207,6 +207,15 @@ export function init(context: ExtensionContext): void {
 
             // Update the diagram preview webview
             await preview.updateWebView(json, viewKey, docUri);
+
+            // Open a side-panel with the raw JSON for debugging
+            const content = JSON.stringify(json, null, 2);
+            const doc = await workspace.openTextDocument({ content, language: 'json' });
+
+            await window.showTextDocument(doc, {
+                viewColumn: ViewColumn.Beside,
+                preview: true
+            });
         })
     );
 

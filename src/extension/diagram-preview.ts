@@ -28,6 +28,13 @@ export class DiagramPreview {
   private currentJson: any | undefined;
   private currentDocUri: string | undefined;
 
+  // Webview readiness handshake: the webview signals it has finished loading
+  // (all scripts parsed) before we send the JSON payload. Without this, the
+  // first postMessage to a freshly created webview can be dropped, leaving the
+  // preview empty until the next auto-refresh arrives.
+  private panelReady = false;
+  private pendingMessage: { json: any; viewKey: string } | undefined;
+
   private readonly title: string = 'Diagram Preview';
   private readonly id: string = 'structurizrPreview';
 
@@ -75,7 +82,13 @@ export class DiagramPreview {
           this.currentDocUri = docUri;
         }
         this.panel ??= this.createPanel();
-        this.panel.webview.postMessage( { 'json' : json, 'viewKey' : viewKey });
+        if (this.panelReady) {
+          this.panel.webview.postMessage( { 'json' : json, 'viewKey' : viewKey });
+        } else {
+          // The webview is still loading - hold on to the latest payload and
+          // deliver it as soon as the webview signals it is ready.
+          this.pendingMessage = { json, viewKey };
+        }
   }
 
   public getCurrentViewKey(): string | undefined {
@@ -106,6 +119,11 @@ export class DiagramPreview {
       }
     );
 
+    // Layout engine is now entirely the ELK pipeline in the TypeScript generator:
+    // the generator bakes element positions/vertices into the view JSON and clears
+    // view.automaticLayout, so the webview renders those coordinates as-is. No ELK
+    // library is loaded in the webview anymore; the vendored dagre layout remains
+    // only as a fallback for views without pre-computed positions.
     panel.webview.html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -115,9 +133,9 @@ export class DiagramPreview {
     <script type="text/javascript" src="${panel.webview.asWebviewUri(this.jsjointcore)}"></script>
     <script type="text/javascript" src="${panel.webview.asWebviewUri(this.jsdagre)}"></script>
     <script type="text/javascript" src="${panel.webview.asWebviewUri(this.jsgraphlib)}"></script>
-    <script type="text/javascript" src="${panel.webview.asWebviewUri(this.jsjointdirectedgraps)}"></script>    
+    <script type="text/javascript" src="${panel.webview.asWebviewUri(this.jsjointdirectedgraps)}"></script>
 
-    <script type="text/javascript" src="${panel.webview.asWebviewUri(this.jspanzoom)}"></script>    
+    <script type="text/javascript" src="${panel.webview.asWebviewUri(this.jspanzoom)}"></script>
     <script type="text/javascript" src="${panel.webview.asWebviewUri(this.jsstructurizr)}"></script>
     <script type="text/javascript" src="${panel.webview.asWebviewUri(this.jsstructurizrutil)}"></script>
     <script type="text/javascript" src="${panel.webview.asWebviewUri(this.jsstructurizrui)}"></script>
@@ -189,11 +207,33 @@ export class DiagramPreview {
         const elem = document.getElementById('svg');
         const panzoom = Panzoom(elem, { maxScale: 16 });
         elem.parentElement.addEventListener('wheel', panzoom.zoomWithWheel)
+
+        // Notify the extension that the webview has finished loading (all
+        // scripts are parsed) so it can deliver the diagram JSON payload.
+        // Without this handshake the first postMessage to a freshly created
+        // webview can be dropped, leaving the preview empty.
+        vscode.postMessage({ command: 'ready' });
 </script>`;
 
     panel.onDidDispose(() => {
       this.panel = undefined;
+      this.panelReady = false;
+      this.pendingMessage = undefined;
     });
+
+    // Ready handshake: deliver any buffered JSON payload once the webview
+    // signals it has finished loading.
+    panel.webview.onDidReceiveMessage((message) => {
+      if (message && message.command === 'ready') {
+        this.panelReady = true;
+        if (this.pendingMessage) {
+          const pending = this.pendingMessage;
+          this.pendingMessage = undefined;
+          panel.webview.postMessage({ 'json': pending.json, 'viewKey': pending.viewKey });
+        }
+      }
+    });
+
     return panel;
   }
 }

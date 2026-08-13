@@ -1,159 +1,154 @@
 {
-    "configuration": {},
+    "name": "Name",
     "description": "Description",
-    "documentation": {},
-    "id": 0,
     "model": {
+        "properties": {},
         "people": [
             {
-                "id": "1",
-                "location": "Unspecified",
+                "id": "person_55b2dfb6",
                 "name": "User",
-                "properties": {
-                    "structurizr.dsl.identifier": "user"
-                },
+                "tags": "Element,Person",
                 "relationships": [
                     {
+                        "id": "relationship_57c7d0ed",
+                        "sourceId": "person_55b2dfb6",
+                        "destinationId": "softwaresystem_4e066da6",
                         "description": "Uses",
-                        "destinationId": "2",
-                        "id": "6",
-                        "sourceId": "1",
                         "tags": "Relationship"
                     }
-                ],
-                "tags": "Element,Person"
+                ]
             }
         ],
         "softwareSystems": [
             {
+                "id": "softwaresystem_4e066da6",
+                "name": "Software System",
+                "tags": "Element,Software System",
                 "containers": [
                     {
-                        "documentation": {},
-                        "id": "3",
+                        "id": "container_5b128fcc",
                         "name": "Web Application",
-                        "properties": {
-                            "structurizr.dsl.identifier": "webapp",
-                            "directive-applied": "true"
-                        },
+                        "tags": "Element,Container,Tag1,Tag2,FromDirective",
                         "relationships": [
                             {
+                                "id": "relationship_1d9fa098",
+                                "sourceId": "container_5b128fcc",
+                                "destinationId": "container_5b128c0a",
                                 "description": "Reads/Writes",
-                                "destinationId": "4",
-                                "id": "5",
-                                "sourceId": "3",
                                 "tags": "Relationship"
+                            },
+                            {
+                                "id": "relationship_27423e57",
+                                "sourceId": "softwaresystem_4e066da6",
+                                "destinationId": "container_5b128c0a",
+                                "description": "Reads/Writes",
+                                "tags": "Relationship",
+                                "linkedRelationshipId": "relationship_1d9fa098"
                             }
                         ],
-                        "tags": "Element,Container,Tag1,Tag2,FromDirective",
-                        "url": "https://example.com/containers"
+                        "url": "https://example.com/containers",
+                        "properties": {
+                            "directive-applied": "true"
+                        }
                     },
                     {
-                        "documentation": {},
-                        "id": "4",
+                        "id": "container_5b128c0a",
                         "name": "Database",
-                        "properties": {
-                            "structurizr.dsl.identifier": "db",
-                            "directive-applied": "true"
-                        },
                         "tags": "Element,Container,FromDirective",
-                        "url": "https://example.com/containers"
+                        "relationships": [],
+                        "url": "https://example.com/containers",
+                        "properties": {
+                            "directive-applied": "true"
+                        }
                     }
                 ],
-                "documentation": {},
-                "id": "2",
-                "location": "Unspecified",
-                "name": "Software System",
-                "properties": {
-                    "structurizr.dsl.identifier": "softwaresystem"
-                },
-                "tags": "Element,Software System"
+                "relationships": []
             }
         ]
-    },
-    "name": "Name",
-    "properties": {
-        "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgdXNlciA9IHBlcnNvbiAiVXNlciINCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gPSBzb2Z0d2FyZVN5c3RlbSAiU29mdHdhcmUgU3lzdGVtIiB7DQogICAgICAgICAgICB3ZWJhcHAgPSBjb250YWluZXIgIldlYiBBcHBsaWNhdGlvbiIgew0KICAgICAgICAgICAgICAgIHRhZ3MgIlRhZzEsVGFnMiINCiAgICAgICAgICAgIH0NCiAgICAgICAgICAgIGRiID0gY29udGFpbmVyICJEYXRhYmFzZSINCg0KICAgICAgICAgICAgd2ViYXBwIC0+IGRiICJSZWFkcy9Xcml0ZXMiDQoNCiAgICAgICAgICAgICFlbGVtZW50cyBlbGVtZW50LnR5cGU9PUNvbnRhaW5lciB7DQogICAgICAgICAgICAgICAgdGFncyAiRnJvbURpcmVjdGl2ZSINCiAgICAgICAgICAgICAgICB1cmwgImh0dHBzOi8vZXhhbXBsZS5jb20vY29udGFpbmVycyINCiAgICAgICAgICAgICAgICBwcm9wZXJ0aWVzIHsNCiAgICAgICAgICAgICAgICAgICAgImRpcmVjdGl2ZS1hcHBsaWVkIiAidHJ1ZSINCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICB1c2VyIC0+IHNvZnR3YXJlU3lzdGVtICJVc2VzIg0KICAgIH0NCg0KICAgIHZpZXdzIHsNCiAgICAgICAgc3lzdGVtY29udGV4dCBzb2Z0d2FyZVN5c3RlbSB7DQogICAgICAgICAgICBpbmNsdWRlICoNCiAgICAgICAgICAgIGF1dG9sYXlvdXQNCiAgICAgICAgfQ0KDQogICAgICAgIGNvbnRhaW5lciBzb2Z0d2FyZVN5c3RlbSB7DQogICAgICAgICAgICBpbmNsdWRlICoNCiAgICAgICAgICAgIGF1dG9sYXlvdXQNCiAgICAgICAgfQ0KICAgIH0NCg0KfQ=="
     },
     "views": {
-        "configuration": {
-            "branding": {},
-            "styles": {},
-            "terminology": {}
-        },
-        "containerViews": [
-            {
-                "automaticLayout": {
-                    "applied": false,
-                    "edgeSeparation": 0,
-                    "implementation": "Graphviz",
-                    "nodeSeparation": 300,
-                    "rankDirection": "TopBottom",
-                    "rankSeparation": 300,
-                    "vertices": false
-                },
-                "elements": [
-                    {
-                        "id": "3",
-                        "x": 0,
-                        "y": 0
-                    },
-                    {
-                        "id": "4",
-                        "x": 0,
-                        "y": 0
-                    }
-                ],
-                "externalSoftwareSystemBoundariesVisible": false,
-                "generatedKey": true,
-                "key": "Container-001",
-                "order": 2,
-                "relationships": [
-                    {
-                        "id": "5"
-                    }
-                ],
-                "softwareSystemId": "2"
-            }
-        ],
         "systemContextViews": [
             {
-                "automaticLayout": {
-                    "applied": false,
-                    "edgeSeparation": 0,
-                    "implementation": "Graphviz",
-                    "nodeSeparation": 300,
-                    "rankDirection": "TopBottom",
-                    "rankSeparation": 300,
-                    "vertices": false
-                },
-                "dimensions": {
-                    "height": 1316,
-                    "width": 866
-                },
+                "softwareSystemId": "softwaresystem_4e066da6",
+                "key": "Software System-SystemContext-79eddd5",
                 "elements": [
                     {
-                        "id": "1",
-                        "x": 208,
-                        "y": 208
+                        "id": "softwaresystem_4e066da6",
+                        "x": 1262,
+                        "y": 400,
+                        "width": 450,
+                        "height": 300
                     },
                     {
-                        "id": "2",
-                        "x": 208,
-                        "y": 808
+                        "id": "person_55b2dfb6",
+                        "x": 400,
+                        "y": 400,
+                        "width": 450,
+                        "height": 300
                     }
                 ],
-                "enterpriseBoundaryVisible": true,
-                "generatedKey": true,
-                "key": "SystemContext-001",
-                "order": 1,
-                "paperSize": "A6_Portrait",
                 "relationships": [
                     {
-                        "id": "6"
+                        "id": "relationship_57c7d0ed",
+                        "x": 0,
+                        "y": 0,
+                        "vertices": [
+                            {
+                                "x": 1000,
+                                "y": 550
+                            }
+                        ],
+                        "position": 44
                     }
                 ],
-                "softwareSystemId": "2"
+                "externalSoftwareSystemBoundariesVisible": true,
+                "dimensions": {
+                    "width": 2112,
+                    "height": 1100
+                }
             }
-        ]
+        ],
+        "containerViews": [
+            {
+                "softwareSystemId": "softwaresystem_4e066da6",
+                "key": "Software System-Container-19c518d2",
+                "elements": [
+                    {
+                        "id": "container_5b128fcc",
+                        "x": 450,
+                        "y": 450,
+                        "width": 450,
+                        "height": 300
+                    },
+                    {
+                        "id": "container_5b128c0a",
+                        "x": 1300,
+                        "y": 450,
+                        "width": 450,
+                        "height": 300
+                    }
+                ],
+                "relationships": [
+                    {
+                        "id": "relationship_1d9fa098",
+                        "x": 0,
+                        "y": 0,
+                        "position": 36
+                    }
+                ],
+                "externalSoftwareSystemBoundariesVisible": true,
+                "dimensions": {
+                    "width": 2200,
+                    "height": 1280
+                }
+            }
+        ],
+        "configuration": {
+            "properties": {},
+            "styles": {
+                "elements": [],
+                "relationships": []
+            }
+        }
     }
 }

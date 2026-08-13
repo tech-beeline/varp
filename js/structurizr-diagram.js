@@ -560,6 +560,16 @@ structurizr.ui.Diagram = function(id, diagramIsEditable, constructionCompleteCal
                 }
 
                 var elementStyle = structurizr.ui.findElementStyle(element, darkMode);
+
+                // The plugin may pre-compute element sizes (ELK auto-layout) and
+                // write them into the view JSON. Apply them so the rendered box
+                // matches the layout exactly; otherwise style defaults (e.g.
+                // Person 400x400) overlap the pre-positioned elements.
+                if (view.elements[i].width !== undefined) {
+                    elementStyle.width = view.elements[i].width;
+                    elementStyle.height = view.elements[i].height;
+                }
+
                 registerElementStyle(elementStyle);
 
                 var box;

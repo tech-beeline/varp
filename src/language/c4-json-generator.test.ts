@@ -15,7 +15,7 @@
 */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
+import { readFileSync, existsSync, readdirSync, statSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { EmptyFileSystem } from 'langium';
 import { URI } from 'vscode-uri';
@@ -85,6 +85,14 @@ describe('C4JsonGenerator', () => {
     for (const testCase of testCases) {
         it(`generates correct JSON for "${testCase.name}"`, async () => {
             const actual = await loadDSL(testCase.dslPath);
+
+            // Regenerate fixtures: run with UPDATE_FIXTURES=1 to write the actual
+            // output into expected.json instead of comparing.
+            if (process.env.UPDATE_FIXTURES === '1') {
+                writeFileSync(testCase.jsonPath, JSON.stringify(actual, null, 4) + '\n');
+                return;
+            }
+
             const expected = loadExpectedJSON(testCase.jsonPath);
             
             const diffs = compareJson(actual, expected);

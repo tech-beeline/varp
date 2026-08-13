@@ -1,149 +1,146 @@
 {
-    "configuration": {},
+    "name": "Name",
     "description": "Description",
-    "documentation": {},
-    "id": 0,
     "model": {
+        "properties": {},
         "people": [
             {
-                "id": "1",
-                "location": "Unspecified",
+                "id": "person_55b2dfb6",
                 "name": "User",
-                "properties": {
-                    "structurizr.dsl.identifier": "user"
-                },
+                "tags": "Element,Person",
                 "relationships": [
                     {
+                        "id": "relationship_57c7c8cb",
+                        "sourceId": "person_55b2dfb6",
+                        "destinationId": "softwaresystem_4e066da6",
                         "description": "Uses",
-                        "destinationId": "2",
-                        "id": "6",
-                        "sourceId": "1",
                         "tags": "Relationship"
                     }
-                ],
-                "tags": "Element,Person"
+                ]
             }
         ],
         "softwareSystems": [
             {
+                "id": "softwaresystem_4e066da6",
+                "name": "Software System",
+                "tags": "Element,Software System",
                 "containers": [
                     {
-                        "documentation": {},
-                        "id": "3",
+                        "id": "container_5b128fcc",
                         "name": "Web Application",
-                        "properties": {
-                            "structurizr.dsl.identifier": "webapp"
-                        },
+                        "tags": "Element,Container,Tag1,Tag2",
                         "relationships": [
                             {
+                                "id": "relationship_1d9fa098",
+                                "sourceId": "container_5b128fcc",
+                                "destinationId": "container_5b128c0a",
                                 "description": "Reads/Writes",
-                                "destinationId": "4",
-                                "id": "5",
-                                "sourceId": "3",
                                 "tags": "Relationship"
+                            },
+                            {
+                                "id": "relationship_27423e57",
+                                "sourceId": "softwaresystem_4e066da6",
+                                "destinationId": "container_5b128c0a",
+                                "description": "Reads/Writes",
+                                "tags": "Relationship",
+                                "linkedRelationshipId": "relationship_1d9fa098"
                             }
-                        ],
-                        "tags": "Element,Container,Tag1,Tag2"
+                        ]
                     },
                     {
-                        "documentation": {},
-                        "id": "4",
+                        "id": "container_5b128c0a",
                         "name": "Database",
-                        "properties": {
-                            "structurizr.dsl.identifier": "db"
-                        },
-                        "tags": "Element,Container"
+                        "tags": "Element,Container",
+                        "relationships": []
                     }
                 ],
-                "documentation": {},
-                "id": "2",
-                "location": "Unspecified",
-                "name": "Software System",
-                "properties": {
-                    "structurizr.dsl.identifier": "softwaresystem"
-                },
-                "tags": "Element,Software System"
+                "relationships": []
             }
         ]
-    },
-    "name": "Name",
-    "properties": {
     },
     "views": {
-        "configuration": {
-            "branding": {},
-            "styles": {},
-            "terminology": {}
-        },
-        "containerViews": [
-            {
-                "automaticLayout": {
-                    "applied": false,
-                    "edgeSeparation": 0,
-                    "implementation": "Graphviz",
-                    "nodeSeparation": 300,
-                    "rankDirection": "TopBottom",
-                    "rankSeparation": 300,
-                    "vertices": false
-                },
-                "elements": [
-                    {
-                        "id": "3",
-                        "x": 0,
-                        "y": 0
-                    },
-                    {
-                        "id": "4",
-                        "x": 0,
-                        "y": 0
-                    }
-                ],
-                "externalSoftwareSystemBoundariesVisible": false,
-                "generatedKey": true,
-                "key": "Container-001",
-                "order": 2,
-                "relationships": [
-                    {
-                        "id": "5"
-                    }
-                ],
-                "softwareSystemId": "2"
-            }
-        ],
         "systemContextViews": [
             {
-                "automaticLayout": {
-                    "applied": false,
-                    "edgeSeparation": 0,
-                    "implementation": "Graphviz",
-                    "nodeSeparation": 300,
-                    "rankDirection": "TopBottom",
-                    "rankSeparation": 300,
-                    "vertices": false
-                },
+                "softwareSystemId": "softwaresystem_4e066da6",
+                "key": "Software System-SystemContext-d164554e",
                 "elements": [
                     {
-                        "id": "1",
-                        "x": 0,
-                        "y": 0
+                        "id": "softwaresystem_4e066da6",
+                        "x": 1262,
+                        "y": 400,
+                        "width": 450,
+                        "height": 300
                     },
                     {
-                        "id": "2",
-                        "x": 0,
-                        "y": 0
+                        "id": "person_55b2dfb6",
+                        "x": 400,
+                        "y": 400,
+                        "width": 450,
+                        "height": 300
                     }
                 ],
-                "enterpriseBoundaryVisible": true,
-                "generatedKey": true,
-                "key": "SystemContext-001",
-                "order": 1,
                 "relationships": [
                     {
-                        "id": "6"
+                        "id": "relationship_57c7c8cb",
+                        "x": 0,
+                        "y": 0,
+                        "vertices": [
+                            {
+                                "x": 1000,
+                                "y": 550
+                            }
+                        ],
+                        "position": 44
                     }
                 ],
-                "softwareSystemId": "2"
+                "externalSoftwareSystemBoundariesVisible": true,
+                "dimensions": {
+                    "width": 2112,
+                    "height": 1100
+                }
             }
-        ]
+        ],
+        "containerViews": [
+            {
+                "softwareSystemId": "softwaresystem_4e066da6",
+                "key": "Software System-Container-1e44472f",
+                "elements": [
+                    {
+                        "id": "container_5b128fcc",
+                        "x": 450,
+                        "y": 450,
+                        "width": 450,
+                        "height": 300
+                    },
+                    {
+                        "id": "container_5b128c0a",
+                        "x": 1300,
+                        "y": 450,
+                        "width": 450,
+                        "height": 300
+                    }
+                ],
+                "relationships": [
+                    {
+                        "id": "relationship_1d9fa098",
+                        "x": 0,
+                        "y": 0,
+                        "position": 36
+                    }
+                ],
+                "externalSoftwareSystemBoundariesVisible": true,
+                "dimensions": {
+                    "width": 2200,
+                    "height": 1280
+                }
+            }
+        ],
+        "configuration": {
+            "properties": {},
+            "styles": {
+                "elements": [],
+                "relationships": []
+            }
+        }
     }
 }

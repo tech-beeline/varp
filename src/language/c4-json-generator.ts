@@ -1,4 +1,4 @@
-/*
+    /*
 	Copyright 2026 VimpelCom PJSC
 
 	Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,10 @@
 import { AstNode, AstUtils, Reference } from 'langium';
 import { Utils } from 'vscode-uri';
 import { StringUtils } from './c4-utils';
+// elkjs/lib/elk.bundled.js is the self-contained cross-platform UMD bundle
+// (works in both the Node and the browser language server); 'elkjs' main entry
+// is Node-specific (require.resolve('web-worker')).
+import ELK from 'elkjs/lib/elk.bundled.js';
 
 import {
     Workspace, Container,
@@ -38,7 +42,7 @@ import {
     isDeploymentEnvironment, DeploymentNode,
     ViewsBlock, SystemContextView, isWorkspace, isC4Document,
     isViewsBlock, ElementStyle, RelationshipStyle, isStylesBlock,
-    StylesBlock, isModelBlock, Include, isGroup, isDeploymentNode,
+    StylesBlock, isModelBlock, isConstant, Include, isInclude, isGroup, isDeploymentNode,
     isDeploymentView, DynamicMember, isDynamicStep, isParallelStepBlock,
     DynamicView, isContainerView,
     isSystemLandscapeView, isSystemContextView,
@@ -121,6 +125,12 @@ class JsonGenerator {
 
     /** Terminology overrides for diagram rendering (person, softwareSystem, container, etc.), populated from workspace terminology blocks */
     private terminology: Record<string, string> = {};
+    /** Element styles loaded from external themes (!theme), mirroring structurizr.ui.themes. */
+    private readonly themeStyles: any[] = [];
+    /** Relationship styles loaded from external themes (!theme), mirroring structurizr.ui.themes[].relationships. */
+    private readonly themeRelationshipStyles: any[] = [];
+    /** Merged element style map (theme + workspace) keyed by tag, built lazily for ELK sizing. */
+    private elementStyleMap: Record<string, any> | undefined = undefined;
 
     constructor(services: C4Services) {
         this.services = services;
@@ -131,11 +141,16 @@ class JsonGenerator {
      * Orchestrates all collection phases (constants, styles, themes, properties, terminology,
      * elements, relationships) and then assembles the final model + views output.
      */
-    public generate(workspace: Workspace) {
+    public async generate(workspace: Workspace): Promise<any> {
 
         this.collectConstants(workspace);
         this.collectStyles(workspace);
         this.collectThemes(workspace);
+
+        // Download external theme files (!theme) so element sizes defined by
+        // themes are reflected in the ELK layout (the webview downloads the same
+        // files at render time via loadTheme).
+        await this.collectThemeStyles();
         this.collectProperties(workspace);
         this.collectTerminology(workspace);
 
@@ -190,6 +205,12 @@ class JsonGenerator {
                 }
             }
         };
+
+        // Run ELK in the plugin (full model context) and bake the resulting
+        // coordinates/sizes directly into the view JSON. The webview then renders
+        // at these positions instead of re-running a layout itself.
+        await this.applyElkAutoLayouts(jsonOutput);
+
         return jsonOutput;
     }
 
@@ -435,43 +456,54 @@ class JsonGenerator {
     private collectConstants(node: AstNode | undefined, visited: Set<string> = new Set<string>()): void {
         if (!node) return;
 
-        const docUri = AstUtils.getDocument(node)?.uri.toString();
+        // Always start from the document root (C4Document) so constants declared
+        // OUTSIDE the workspace block (top-level !constant) are collected too.
+        // Matches the scope provider's substituteConstants, which scans the
+        // document's parse result rather than the workspace node.
+        const root = AstUtils.getDocument(node)?.parseResult?.value ?? node;
+
+        const docUri = AstUtils.getDocument(root)?.uri.toString();
         if (docUri) {
             if (visited.has(docUri)) return;
             visited.add(docUri);
         }
 
-        const anyNode = node as any;
+        // Collect constants from anywhere in the document subtree. Constants may be
+        // declared at document, workspace, model, or element level, so a plain
+        // node.constants scan (workspace-level only) would miss them
+        AstUtils.streamAllContents(root).filter(isConstant).forEach((c) => {
+            const name = (c.name ?? '').toString().replace(/['"]/g, '');
+            const rawValue = (c.value ?? '').toString();
+            const value = typeof rawValue === 'string' ? rawValue.replace(/^['"]|['"]$/g, '') : rawValue;
+            if (name && !this.constants.has(name)) this.constants.set(name, value);
+        });
 
-        // Collect constants from the current file
-        if (Array.isArray(anyNode.constants)) {
-            for (const c of anyNode.constants) {
-                if (c.name && c.value) {
-                    this.constants.set(c.name, c.value);
-                }
+        // Recurse into every !include directive anywhere in this document (top-level,
+        // inside model blocks, and nested inside element blocks like softwareSystem).
+        AstUtils.streamAllContents(root).filter(isInclude).forEach((inc) => {
+            if (inc.file) {
+                const includedRoot = this.resolveIncludedRoot(inc, inc.file);
+                if (includedRoot) this.collectConstants(includedRoot, visited);
             }
-        }
-
-        // Recurse into !include files
-        if (Array.isArray(anyNode.includes)) {
-            for (const inc of anyNode.includes) {
-                if (inc.file) {
-                    const root = this.resolveIncludedRoot(node, inc.file);
-                    this.collectConstants(root, visited);
-                }
-            }
-        }
+        });
     }
 
     /**
      * Resolves the root AST node of an included file by its relative path from the context node.
+     * Substitutes ${CONST} placeholders (matching resolvePathToUri in the scope provider) and
+     * falls back to appending a missing .dsl extension (matching C4DocumentBuilder.loadIncludeFile).
      * Looks up the target document in LangiumDocuments and returns its parsed AST root.
      */
     private resolveIncludedRoot(contextNode: AstNode, relativePath: string): AstNode | undefined {
         const sourceDoc = AstUtils.getDocument(contextNode);
-        const targetUri = Utils.resolvePath(Utils.dirname(sourceDoc.uri), relativePath);
+        const substituted = this.substitute(relativePath) ?? relativePath;
+        const baseDir = Utils.dirname(sourceDoc.uri);
+        const targetUri = Utils.resolvePath(baseDir, substituted);
         try {
-            const doc = this.services.shared.workspace.LangiumDocuments.getDocument(targetUri);
+            let doc = this.services.shared.workspace.LangiumDocuments.getDocument(targetUri);
+            if (!doc && !substituted.toLowerCase().endsWith('.dsl')) {
+                doc = this.services.shared.workspace.LangiumDocuments.getDocument(Utils.resolvePath(baseDir, substituted + '.dsl'));
+            }
             return doc?.parseResult.value;
         } catch (e) {
             console.error(`[C4 Gen] Could not resolve include file: ${relativePath}`);
@@ -677,6 +709,42 @@ class JsonGenerator {
     }
 
     /**
+     * Downloads external theme files (!theme) and collects their element styles so
+     * ELK plans for the sizes the webview will render after downloading the same
+     * theme files. Absolute http(s) URLs are fetched; relative/local paths are
+     * skipped (the webview resolves them against its own base URL).
+     */
+    private async collectThemeStyles(): Promise<void> {
+        if (this.themes.size === 0 || typeof fetch !== 'function') return;
+        for (const themeUrl of this.themes) {
+            if (!/^https?:\/\//i.test(themeUrl)) continue;
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 5000);
+            try {
+                const response = await fetch(themeUrl, { signal: controller.signal });
+                if (!response.ok) {
+                    console.warn(`[C4 ELK] Theme fetch failed (${response.status}): ${themeUrl}`);
+                    continue;
+                }
+                const theme = await response.json();
+                if (theme && Array.isArray(theme.elements)) {
+                    for (const style of theme.elements) this.themeStyles.push(style);
+                }
+                // The webview merges theme.relationships into findRelationshipStyle
+                // (structurizr-ui.js), so collect them too - otherwise themed
+                // relationship fontSize/width would not be reflected in ELK labels.
+                if (theme && Array.isArray(theme.relationships)) {
+                    for (const style of theme.relationships) this.themeRelationshipStyles.push(style);
+                }
+            } catch (err) {
+                console.warn(`[C4 ELK] Could not load theme ${themeUrl}:`, err);
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+    }
+
+    /**
      * Collects properties from model and views configuration blocks across all documents and includes.
      * Properties are stored as flat key-value records (propertiesModel and propertiesViews).
      */
@@ -750,30 +818,57 @@ class JsonGenerator {
      * Handles C4Document/Workspace root wrappers, processes groups with stack tracking
      * for group paths, converts implicit relationships to synthetic ones.
      */
-    private collectLocal(node: any, groupStack: string[] = []) {
+    private collectLocal(node: any, groupStack: string[] = [], visitedDocs: Set<string> = new Set()) {
         // Handle C4Document root wrapper: delegate to workspace or model block
         if (isC4Document(node)) {
             if (node.workspaces.at(0)) {
-                this.collectLocal(node.workspaces.at(0), groupStack);
+                this.collectLocal(node.workspaces.at(0), groupStack, visitedDocs);
                 return;
             }
             if (node.modelBlocks.at(0)) {
-                this.collectLocal(node.modelBlocks.at(0), groupStack);
+                this.collectLocal(node.modelBlocks.at(0), groupStack, visitedDocs);
                 return;
             }
         }
         if(isWorkspace(node)) {
             if (node.modelBlocks.at(0)) {
-                this.collectLocal(node.modelBlocks.at(0), groupStack);
+                this.collectLocal(node.modelBlocks.at(0), groupStack, visitedDocs);
             }
             return;
+        }
+        // Process !include directives on this node — works for model blocks
+        // (`model { !include ... }`) and element blocks (e.g. a softwareSystem or
+        // container with `!include "..."`). ModelBlocks and element blocks are not
+        // visited by collectElementsRelationships, so included elements must be
+        // collected here — otherwise they are missing from the emitted model while
+        // references (e.g. deployment instances, container views) still point to ids.
+        if (Array.isArray(node.includes)) {
+            for (const inc of node.includes) {
+                if (inc.file) {
+                    const root = this.resolveIncludedRoot(node, inc.file);
+                    if (root) {
+                        const docUri = AstUtils.getDocument(root)?.uri.toString();
+                        if (docUri) {
+                            if (visitedDocs.has(docUri)) continue;
+                            visitedDocs.add(docUri);
+                            // Register the include context so parent resolution
+                            // (resolveConatinerParent / resolveComponentParent) can
+                            // climb from the Include directive to the logical parent.
+                            const existing = this.includeContexts.get(docUri) || [];
+                            existing.push(inc);
+                            this.includeContexts.set(docUri, existing);
+                        }
+                        this.collectLocal(root, groupStack, visitedDocs);
+                    }
+                }
+            }
         }
         // Universal collection handler: processes groups, relationships, and named elements
         const processItems = (items: any[]) => {
             for (const item of items) {
                 if (isGroup(item)) {
                     // Groups add another recursion level with an extended group stack
-                    this.collectLocal(item, [...groupStack, StringUtils.stripQuotes(item.name) || ""]);
+                    this.collectLocal(item, [...groupStack, StringUtils.stripQuotes(item.name) || ""], visitedDocs);
                 }
                 else if (isRelationship(item)) {
                     this.relationships.push(item);
@@ -788,7 +883,7 @@ class JsonGenerator {
                     }
                     this.elements.push(item);
                     // Recurse into element children (SoftwareSystem → Containers, etc.) with empty group stack
-                    this.collectLocal(item, []);
+                    this.collectLocal(item, [], visitedDocs);
                 }
             }
         };
@@ -1917,7 +2012,7 @@ class JsonGenerator {
      * Collects nested child elements of a specific type from a parent node.
      * Recursively searches through groups, containers, components, deployment nodes, etc.
      */
-    private collectNested<T>(node: any, check: (item: any) => item is T): T[] | undefined {
+    private collectNested<T>(node: any, check: (item: any) => item is T, visitedDocs: Set<string> = new Set()): T[] | undefined {
         let results: T[] = [];
         
         // Check all possible element collections on the current node
@@ -1938,7 +2033,25 @@ class JsonGenerator {
                 results.push(item);
             } else if (isGroup(item)) {
                 // If it's a group, recurse deeper
-                results = results.concat(this.collectNested(item, check) || []);
+                results = results.concat(this.collectNested(item, check, visitedDocs) || []);
+            }
+        }
+
+        // Elements defined via !include inside this block (e.g. containers included
+        // inside a softwareSystem) are nested children of this block too. Resolve the
+        // include target and collect matching elements from it (handles C4Document /
+        // Workspace / ModelBlock wrappers as well as top-level element collections).
+        if (Array.isArray(node.includes)) {
+            for (const inc of node.includes) {
+                if (!inc.file) continue;
+                const root = this.resolveIncludedRoot(node, inc.file);
+                if (!root) continue;
+                const docUri = AstUtils.getDocument(root)?.uri.toString();
+                if (docUri) {
+                    if (visitedDocs.has(docUri)) continue;
+                    visitedDocs.add(docUri);
+                }
+                results = results.concat(this.collectNested(root, check, visitedDocs) || []);
             }
         }
         return results.length > 0 ? results : undefined;
@@ -2280,7 +2393,9 @@ class JsonGenerator {
                     description: this.description(view),
                     elements: Array.from(elements).map(el => this.elementJson(el)),
                     relationships: Array.from(relationships).map(rel => this.elementJson(rel)),
-                    automaticLayout: this.transformAutoLayout(view)
+                    automaticLayout: this.transformAutoLayout(view),
+                    // Transient: consumed by applyElkAutoLayouts in the plugin, removed before shipping.
+                    elkGraph: this.buildElkGraphForView(this.transformAutoLayout(view), undefined, false, elements, relationships)
                 };
             });
         return views && views.length > 0 ? views : undefined;
@@ -2302,7 +2417,9 @@ class JsonGenerator {
                     description: this.description(view),
                     elements: Array.from(elements).map(el => this.elementJson(el)),
                     relationships: Array.from(relationships).map(rel => this.elementJson(rel)),
-                    automaticLayout: this.transformAutoLayout(view)
+                    automaticLayout: this.transformAutoLayout(view),
+                    // Transient: consumed by applyElkAutoLayouts in the plugin, removed before shipping.
+                    elkGraph: this.buildElkGraphForView(this.transformAutoLayout(view), undefined, false, elements, relationships)
                 };
             });
         return views && views.length > 0 ? views : undefined;
@@ -2336,6 +2453,723 @@ class JsonGenerator {
             edgeSeparation: 50,
             vertices: true
         };
+    }
+
+    /**
+     * Builds an ELK layout graph for a view using the full model context that is
+     * available in the generator but NOT in the webview.
+     *
+     * Frames (the scope software system / container, groups, deployment nodes)
+     * become ELK compound nodes so ELK sizes/positions them without overlaps and
+     * lays their contents out inside. Elements are leaves. Cross-frame edges are
+     * lifted onto the level of the lowest common ancestor so ELK routes them.
+     * The graph is consumed in the plugin (applyElkLayoutToView) to compute
+     * coordinates, then removed from the shipped JSON.
+     *
+     * @param autoLayout      automaticLayout settings
+     * @param scopeElement    the view's scope element (software system / container), if any
+     * @param scopeAsFrame    whether the scope is rendered as a frame compound (container & component views)
+     * @param elements        the view's element AST nodes
+     * @param relationships   the view's relationship AST nodes (ImpliedRelationship wrappers)
+     */
+    private buildElkGraphForView(
+        autoLayout: any,
+        scopeElement: NamedElement | undefined,
+        scopeAsFrame: boolean,
+        elements: Iterable<any>,
+        relationships: Iterable<any>
+    ): any | undefined {
+        if (!autoLayout) return undefined;
+
+        const rankSeparation = autoLayout.rankSeparation ?? 100;
+        const nodeSeparation = autoLayout.nodeSeparation ?? 50;
+        const edgeSeparation = autoLayout.edgeSeparation ?? 50;
+        // Minimums keep the diagram from looking cramped (labels/edges clear of elements).
+        const edgeClearance = Math.max(edgeSeparation, 80);
+        const nodeGap = Math.max(nodeSeparation, 80);
+        const layerGap = Math.max(rankSeparation, 150);
+
+        const graph: any = {
+            id: 'root',
+            layoutOptions: {
+                'elk.algorithm': 'layered',
+                'elk.direction': this.mapElkDirection(autoLayout.rankDirection),
+                // Lay the whole compound hierarchy out together so cross-hierarchy
+                // edges (root element -> element inside a group/deployment node) are
+                // routed by ELK around the group's content instead of straight through
+                // it (SEPARATE_CHILDREN, the default, only avoids the group frame).
+                'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
+                'elk.edgeRouting': 'POLYLINE',
+                'elk.edgeLabels.placement': 'CENTER',
+                'elk.spacing.edgeLabel': '30',
+                // The base spacing value is what actually drives the gap between
+                // UNCONNECTED siblings (elk.spacing.nodeNode is ignored by this
+                // elkjs build). It must be set on the scope (root / each compound)
+                // so unconnected deployment nodes / group members don't collapse to
+                // the 20px default. The explicit *BetweenLayers options below keep
+                // the spacing between CONNECTED (different-layer) nodes unchanged.
+                'elk.layered.spacing.baseValue': String(nodeGap),
+                'elk.spacing.nodeNode': String(nodeGap),
+                'elk.spacing.edgeEdge': String(edgeClearance),
+                'elk.spacing.edgeNode': String(edgeClearance),
+                'elk.layered.spacing.nodeNodeBetweenLayers': String(layerGap),
+                'elk.layered.spacing.edgeNodeBetweenLayers': String(edgeClearance),
+                'elk.layered.spacing.edgeEdgeBetweenLayers': String(edgeClearance),
+                'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP'
+            },
+            children: [],
+            edges: []
+        };
+
+        const nodeById: Record<string, any> = {};
+        // elk node id -> parent elk node id (used for the LCA edge lift)
+        const parentOf: Record<string, string | undefined> = {};
+
+        const makeCompound = (node: any, id: string, el?: NamedElement) => {
+            node.children = [];
+            // Replicate the webview's reposition() frame padding so ELK reserves the
+            // same space the webview will use when it resizes a frame around its
+            // children (clusterPadding 50 on all sides + an extra bottom block for the
+            // node name/metadata text: 50 + 15 + fontSize*1.4 + fontSize*0.7 + 15).
+            // If ELK under-reserves this, the webview grows the frame and it overlaps
+            // the elements placed below it (e.g. deployment frames over infra nodes).
+            const fontSize = el ? this.resolveElementStyle(el).fontSize : 24;
+            const bottom = Math.round(50 + 15 + fontSize * 1.4 + fontSize * 0.7 + 15);
+            node.layoutOptions = {
+                'elk.padding': `[top=50,left=50,right=50,bottom=${bottom}]`,
+                // Drives the gap between UNCONNECTED children of this compound
+                // (see the note on the root layoutOptions).
+                'elk.layered.spacing.baseValue': String(nodeGap)
+            };
+        };
+
+        const attach = (node: any, parentId: string | undefined) => {
+            if (parentId !== undefined && nodeById[parentId] !== undefined) {
+                const parentNode = nodeById[parentId];
+                if (!parentNode.children) makeCompound(parentNode, parentId);
+                parentNode.children.push(node);
+                parentOf[node.id] = parentId;
+            } else {
+                graph.children.push(node);
+                parentOf[node.id] = undefined;
+            }
+        };
+
+        // Ensures a (possibly nested) group compound exists under `parentId` and
+        // returns the innermost group node id. Group ids are derived from the parent
+        // (not from the element) so all elements of the same group under the same
+        // parent share a single group compound.
+        const ensureGroupNode = (groupPath: string, parentId: string | undefined): string => {
+            const segments = groupPath.split('/').filter(s => s.length > 0);
+            let currentParent = parentId;
+            for (const seg of segments) {
+                const gid = 'group:' + (currentParent ?? 'root') + ':' + seg;
+                if (nodeById[gid] === undefined) {
+                    const gnode: any = { id: gid };
+                    makeCompound(gnode, gid);
+                    nodeById[gid] = gnode;
+                    attach(gnode, currentParent);
+                }
+                currentParent = gid;
+            }
+            return currentParent!;
+        };
+
+        // Scope frame (software system on a container view / container on a
+        // component view) is rendered as a boundary -> top-level compound.
+        if (scopeElement && scopeAsFrame) {
+            const scopeId = this.getId(scopeElement);
+            const scopeNode: any = { id: scopeId };
+            makeCompound(scopeNode, scopeId, scopeElement);
+            nodeById[scopeId] = scopeNode;
+            graph.children.push(scopeNode);
+            parentOf[scopeId] = undefined;
+        }
+
+        // First pass: create compound (deployment node) nodes BEFORE any leaf/group
+        // attaches to them. Otherwise an instance processed before its deployment node
+        // would attach its group to the ROOT (the frame node does not exist yet), the
+        // deployment view would be laid out flat (frames not wrapping children), and the
+        // gap between the connected instances would be too small for the edge label.
+        for (const el of elements) {
+            if (nodeById[this.getId(el)] !== undefined) continue;
+            if (!this.isElkCompound(el)) continue;
+            const id = this.getId(el);
+            const size = this.defaultElementSize(el);
+            const node: any = { id, width: size.width, height: size.height };
+            makeCompound(node, id, el);
+            nodeById[id] = node;
+
+            const group = this.extractGroup(el);
+            if (group && group.length > 0) {
+                const frameParentId = this.resolveElkParentId(el, scopeElement);
+                const gid = ensureGroupNode(group, frameParentId);
+                attach(node, gid);
+            } else {
+                attach(node, this.resolveElkParentId(el, scopeElement));
+            }
+        }
+
+        // Second pass: leaves attach to the (already created) compound nodes.
+        for (const el of elements) {
+            const id = this.getId(el);
+            if (nodeById[id] !== undefined) {
+                continue; // already a frame (scope / compound) - do not duplicate
+            }
+            const size = this.defaultElementSize(el);
+            const node: any = { id, width: size.width, height: size.height };
+            nodeById[id] = node;
+
+            const group = this.extractGroup(el);
+            if (group && group.length > 0) {
+                const frameParentId = this.resolveElkParentId(el, scopeElement);
+                const gid = ensureGroupNode(group, frameParentId);
+                attach(node, gid);
+            } else {
+                attach(node, this.resolveElkParentId(el, scopeElement));
+            }
+        }
+
+        // Edges with an LCA lift so ELK routes cross-frame relationships.
+        for (const item of relationships as any[]) {
+            const relationship = item?.relationship ?? item;
+            const sourceId = this.getId(this.resolveSource(relationship));
+            const targetId = this.getId(this.resolveTarget(relationship));
+
+            let src = sourceId;
+            let tgt = targetId;
+            let container: string | undefined = undefined;
+            if (nodeById[src] !== undefined && nodeById[tgt] !== undefined) {
+                const lifted = this.liftEdgeToLca(src, tgt, parentOf);
+                // Keep the original element endpoints and route the edge inside the LCA
+                // compound (edge.container) so ELK's POLYLINE router avoids intermediate
+                // elements/groups. Lifting the endpoints to the LCA's direct children
+                // (the previous behaviour) made ELK route straight past interior
+                // obstacles - e.g. the "Uses" edge from Service 1 API to Service 2 API
+                // crossed Service 1 Database which sits between them.
+                if (lifted.lca !== undefined && lifted.lca !== sourceId && lifted.lca !== targetId) {
+                    container = lifted.lca;
+                } else {
+                    src = lifted.src;
+                    tgt = lifted.tgt;
+                }
+            }
+
+            const edge: any = {
+                // Use the wrapper item id so it matches view.relationships[].id
+                // (elementJson uses getId(item)) - the plugin writes vertices by id.
+                // Dynamic-view steps are synthetic objects carrying an explicit `id`
+                // (getId() on them would hash to the same value for every step), so
+                // prefer item.id when present and fall back to getId(item) for AST
+                // relationship wrappers.
+                id: (item as any)?.id ?? this.getId(item),
+                sources: [src],
+                targets: [tgt]
+            };
+            if (container !== undefined) edge.container = container;
+            // Keep the original endpoints so the plugin can map the routed path back.
+            edge._srcId = sourceId;
+            edge._tgtId = targetId;
+
+            const label = this.buildElkLabel(relationship);
+            if (label) edge.labels = [label];
+            graph.edges.push(edge);
+        }
+
+        return graph;
+    }
+
+    /** Resolves the ELK compound (frame) parent id of a view element, if any. */
+    private resolveElkParentId(el: any, scopeElement: NamedElement | undefined): string | undefined {
+        const parent = this.resolveElkParent(el, scopeElement);
+        return parent ? this.getId(parent) : undefined;
+    }
+
+    /**
+     * Lifts an edge (source -> target) onto the level of their lowest common
+     * ancestor so both endpoints become direct children of the LCA. ELK only
+     * routes edges between nodes at the same level of a compound; lifting the
+     * cross-frame edges onto the LCA makes ELK produce a real routed path.
+     */
+    private liftEdgeToLca(
+        sourceId: string,
+        targetId: string,
+        parentOf: Record<string, string | undefined>
+    ): { src: string; tgt: string; lca: string | undefined } {
+        const chainOf = (id: string): string[] => {
+            const chain: string[] = [];
+            let cur: string | undefined = id;
+            while (cur !== undefined) {
+                chain.push(cur);
+                cur = parentOf[cur];
+            }
+            return chain; // [id, parent, ..., root]
+        };
+
+        const srcChain = chainOf(sourceId);
+        const tgtChain = chainOf(targetId);
+        const tgtSet = new Set(tgtChain);
+
+        // LCA = first (deepest) node of srcChain also present in tgtChain.
+        let lca: string | undefined = srcChain[0];
+        for (const id of srcChain) {
+            if (tgtSet.has(id)) { lca = id; break; }
+        }
+
+        const srcRep = srcChain.indexOf(lca!) > 0 ? srcChain[srcChain.indexOf(lca!) - 1] : sourceId;
+        const tgtRep = tgtChain.indexOf(lca!) > 0 ? tgtChain[tgtChain.indexOf(lca!) - 1] : targetId;
+        return { src: srcRep, tgt: tgtRep, lca };
+    }
+
+    private mapElkDirection(rankDirection: string | undefined): string {
+        switch (rankDirection) {
+            case 'LeftRight': return 'RIGHT';
+            case 'RightLeft': return 'LEFT';
+            case 'BottomTop': return 'UP';
+            default: return 'DOWN';
+        }
+    }
+
+    /** Approximate rendered size of an element by type (used as an ELK node size). */
+    /**
+     * Replicates structurizr.ui.findElementStyle() so ELK plans the exact size the
+     * webview renders: default 450x300, Person/Robot 400x400 when no size style is
+     * defined, DSL + theme style sizes merged per tag, and the shape-based cell size.
+     */
+    private defaultElementSize(el: NamedElement): { width: number; height: number } {
+        const style = this.resolveElementStyle(el);
+        return this.cellSizeForStyle(style.width, style.height, style.shape);
+    }
+
+    /** The Structurizr default type tag for an element (e.g. "Person", "Software System"). */
+    private typeTagForElement(el: NamedElement): string {
+        if (isPerson(el)) return 'Person';
+        if (isSoftwareSystem(el)) return 'Software System';
+        if (isSoftwareSystemInstance(el)) return 'Software System Instance';
+        if (isContainer(el)) return 'Container';
+        if (isContainerInstance(el)) return 'Container Instance';
+        if (isComponent(el)) return 'Component';
+        if (isDeploymentNode(el)) return 'Deployment Node';
+        if (isInfrastructureNode(el)) return 'Infrastructure Node';
+        if (isCustomElement(el)) return 'Custom';
+        return '';
+    }
+
+    /**
+     * All tags an element matches in the webview (mirrors getAllTagsForElement):
+     * "Element" + type tag + DSL tags, plus the parent element's tags for instances.
+     */
+    private elementTagsFor(el: NamedElement): string[] {
+        const tags: string[] = [];
+        const add = (t: string) => { const s = t.trim(); if (s && tags.indexOf(s) === -1) tags.push(s); };
+        const base = this.extractTags(el, 'Element', this.typeTagForElement(el));
+        if (base) base.split(',').forEach(add);
+        // Instance elements also carry their parent element's tags.
+        if (isSoftwareSystemInstance(el)) {
+            const parent = el.softwareSystem?.ref;
+            if (parent) { const pt = this.extractTags(parent, 'Element', 'Software System'); if (pt) pt.split(',').forEach(add); }
+        } else if (isContainerInstance(el)) {
+            const parent = el.container?.ref;
+            if (parent) { const pt = this.extractTags(parent, 'Element', 'Container'); if (pt) pt.split(',').forEach(add); }
+        }
+        return tags;
+    }
+
+    /** Merged element style map (theme first, then workspace) keyed by tag — mirrors findElementStyle. */
+    private ensureElementStyleMap(): Record<string, any> {
+        if (this.elementStyleMap !== undefined) return this.elementStyleMap;
+        const map: Record<string, any> = {};
+        const merge = (def: any) => {
+            if (!def || def.tag === undefined) return;
+            const tag = String(def.tag).trim();
+            if (tag.length === 0) return;
+            const existing = map[tag];
+            if (existing === undefined) {
+                map[tag] = { ...def };
+            } else {
+                // copyAttributeIfSpecified: only copy attributes that are defined.
+                for (const key of ['width', 'height', 'shape', 'background', 'stroke', 'color', 'fontSize', 'icon', 'iconPosition', 'border', 'opacity', 'metadata', 'description']) {
+                    if (def[key] !== undefined) existing[key] = def[key];
+                }
+            }
+        };
+        for (const themeDef of this.themeStyles) merge(themeDef);
+        for (const raw of this.styles.elements) merge(raw as any);
+        this.elementStyleMap = map;
+        return map;
+    }
+
+    /** Resolves the effective element style (width/height/shape/fontSize) — mirrors findElementStyle. */
+    private resolveElementStyle(el: NamedElement): { width: number; height: number; shape: string; fontSize: number } {
+        const map = this.ensureElementStyleMap();
+        let width = 450;
+        let height = 300;
+        let defaultSizeInUse = true;
+        let shape: string | undefined = undefined;
+        let fontSize: number | undefined = undefined;
+        for (const tag of this.elementTagsFor(el)) {
+            const s = map[tag];
+            if (s) {
+                if (s.width !== undefined) { width = s.width; defaultSizeInUse = false; }
+                if (s.height !== undefined) { height = s.height; defaultSizeInUse = false; }
+                if (s.shape !== undefined) shape = s.shape;
+                if (s.fontSize !== undefined) fontSize = s.fontSize;
+            }
+        }
+        if (shape === undefined) shape = 'Box';
+        if (fontSize === undefined) fontSize = 24;
+        // Mobile device size normalization (findElementStyle).
+        if (shape === 'MobileDevicePortrait' && height < width) { const t = width; width = height; height = t; }
+        if (shape === 'MobileDeviceLandscape' && height > width) { const t = width; width = height; height = t; }
+        // Unstyled Person/Robot shapes are rendered 400x400.
+        if (defaultSizeInUse && (shape === 'Person' || shape === 'Robot')) { width = 400; height = 400; }
+        return { width, height, shape, fontSize };
+    }
+
+    /** Converts a resolved style into the actual rendered cell size for a shape. */
+    private cellSizeForStyle(width: number, height: number, shape: string): { width: number; height: number } {
+        switch (shape) {
+            // These shapes derive their cell height from the width in the webview.
+            case 'Person':
+            case 'Robot':
+            case 'Circle':
+            case 'Diamond':
+                return { width, height: width };
+            case 'Hexagon':
+                return { width, height: Math.floor((width / 2) * Math.sqrt(3)) };
+            default:
+                return { width, height };
+        }
+    }
+
+    /** Whether an element is rendered as a compound (deployment nodes contain children). */
+    private isElkCompound(el: any): boolean {
+        return isDeploymentNode(el);
+    }
+
+    /** Finds the ELK compound parent of a view element, if any. */
+    private resolveElkParent(el: any, scopeElement: NamedElement | undefined): NamedElement | undefined {
+        // Container view: containers live inside the software system frame.
+        if (isContainer(el) && scopeElement && isSoftwareSystem(scopeElement)) {
+            return scopeElement;
+        }
+        // Component view: components live inside the container frame.
+        if (isComponent(el) && scopeElement && isContainer(scopeElement)) {
+            return scopeElement;
+        }
+        // Deployment hierarchy: deployment nodes nest inside parent deployment nodes.
+        if (isDeploymentNode(el)) {
+            return this.resolveDeploymentNodeParent(el);
+        }
+        // Instances / infrastructure nodes nest inside their deployment node.
+        // resolveDeploymentNodeParent is used (not a plain $container climb) because
+        // it also handles the !include case and does not stop at the deployment
+        // environment - otherwise instances would not be attached to their frames and
+        // the deployment view would be laid out flat (frames not wrapping children).
+        if (isContainerInstance(el) || isSoftwareSystemInstance(el) || isInfrastructureNode(el)) {
+            return this.resolveDeploymentNodeParent(el);
+        }
+        return undefined;
+    }
+
+    /**
+     * Builds the ELK edge label (relationship description) with an estimated size
+     * that matches what the webview renders. Width/height follow the resolved
+     * relationship style (fontSize, width, description/metadata flags) and the same
+     * text-measurement heuristics as the webview (breakText uses ~0.75em per char,
+     * wrapped at the relationship style width; calculateHeight uses lineSpacing 1.2).
+     * A margin is added so ELK keeps a visible gap between the label and the
+     * connected elements (ELK sizes the node gap to the reserved label width + 40).
+     */
+    private buildElkLabel(relationship: any): any | undefined {
+        const rel = relationship?.relationship ?? relationship;
+        const text = this.description(rel);
+        if (!text || text.trim().length === 0) return undefined;
+        const clean = text.replace(/\r?\n/g, ' ').trim();
+        const style = this.resolveRelationshipStyle(rel);
+        if (style.description === false) return undefined;
+
+        // breakText heuristic: characterWidth = fontSize * 0.75, wrapped at the
+        // relationship style width (default 200).
+        const characterWidth = style.fontSize * 0.75;
+        const textWidth = Math.min(clean.length * characterWidth, style.width);
+        const width = Math.max(textWidth, 20) + 40; // +40 total margin (~20px each side)
+
+        // Label height: description height + (technology line + padding), mirroring
+        // createArrow's totalHeight (calculateHeight uses lineSpacing 1.2).
+        const lines = style.width > 0 ? Math.max(1, Math.ceil((clean.length * characterWidth) / style.width)) : 1;
+        let height = style.fontSize + ((lines - 1) * style.fontSize * 1.2);
+        const technology = this.technology(rel);
+        if (technology && style.metadata !== false) {
+            height += 10 + style.fontSize * 0.7;
+        }
+        return { id: 'l1', text: clean, width, height: Math.max(height, 20) };
+    }
+
+    /** All tags a relationship matches in the webview (mirrors getAllTagsForRelationship). */
+    private relationshipTagsFor(relationship: any): string[] {
+        const rel = relationship?.relationship ?? relationship;
+        const tags: string[] = [];
+        const add = (t: string) => { const s = t.trim(); if (s && tags.indexOf(s) === -1) tags.push(s); };
+        const base = this.extractTags(rel, 'Relationship');
+        if (base) base.split(',').forEach(add);
+        // Linked (implied) relationships also contribute their tags.
+        let linked: any = rel?.linked;
+        let guard = 0;
+        while (linked && guard++ < 10) {
+            const node = (linked && typeof linked === 'object' && 'ref' in linked) ? linked.ref : linked;
+            if (!node) break;
+            const lt = this.extractTags(node, 'Relationship');
+            if (lt) lt.split(',').forEach(add);
+            linked = node?.linked;
+        }
+        return tags;
+    }
+
+    /** Resolves the effective relationship style (mirrors findRelationshipStyle). */
+    private resolveRelationshipStyle(relationship: any): { fontSize: number; width: number; description: boolean; metadata: boolean } {
+        const rel = relationship?.relationship ?? relationship;
+        // Defaults from findRelationshipStyle.
+        let fontSize = 24;
+        let width = 200;
+        let description: boolean | undefined = undefined;
+        let metadata: boolean | undefined = undefined;
+        // Merge relationship styles by tag (first definition wins, then
+        // copyAttributeIfSpecified) — mirrors findRelationshipStyle. Themes
+        // come first (they act as the base), workspace styles override them,
+        // exactly like the webview concatenates theme.relationships and then
+        // configuration.styles.relationships.
+        const map: Record<string, any> = {};
+        const merge = (def: any) => {
+            if (!def || def.tag === undefined) return;
+            const tag = String(def.tag).trim();
+            if (tag.length === 0) return;
+            const existing = map[tag];
+            if (existing === undefined) {
+                map[tag] = { ...def };
+            } else {
+                for (const key of ['thickness', 'color', 'fontSize', 'width', 'dashed', 'routing', 'position', 'opacity', 'jump', 'style', 'metadata', 'description']) {
+                    if (def[key] !== undefined) existing[key] = def[key];
+                }
+            }
+        };
+        for (const themeDef of this.themeRelationshipStyles) merge(themeDef as any);
+        for (const raw of this.styles.relationships) merge(raw as any);
+        for (const tag of this.relationshipTagsFor(rel)) {
+            const s = map[tag];
+            if (s) {
+                if (s.fontSize !== undefined) fontSize = s.fontSize;
+                if (s.width !== undefined) width = s.width;
+                if (s.description !== undefined) description = s.description === true;
+                if (s.metadata !== undefined) metadata = s.metadata === true;
+            }
+        }
+        return { fontSize, width, description: description !== false, metadata: metadata !== false };
+    }
+
+    /**
+     * Runs ELK.layout() in the plugin for every view that has an attached elkGraph
+     * (i.e. views with an explicit autoLayout), writes the resulting coordinates and
+     * ELK-computed sizes into view.elements, drops automaticLayout (so the webview
+     * renders at these positions instead of re-laying out) and removes the transient
+     * elkGraph so it is not shipped to the webview.
+     */
+    private async applyElkAutoLayouts(jsonOutput: any): Promise<void> {
+        const viewArrays: any[] = [
+            jsonOutput.views?.systemLandscapeViews,
+            jsonOutput.views?.systemContextViews,
+            jsonOutput.views?.containerViews,
+            jsonOutput.views?.componentViews,
+            jsonOutput.views?.deploymentViews,
+            jsonOutput.views?.dynamicViews,
+            jsonOutput.views?.customViews
+        ];
+        for (const views of viewArrays) {
+            if (!Array.isArray(views)) continue;
+            for (const view of views) {
+                // Some extractors return undefined for views that fail their scope
+                // guard - skip those entries.
+                if (!view || !view.elkGraph) continue;
+                try {
+                    await this.applyElkLayoutToView(view);
+                } catch (err) {
+                    console.error(`[C4 ELK] Layout failed for view ${view.key}:`, err);
+                }
+                delete view.elkGraph;
+            }
+        }
+    }
+
+    /**
+     * Runs ELK on a single view's graph and writes normalized coordinates/sizes/vertices
+     * into the view JSON. The pipeline is intentionally clean: build the ELK graph,
+     * run elk.layout(), then copy the resulting positions/sizes/vertices into the view.
+     * No post-processing is applied.
+     */
+    private async applyElkLayoutToView(view: any): Promise<void> {
+        const elk = new ELK();
+        const result = await elk.layout(view.elkGraph);
+
+        // ELK returns compound children relative to their parent; accumulate the
+        // offsets to obtain absolute paper coordinates.
+        const positions: Record<string, { x: number; y: number }> = {};
+        const sizes: Record<string, { width: number; height: number }> = {};
+        const computeAbsolute = (node: any, parentX: number, parentY: number) => {
+            const x = parentX + (node.x || 0);
+            const y = parentY + (node.y || 0);
+            positions[node.id] = { x, y };
+            if (node.width !== undefined && node.height !== undefined) {
+                sizes[node.id] = { width: node.width, height: node.height };
+            }
+            (node.children || []).forEach((child: any) => computeAbsolute(child, x, y));
+        };
+        (result.children || []).forEach((node: any) => computeAbsolute(node, 0, 0));
+
+        // Content bounds over all nodes (elements + frames) so the paper fits the
+        // layout and the diagram is not rendered on the huge default 2000x2000.
+        const margin = 400;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const id of Object.keys(positions)) {
+            const p = positions[id];
+            const s = sizes[id];
+            if (!p || !s) continue;
+            minX = Math.min(minX, p.x);
+            minY = Math.min(minY, p.y);
+            maxX = Math.max(maxX, p.x + s.width);
+            maxY = Math.max(maxY, p.y + s.height);
+        }
+        // Extend the bounds with the routed edge bend points and label boxes so the
+        // paper is large enough for the FULL paths - otherwise edges whose bends /
+        // labels reach beyond the element boxes (cross-hierarchy edges are routed
+        // far around the compounds) are clipped or drawn off the paper.
+        for (const edge of (result.edges || [])) {
+            const eoffset = positions[edge.container] || { x: 0, y: 0 };
+            (edge.sections || []).forEach((section: any) => {
+                (section.bendPoints || []).forEach((p: any) => {
+                    const bx = p.x + eoffset.x, by = p.y + eoffset.y;
+                    minX = Math.min(minX, bx);
+                    minY = Math.min(minY, by);
+                    maxX = Math.max(maxX, bx);
+                    maxY = Math.max(maxY, by);
+                });
+            });
+            const lbl = edge.labels && edge.labels[0];
+            if (lbl && lbl.x !== undefined && lbl.y !== undefined) {
+                const hw = (lbl.width ?? 0) / 2, hh = (lbl.height ?? 0) / 2;
+                const lx = lbl.x + eoffset.x, ly = lbl.y + eoffset.y;
+                minX = Math.min(minX, lx - hw);
+                minY = Math.min(minY, ly - hh);
+                maxX = Math.max(maxX, lx + hw);
+                maxY = Math.max(maxY, ly + hh);
+            }
+        }
+        const offsetX = minX === Infinity ? 0 : -minX + margin;
+        const offsetY = minY === Infinity ? 0 : -minY + margin;
+
+        for (const el of view.elements) {
+            const pos = positions[el.id];
+            if (pos) {
+                el.x = Math.floor(pos.x + offsetX);
+                el.y = Math.floor(pos.y + offsetY);
+            }
+            const size = sizes[el.id];
+            if (size) {
+                el.width = size.width;
+                el.height = size.height;
+            }
+        }
+
+        // Write the routed edge bend points into view.relationships so the webview
+        // draws edges along the ELK path. Only bendPoints are used, NOT
+        // startPoint/endPoint: JointJS computes the boundary connection points itself
+        // from the element boxes. Edge id matches view.relationships[].id.
+        if (view.relationships) {
+            const relById: Record<string, any> = {};
+            for (const rel of view.relationships) {
+                if (rel && rel.id) relById[rel.id] = rel;
+            }
+            // Paper-space rects for ALL nodes (leaves + compounds). Compounds are
+            // needed as polyline endpoints too: deployment-node endpoints are
+            // compounds, and using their centres keeps the label projection valid.
+            const paperRects: Record<string, { x: number; y: number; w: number; h: number }> = {};
+            for (const id of Object.keys(positions)) {
+                const p = positions[id];
+                const s = sizes[id];
+                if (p && s) paperRects[id] = { x: p.x + offsetX, y: p.y + offsetY, w: s.width, h: s.height };
+            }
+
+            for (const edge of (result.edges || [])) {
+                const rel = relById[edge.id];
+                if (!rel) continue;
+                const offset = positions[edge.container] || { x: 0, y: 0 };
+                const vertices: any[] = [];
+                (edge.sections || []).forEach((section: any) => {
+                    (section.bendPoints || []).forEach((p: any) => vertices.push({ x: p.x + offset.x + offsetX, y: p.y + offset.y + offsetY }));
+                });
+                if (vertices.length > 0) rel.vertices = vertices;
+
+                // Let ELK's own label placement drive the webview label position.
+                // ELK knows the label size (edge.labels) and returns the label centre
+                // (x/y) in the same coordinate space as the edge bend points. Project
+                // that point onto the routed polyline and write its arc-length fraction
+                // (0..100) as rel.position - the webview renders labels at position/100
+                // along the path, so this reproduces ELK's placement instead of our own
+                // midpoint search.
+                const label = edge.labels && edge.labels[0];
+                const srcRect = paperRects[edge._srcId];
+                const tgtRect = paperRects[edge._tgtId];
+                if (label && srcRect && tgtRect && label.x !== undefined && label.y !== undefined) {
+                    const poly = [
+                        { x: srcRect.x + srcRect.w / 2, y: srcRect.y + srcRect.h / 2 },
+                        ...vertices,
+                        { x: tgtRect.x + tgtRect.w / 2, y: tgtRect.y + tgtRect.h / 2 }
+                    ];
+                    const labelCenter = { x: label.x + offset.x + offsetX, y: label.y + offset.y + offsetY };
+                    // Cumulative arc length at each vertex.
+                    const acc: number[] = [0];
+                    let total = 0;
+                    for (let i = 0; i < poly.length - 1; i++) {
+                        total += Math.hypot(poly[i + 1].x - poly[i].x, poly[i + 1].y - poly[i].y);
+                        acc.push(total);
+                    }
+                    let bestFrac = 0.5;
+                    if (total > 0) {
+                        let bestDist = Infinity;
+                        for (let i = 0; i < poly.length - 1; i++) {
+                            const a = poly[i], b = poly[i + 1];
+                            const abx = b.x - a.x, aby = b.y - a.y;
+                            const len2 = abx * abx + aby * aby;
+                            let t = 0;
+                            if (len2 > 0) {
+                                t = ((labelCenter.x - a.x) * abx + (labelCenter.y - a.y) * aby) / len2;
+                                t = Math.max(0, Math.min(1, t));
+                            }
+                            const px = a.x + abx * t, py = a.y + aby * t;
+                            const d = Math.hypot(labelCenter.x - px, labelCenter.y - py);
+                            if (d < bestDist) {
+                                bestDist = d;
+                                bestFrac = (acc[i] + Math.hypot(px - a.x, py - a.y)) / total;
+                            }
+                        }
+                    }
+                    const pos = Math.round(bestFrac * 100);
+                    if (pos >= 0 && pos <= 100 && pos !== 50) rel.position = pos;
+                }
+            }
+        }
+
+        // Paper size fitted to the content so the webview (setPaperSize) renders
+        // the diagram centred with a margin instead of on the default 2000x2000.
+        if (minX !== Infinity) {
+            view.dimensions = {
+                width: Math.ceil((maxX - minX) + margin * 2),
+                height: Math.ceil((maxY - minY) + margin * 2)
+            };
+        }
+
+        // Layout is already applied here - the webview must render at the given
+        // coordinates instead of re-running its own auto-layout.
+        view.automaticLayout = undefined;
     }
 
     /**
@@ -3994,7 +4828,9 @@ class JsonGenerator {
                 elements: Array.from(elements).map(el => this.elementJson(el)),
                 relationships: Array.from(relationships).map(el => this.elementJson(el)),
                 externalSoftwareSystemBoundariesVisible: true,
-                automaticLayout: this.transformAutoLayout(view)
+                automaticLayout: this.transformAutoLayout(view),
+                // Transient: consumed by applyElkAutoLayouts in the plugin, removed before shipping.
+                elkGraph: this.buildElkGraphForView(this.transformAutoLayout(view), scopeSystem, false, elements, relationships)
             };
         });
         return views && views?.length > 0 ? views : undefined; 
@@ -4020,7 +4856,9 @@ class JsonGenerator {
                     elements: Array.from(elements).map(el => this.elementJson(el)),// elements,,
                     relationships: Array.from(relationships).map(el => this.elementJson(el)),
                     externalSoftwareSystemBoundariesVisible: true,
-                    automaticLayout: this.transformAutoLayout(view)
+                    automaticLayout: this.transformAutoLayout(view),
+                    // Transient: consumed by applyElkAutoLayouts in the plugin, removed before shipping.
+                    elkGraph: this.buildElkGraphForView(this.transformAutoLayout(view), scopeSystem, true, elements, relationships)
                 }
             });
         return views && views.length > 0 ? views : undefined;
@@ -4046,7 +4884,9 @@ class JsonGenerator {
                     elements: Array.from(elements).map(el => this.elementJson(el)),// elements,,
                     relationships: Array.from(relationships).map(el => this.elementJson(el)),
                     externalSoftwareSystemBoundariesVisible: true,
-                    automaticLayout: this.transformAutoLayout(view)
+                    automaticLayout: this.transformAutoLayout(view),
+                    // Transient: consumed by applyElkAutoLayouts in the plugin, removed before shipping.
+                    elkGraph: this.buildElkGraphForView(this.transformAutoLayout(view), scopeContainer, true, elements, relationships)
                 };
             });
         return views && views.length > 0 ? views : undefined;
@@ -4112,7 +4952,9 @@ class JsonGenerator {
                     environment: environment,
                     elements: Array.from(elements).map(el => this.elementJson(el)),// elements,,
                     relationships: Array.from(relationships).map(el => this.elementJson(el)),
-                    automaticLayout: this.transformAutoLayout(view)
+                    automaticLayout: this.transformAutoLayout(view),
+                    // Transient: consumed by applyElkAutoLayouts in the plugin, removed before shipping.
+                    elkGraph: this.buildElkGraphForView(this.transformAutoLayout(view), undefined, false, elements, relationships)
                 };
             });
         return views && views.length > 0 ? views : undefined;
@@ -4130,6 +4972,20 @@ class JsonGenerator {
             .map(view => {
                 const scopeElement = view.element?.ref;
                 const content = this.resolveDynamic(view);
+                // Dynamic views are always laid out automatically (no manual positions
+                // in the DSL), so run them through the same ELK pipeline as the other
+                // view types. When the DSL does not declare `autolayout`, fall back to
+                // the webview defaults (LeftRight / 100 / 50 / 50) so the behaviour is
+                // identical to the previous dagre forceApplyAutomaticLayout path.
+                const autoLayout = this.transformAutoLayout(view) ?? {
+                    applied: false,
+                    implementation: "Graphviz",
+                    rankDirection: "LeftRight",
+                    rankSeparation: 100,
+                    nodeSeparation: 50,
+                    edgeSeparation: 50,
+                    vertices: true
+                };
                 return {
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.[0]?.value) ?? "Dynamic View",
@@ -4137,7 +4993,10 @@ class JsonGenerator {
                     elementId: scopeElement ? this.getId(scopeElement) : undefined,
                     elements: content.elements,
                     relationships: content.relationships,
-                    automaticLayout: this.transformAutoLayout(view)
+                    automaticLayout: this.transformAutoLayout(view),
+                    // Transient: consumed by applyElkAutoLayouts in the plugin, removed before shipping.
+                    // No scope frame for dynamic views - elements are laid out flat on the root.
+                    elkGraph: this.buildElkGraphForView(autoLayout, undefined, false, content.elkElements, content.elkEdges)
                 };
             });
 
@@ -4171,6 +5030,12 @@ class JsonGenerator {
     private resolveDynamic(view: DynamicView) {
         const steps: any[] = [];
         const uniqueElements = new Set<NamedElement>();
+        // Edges for the ELK layout graph, one per dynamic step. Each edge is a
+        // minimal synthetic relationship (source/target AST refs + the step text)
+        // that buildElkGraphForView consumes via resolveSource/resolveTarget. The
+        // `id` matches the step's view.relationships[].id so the ELK layout writes
+        // vertices back onto the same step entries.
+        const elkEdges: any[] = [];
 
         // Global counter for top-level sequential steps
         let globalSequence = 1;
@@ -4226,6 +5091,16 @@ class JsonGenerator {
                             description: stepDescription,
                             response: isResponse
                         });
+                        // Layout edge: direction source -> target of the step, so ELK
+                        // places the participants left-to-right in step order. The
+                        // label text mirrors what the webview renders ("N: text").
+                        const labelText = stepDescription ? `${finalOrder}: ${stepDescription}` : undefined;
+                        elkEdges.push({
+                            id: this.getId(modelRel),
+                            source: { ref: source },
+                            target: { ref: target },
+                            description: labelText
+                        });
                     }
                 }
                 else if (isParallelStepBlock(member)) {
@@ -4245,7 +5120,9 @@ class JsonGenerator {
 
         return {
             elements: elements,
-            relationships: steps
+            relationships: steps,
+            elkElements: uniqueElements,
+            elkEdges
         };
     }
 
@@ -4276,8 +5153,8 @@ export class C4JsonGenerator {
      * @param workspace The workspace AST node to generate JSON for
      * @returns A JSON object matching the Structurizr output format
      */
-    public generate(workspace: Workspace) {
+    public async generate(workspace: Workspace): Promise<any> {
         let jsonGenerator : JsonGenerator = new JsonGenerator(this.services);
-        return jsonGenerator.generate(workspace);
+        return await jsonGenerator.generate(workspace);
     }
 }

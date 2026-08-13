@@ -18,6 +18,7 @@ import * as path from 'path';
 import { LanguageClient, type LanguageClientOptions, type ServerOptions, TransportKind } from 'vscode-languageclient/node';
 import { commands, ExtensionContext } from 'vscode';
 import { init, setLanguageClient } from './init';
+import { initMCP } from './mcp/controller';
 
 let client: LanguageClient;
 
@@ -60,6 +61,9 @@ export function activate(context: ExtensionContext): void {
     client = new LanguageClient('c4', 'C4', serverOptions, clientOptions);
     client.start().then(() => {
         setLanguageClient(client);
+        // Start the built-in MCP server if varp.mcp.autoStart is enabled
+        // (Node/desktop only; the browser entry point does not include MCP).
+        void initMCP(context, client);
         console.log('[C4 Extension] Language Server connected, auto-refresh enabled');
     });
 

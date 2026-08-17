@@ -33,12 +33,16 @@ export class DiagramPreview {
   // first postMessage to a freshly created webview can be dropped, leaving the
   // preview empty until the next auto-refresh arrives.
   private panelReady = false;
-  private pendingMessage: { json: any; viewKey: string } | undefined;
+  private pendingMessage: { json: any; viewKey: string; themes?: { url: string; content: string }[] } | undefined;
 
   // True while the preview is open but its first JSON payload has not been
   // delivered yet - the webview shows the "Rendering" indicator until then.
   // Set by openPreview(), cleared when updateWebView() delivers the JSON.
   private pendingJson = false;
+
+  // Pre-fetched theme contents (from the language server cache) sent to the
+  // webview so it does not re-download the theme files on every render.
+  private themes: { url: string; content: string }[] | undefined;
 
   private readonly title: string = 'Diagram Preview';
   private readonly id: string = 'structurizrPreview';
@@ -88,13 +92,19 @@ export class DiagramPreview {
         }
         this.panel ??= this.createPanel();
         this.pendingJson = false;
+        const message = { 'json': json, 'viewKey': viewKey, 'themes': this.themes };
         if (this.panelReady) {
-          this.panel.webview.postMessage( { 'json' : json, 'viewKey' : viewKey });
+          this.panel.webview.postMessage(message);
         } else {
           // The webview is still loading - hold on to the latest payload and
           // deliver it as soon as the webview signals it is ready.
-          this.pendingMessage = { json, viewKey };
+          this.pendingMessage = { json, viewKey, themes: this.themes };
         }
+  }
+
+  /** Stores pre-fetched theme contents for the current workspace document. */
+  public setThemes(themes: { url: string; content: string }[]): void {
+        this.themes = themes;
   }
 
   /**
@@ -105,6 +115,7 @@ export class DiagramPreview {
   public openPreview(viewKey: string, docUri?: string): void {
         this.currentViewKey = viewKey;
         this.currentJson = undefined;
+        this.themes = undefined;
         if (docUri) {
           this.currentDocUri = docUri;
         }
@@ -227,12 +238,18 @@ export class DiagramPreview {
             const message = event.data;
             if(message.json !== undefined) {
               structurizr.workspace = new structurizr.Workspace(message.json);
-              structurizr.ui.loadThemes(function() {
-                structurizr.diagram = new structurizr.ui.Diagram('diagram', false, function() {
-                    structurizr.diagram.onViewChanged(viewChanged);
-                    structurizr.diagram.changeView(message.viewKey);
+              if (message.themes !== undefined) {
+                // Themes are provided by the extension (already cached by the
+                // language server) - inject them without any network I/O.
+                applyThemes(message.themes, function() {
+                  buildDiagram(message.viewKey);
                 });
-              });
+              } else {
+                // Fallback: let the webview download the theme files itself.
+                structurizr.ui.loadThemes(function() {
+                  buildDiagram(message.viewKey);
+                });
+              }
             } else if (message.command === 'export-drawio') {
               // Export current (displayed) view to DrawIO format
               var currentViewKey = structurizr.diagram.getCurrentViewOrFilter ?
@@ -254,6 +271,54 @@ export class DiagramPreview {
               structurizr.diagram.changeView(message.viewKey);
             }
         });
+
+        function buildDiagram(viewKey) {
+            structurizr.diagram = new structurizr.ui.Diagram('diagram', false, function() {
+                structurizr.diagram.onViewChanged(viewChanged);
+                structurizr.diagram.changeView(viewKey);
+            });
+        }
+
+        // Populates structurizr.ui.themes from theme contents provided by the
+        // extension (already cached by the language server), replicating
+        // loadTheme's icon base-url resolution and style sorting - no network I/O.
+        function applyThemes(themes, callback) {
+            var loaded = [];
+            if (themes.length === 0) {
+                structurizr.ui.themes = [];
+                callback();
+                return;
+            }
+            var pending = themes.length;
+            function pushTheme(theme) {
+                if (theme.elements === undefined) theme.elements = [];
+                if (theme.relationships === undefined) theme.relationships = [];
+                loaded.push({
+                    elements: theme.elements.sort(structurizr.util.sortStyles),
+                    relationships: theme.relationships.sort(structurizr.util.sortStyles),
+                    logo: theme.logo
+                });
+                if (--pending <= 0) {
+                    structurizr.ui.themes = loaded;
+                    callback();
+                }
+            }
+            themes.forEach(function(item) {
+                try {
+                    var theme = JSON.parse(item.content);
+                    var baseUrl = item.url.substring(0, item.url.lastIndexOf('/') + 1);
+                    for (var i = 0; i < (theme.elements || []).length; i++) {
+                        var style = theme.elements[i];
+                        if (style.icon && style.icon.indexOf('http') === -1 && style.icon.indexOf('data:image') === -1) {
+                            style.icon = baseUrl + style.icon;
+                        }
+                    }
+                    pushTheme(theme);
+                } catch (e) {
+                    pushTheme({ elements: [], relationships: [] });
+                }
+            });
+        }
 
         function viewChanged() {
             const options = {
@@ -306,7 +371,7 @@ export class DiagramPreview {
         if (this.pendingMessage) {
           const pending = this.pendingMessage;
           this.pendingMessage = undefined;
-          panel.webview.postMessage({ 'json': pending.json, 'viewKey': pending.viewKey });
+          panel.webview.postMessage({ 'json': pending.json, 'viewKey': pending.viewKey, 'themes': pending.themes });
         }
       }
     });

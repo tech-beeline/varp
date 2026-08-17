@@ -32,6 +32,7 @@
 import { startLanguageServer } from 'langium/lsp';
 import { NodeFileSystem } from 'langium/node';
 import { createConnection, ProposedFeatures } from 'vscode-languageserver/node';
+import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
 
 // Create an LSP connection using Node.js IPC (stdio) transport
@@ -114,6 +115,28 @@ C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json) => {
 connection.onRequest('custom/getContentForUri', (params: { uri: string }) => {
     const content = C4.generation.C4GeneratorHandler.getContentForUri(params.uri);
     return content ? { json: content } : null;
+});
+
+// ─── Custom LSP Request Handler: Themes ─────────────────────────────────────
+// Returns the raw JSON content of the requested theme files so the diagram
+// preview webview can render without re-downloading them. Reading through the
+// (patched) FileSystemProvider reuses the fetchCache in this file, so already
+// downloaded themes are served from memory instead of the network.
+connection.onRequest('custom/getThemes', async (params: { themes: string[] }) => {
+    const urls = Array.isArray(params?.themes) ? params.themes : [];
+    const themes: { url: string; content: string }[] = [];
+    for (const url of urls) {
+        if (!/^https?:\/\//i.test(url)) {
+            continue; // only http(s) themes are fetched; built-ins are not supported here
+        }
+        try {
+            const content = await (baseProvider as any).readFile(URI.parse(url));
+            themes.push({ url, content });
+        } catch (err) {
+            console.warn(`[C4 Themes] Could not read theme ${url}:`, err);
+        }
+    }
+    return { themes };
 });
 
 // Enumerate root workspace documents that currently have generated JSON.

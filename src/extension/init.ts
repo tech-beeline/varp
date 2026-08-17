@@ -122,6 +122,10 @@ async function refreshDiagram(uri: string, json: any): Promise<void> {
     if (!viewKey) {
         return;
     }
+    const themes = await getThemesForPreview(json?.views?.configuration?.themes);
+    if (themes !== undefined) {
+        preview.setThemes(themes);
+    }
     await preview.updateWebView(json, viewKey, uri);
 }
 
@@ -145,6 +149,10 @@ async function deliverPreviewJsonWhenReady(uri: string | undefined, viewKey: str
             const res: any = await languageClient.sendRequest('custom/getContentForUri', { uri });
             if (res?.json) {
                 latestJsonByUri.set(uri, res.json);
+                const themes = await getThemesForPreview(res.json?.views?.configuration?.themes);
+                if (themes !== undefined) {
+                    preview.setThemes(themes);
+                }
                 await preview.updateWebView(res.json, viewKey, uri);
                 return;
             }
@@ -153,6 +161,29 @@ async function deliverPreviewJsonWhenReady(uri: string | undefined, viewKey: str
         }
     }
     console.warn(`[C4 Preview] timed out waiting for JSON of view ${viewKey}`);
+}
+
+/**
+ * Returns the raw JSON content of the workspace's theme files. The language
+ * server already caches them (fetchCache), so this is a cheap cache-backed
+ * round-trip; the webview then renders without re-downloading the themes.
+ */
+async function getThemesForPreview(themeUrls: string[] | undefined): Promise<{ url: string; content: string }[] | undefined> {
+    const urls = (Array.isArray(themeUrls) ? themeUrls : []).filter(u => /^https?:\/\//i.test(u));
+    if (urls.length === 0 || !languageClient) {
+        return []; // no http(s) themes - nothing to inject
+    }
+    try {
+        const res: any = await languageClient.sendRequest('custom/getThemes', { themes: urls });
+        const fetched = (Array.isArray(res?.themes) ? res.themes : []) as { url: string; content: string }[];
+        // Returning undefined means "could not get themes" - the caller then
+        // leaves the preview's themes unset so the webview falls back to
+        // loadThemes() instead of rendering without any theme.
+        return fetched.length > 0 ? fetched : undefined;
+    } catch (err) {
+        console.warn('[C4 Preview] theme fetch failed:', err);
+        return undefined;
+    }
 }
 
 /**
@@ -255,6 +286,10 @@ export function init(context: ExtensionContext): void {
                     latestJsonByUri.set(docUri, payload);
                 }
                 try {
+                    const themes = await getThemesForPreview(payload?.views?.configuration?.themes);
+                    if (themes !== undefined) {
+                        preview.setThemes(themes);
+                    }
                     await preview.updateWebView(payload, viewKey, docUri);
                 } catch (err) {
                     console.error(`[C4 Preview] webview update FAILED for view ${viewKey}:`, err);

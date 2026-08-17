@@ -15,12 +15,11 @@
 */
 
 import { AstNode, AstUtils, Reference } from 'langium';
-import { Utils } from 'vscode-uri';
+import { URI, Utils } from 'vscode-uri';
 import { StringUtils } from './c4-utils';
-// elkjs/lib/elk.bundled.js is the self-contained cross-platform UMD bundle
-// (works in both the Node and the browser language server); 'elkjs' main entry
-// is Node-specific (require.resolve('web-worker')).
-import ELK from 'elkjs/lib/elk.bundled.js';
+// Graphviz compiled to WASM - the same layout engine the original Structurizr
+// uses (the autoLayout "implementation: Graphviz").
+import { Graphviz } from '@hpcc-js/wasm';
 
 import {
     Workspace, Container,
@@ -79,6 +78,27 @@ import { SHAPE_NORMALIZE, BORDER_NORMALIZE, ROUTING_NORMALIZE } from './c4-valid
 const DEFAULT_THEME_URL = "https://static.structurizr.com/themes/default/theme.json";
 const DEFAULT_THEME_NAME = "default";
 
+const DEFAULT_ELEMENT_FONT_SIZE = 24;
+
+// Minimum deviation (in points) of a polyline point from the straight source->target
+// line for an edge to be treated as bent and get vertices. Generous on purpose:
+// graphviz fans near-parallel edges (e.g. two edges from one node to two targets
+// that are almost aligned) across the nodesep gap with a small (~15-30pt) deviation;
+// those small "separation" bends are suppressed so the webview draws the edge as a
+// clean straight line, while genuinely routed bends (cross-cluster detours) remain.
+const BEND_DEVIATION_THRESHOLD = 35;
+
+// Webview frame padding replication (structurizr-diagram.js reposition()): a frame
+// wraps its content with clusterPadding (50) on every side plus a bottom footer for
+// the name/metadata text - 50 + margin(15) + nameFontSize + metadataFontSize + 15.
+// nameFontSize/metadataFontSize are the element's fontSize (default 24) times the
+// name/metadata difference ratios, exactly like the webview (parseInt truncates
+// 24*1.4 = 33.6 -> 33 and 24*0.7 = 16.8 -> 16). Groups have no metadata footer.
+const WEBVIEW_CLUSTER_PADDING = 50;
+const WEBVIEW_FRAME_MARGIN = 15;
+const NAME_FONT_SIZE_DIFFERENCE_RATIO = 1.4;
+const METADATA_FONT_SIZE_DIFFERENCE_RATIO = 0.7;
+
 interface Styles {
     elements: ElementStyle [];
     relationships: RelationshipStyle[];
@@ -129,7 +149,7 @@ class JsonGenerator {
     private readonly themeStyles: any[] = [];
     /** Relationship styles loaded from external themes (!theme), mirroring structurizr.ui.themes[].relationships. */
     private readonly themeRelationshipStyles: any[] = [];
-    /** Merged element style map (theme + workspace) keyed by tag, built lazily for ELK sizing. */
+    /** Merged element style map (theme + workspace) keyed by tag, built lazily for Graphviz node sizing. */
     private elementStyleMap: Record<string, any> | undefined = undefined;
 
     constructor(services: C4Services) {
@@ -148,8 +168,8 @@ class JsonGenerator {
         this.collectThemes(workspace);
 
         // Download external theme files (!theme) so element sizes defined by
-        // themes are reflected in the ELK layout (the webview downloads the same
-        // files at render time via loadTheme).
+        // themes are reflected in the Graphviz layout (the webview downloads the
+        // same files at render time via loadTheme).
         await this.collectThemeStyles();
         this.collectProperties(workspace);
         this.collectTerminology(workspace);
@@ -206,10 +226,10 @@ class JsonGenerator {
             }
         };
 
-        // Run ELK in the plugin (full model context) and bake the resulting
+        // Run Graphviz in the plugin (full model context) and bake the resulting
         // coordinates/sizes directly into the view JSON. The webview then renders
         // at these positions instead of re-running a layout itself.
-        await this.applyElkAutoLayouts(jsonOutput);
+        await this.applyGraphvizAutoLayouts(jsonOutput);
 
         return jsonOutput;
     }
@@ -710,36 +730,36 @@ class JsonGenerator {
 
     /**
      * Downloads external theme files (!theme) and collects their element styles so
-     * ELK plans for the sizes the webview will render after downloading the same
-     * theme files. Absolute http(s) URLs are fetched; relative/local paths are
+     * Graphviz plans for the sizes the webview will render after downloading the
+     * same theme files. Absolute http(s) URLs are fetched; relative/local paths are
      * skipped (the webview resolves them against its own base URL).
      */
     private async collectThemeStyles(): Promise<void> {
-        if (this.themes.size === 0 || typeof fetch !== 'function') return;
+        // A fresh JsonGenerator is created per generate() call, so clear defensively.
+        this.themeStyles.length = 0;
+        this.themeRelationshipStyles.length = 0;
+        if (this.themes.size === 0) return;
+        // Reading through the (patched) FileSystemProvider reuses the fetchCache in
+        // main.ts / main.browser.ts (60s TTL) that already serves !include and
+        // extendsUri remote URLs - no separate theme cache is needed.
+        const fs = this.services.shared.workspace.FileSystemProvider;
+        if (!fs || typeof fs.readFile !== 'function') return;
         for (const themeUrl of this.themes) {
             if (!/^https?:\/\//i.test(themeUrl)) continue;
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 5000);
             try {
-                const response = await fetch(themeUrl, { signal: controller.signal });
-                if (!response.ok) {
-                    console.warn(`[C4 ELK] Theme fetch failed (${response.status}): ${themeUrl}`);
-                    continue;
-                }
-                const theme = await response.json();
+                const text = await fs.readFile(URI.parse(themeUrl));
+                const theme = JSON.parse(text);
                 if (theme && Array.isArray(theme.elements)) {
                     for (const style of theme.elements) this.themeStyles.push(style);
                 }
                 // The webview merges theme.relationships into findRelationshipStyle
                 // (structurizr-ui.js), so collect them too - otherwise themed
-                // relationship fontSize/width would not be reflected in ELK labels.
+                // relationship fontSize/width would not be reflected in the layout.
                 if (theme && Array.isArray(theme.relationships)) {
                     for (const style of theme.relationships) this.themeRelationshipStyles.push(style);
                 }
             } catch (err) {
-                console.warn(`[C4 ELK] Could not load theme ${themeUrl}:`, err);
-            } finally {
-                clearTimeout(timer);
+                console.warn(`[C4 Graphviz] Could not load theme ${themeUrl}:`, err);
             }
         }
     }
@@ -1728,9 +1748,8 @@ class JsonGenerator {
         }
 
         // Project implied relationships from parent Container/Component to ContainerInstance.
-        // Only relationships between instances within the same DeploymentNode are projected
-        // (cross-node relationships, e.g. service1Api -> service2Api, are NOT projected).
-        const thisNode = this.resolveDeploymentNodeParent(containerInstance);
+        // Relationships are projected regardless of which deployment node the instances
+        // live in - the reference includes cross-node relationships too (e.g. 55->52).
         const env = this.getEnvironment(containerInstance);
         const parentContainer = containerInstance.container.ref;
         if(parentContainer) {
@@ -1747,12 +1766,9 @@ class JsonGenerator {
                 if(isSoftwareSystemInstance(el)) {
                     for(const relContainer of allParentRels) {
                         if(this.shouldGenerateImplied(relContainer.relationship)) {
-                            if(relContainer.target === el.softwareSystem.ref && env === this.getEnvironment(el)) {
-                                const targetNode = this.resolveDeploymentNodeParent(el);
-                                if (thisNode && targetNode && thisNode === targetNode
-                                    && this.hasCommonDeploymentGroup(containerInstance, el)) {
-                                    rels.push(this.createRelationshipEx(containerInstance, el, relContainer.relationship));
-                                }
+                            if(relContainer.target === el.softwareSystem.ref && env === this.getEnvironment(el)
+                                && this.hasCommonDeploymentGroup(containerInstance, el)) {
+                                rels.push(this.createRelationshipEx(containerInstance, el, relContainer.relationship));
                             }
                         }
                     }
@@ -1762,12 +1778,8 @@ class JsonGenerator {
                             if(env === this.getEnvironment(el)) {
                                 const shouldProject = (relContainer.target === el.container.ref) ||
                                     (el.container.ref && this.resolveConatinerParent(el.container.ref) === relContainer.target);
-                                if (shouldProject) {
-                                    const targetNode = this.resolveDeploymentNodeParent(el);
-                                    if (thisNode && targetNode && thisNode === targetNode
-                                        && this.hasCommonDeploymentGroup(containerInstance, el)) {
-                                        rels.push(this.createRelationshipEx(containerInstance, el, relContainer.relationship));
-                                    }
+                                if (shouldProject && this.hasCommonDeploymentGroup(containerInstance, el)) {
+                                    rels.push(this.createRelationshipEx(containerInstance, el, relContainer.relationship));
                                 }
                             }
                         }
@@ -2394,8 +2406,8 @@ class JsonGenerator {
                     elements: Array.from(elements).map(el => this.elementJson(el)),
                     relationships: Array.from(relationships).map(rel => this.elementJson(rel)),
                     automaticLayout: this.transformAutoLayout(view),
-                    // Transient: consumed by applyElkAutoLayouts in the plugin, removed before shipping.
-                    elkGraph: this.buildElkGraphForView(this.transformAutoLayout(view), undefined, false, elements, relationships)
+                    // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
+                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships)
                 };
             });
         return views && views.length > 0 ? views : undefined;
@@ -2418,8 +2430,8 @@ class JsonGenerator {
                     elements: Array.from(elements).map(el => this.elementJson(el)),
                     relationships: Array.from(relationships).map(rel => this.elementJson(rel)),
                     automaticLayout: this.transformAutoLayout(view),
-                    // Transient: consumed by applyElkAutoLayouts in the plugin, removed before shipping.
-                    elkGraph: this.buildElkGraphForView(this.transformAutoLayout(view), undefined, false, elements, relationships)
+                    // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
+                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships)
                 };
             });
         return views && views.length > 0 ? views : undefined;
@@ -2438,290 +2450,260 @@ class JsonGenerator {
      *
      * Returns undefined if no autolayout keyword is present in the DSL view.
      */
-    private transformAutoLayout(view: any): any | undefined {
+    private transformAutoLayout(view: any): any {
         const autoLayout = view.autoLayoutProps?.[0];
-        if (!autoLayout) {
-            return undefined;
-        }
-        const direction = this.mapDirection(autoLayout.direction);
+        const direction = this.mapDirection(autoLayout?.direction);
         return {
             applied: false,
             implementation: "Graphviz",
             rankDirection: direction,
-            rankSeparation: autoLayout.rankSeparation ?? 100,
-            nodeSeparation: autoLayout.nodeSeparation ?? 50,
+            // Defaults (see autoLayout DSL docs + the reference structurizr-autolayout):
+            // rankSeparation and nodeSeparation both default to 300px, and the rank
+            // direction defaults to TopBottom.
+            rankSeparation: autoLayout?.rankSeparation ?? 300,
+            nodeSeparation: autoLayout?.nodeSeparation ?? 300,
             edgeSeparation: 50,
             vertices: true
         };
     }
 
+
     /**
-     * Builds an ELK layout graph for a view using the full model context that is
-     * available in the generator but NOT in the webview.
-     *
-     * Frames (the scope software system / container, groups, deployment nodes)
-     * become ELK compound nodes so ELK sizes/positions them without overlaps and
-     * lays their contents out inside. Elements are leaves. Cross-frame edges are
-     * lifted onto the level of the lowest common ancestor so ELK routes them.
-     * The graph is consumed in the plugin (applyElkLayoutToView) to compute
-     * coordinates, then removed from the shipped JSON.
-     *
-     * @param autoLayout      automaticLayout settings
-     * @param scopeElement    the view's scope element (software system / container), if any
-     * @param scopeAsFrame    whether the scope is rendered as a frame compound (container & component views)
-     * @param elements        the view's element AST nodes
-     * @param relationships   the view's relationship AST nodes (ImpliedRelationship wrappers)
+     * Builds a Graphviz DOT graph for a view. Groups, deployment nodes and the
+     * scope frame become nested `subgraph cluster_*` blocks so Graphviz packs
+     * their children together; edges carry no labels (the webview draws the
+     * description at the relationship midpoint).
      */
-    private buildElkGraphForView(
+    private buildGraphvizDot(
         autoLayout: any,
         scopeElement: NamedElement | undefined,
         scopeAsFrame: boolean,
         elements: Iterable<any>,
-        relationships: Iterable<any>
-    ): any | undefined {
+        relationships: Iterable<any>,
+        isDynamic = false
+    ): string | undefined {
         if (!autoLayout) return undefined;
 
-        const rankSeparation = autoLayout.rankSeparation ?? 100;
-        const nodeSeparation = autoLayout.nodeSeparation ?? 50;
-        const edgeSeparation = autoLayout.edgeSeparation ?? 50;
-        // Minimums keep the diagram from looking cramped (labels/edges clear of elements).
-        const edgeClearance = Math.max(edgeSeparation, 80);
-        const nodeGap = Math.max(nodeSeparation, 80);
-        const layerGap = Math.max(rankSeparation, 150);
+        // Replicates the structure/attributes of the reference DOTExporter
+        // (structurizr-autolayout): header, cluster margin=25, node sizes in a
+        // 300dpi inch space, and id= attributes. Identifiers are ours - they do
+        // not affect the layout.
+        const STRUCTURIZR_DPI = 300; // Structurizr diagrams are sized for 300dpi
+        const dir = this.mapGraphvizDirection(autoLayout.rankDirection);
+        const rankdir = dir === 'UP' ? 'BT' : dir === 'LEFT' ? 'RL' : dir === 'RIGHT' ? 'LR' : 'TB';
+        // Format like Java's String.format("%s", double) in the reference: whole
+        // inches render as "1.0" rather than "1" (purely cosmetic - same value).
+        const fmtIn = (v: number) => (Number.isInteger(v) ? `${v}.0` : String(v));
+        const ranksep = fmtIn(autoLayout.rankSeparation / STRUCTURIZR_DPI); // inches
+        const nodesep = fmtIn(autoLayout.nodeSeparation / STRUCTURIZR_DPI);
+        const q = (s: string) => '"' + String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+        // Our identifiers are alphanumeric + underscore - safe unquoted like the
+        // reference's numeric ids. Anything else is quoted.
+        const idToken = (s: string) => (/^[A-Za-z0-9_]+$/.test(s) ? s : q(s));
 
-        const graph: any = {
-            id: 'root',
-            layoutOptions: {
-                'elk.algorithm': 'layered',
-                'elk.direction': this.mapElkDirection(autoLayout.rankDirection),
-                // Lay the whole compound hierarchy out together so cross-hierarchy
-                // edges (root element -> element inside a group/deployment node) are
-                // routed by ELK around the group's content instead of straight through
-                // it (SEPARATE_CHILDREN, the default, only avoids the group frame).
-                'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
-                'elk.edgeRouting': 'POLYLINE',
-                'elk.edgeLabels.placement': 'CENTER',
-                'elk.spacing.edgeLabel': '30',
-                // The base spacing value is what actually drives the gap between
-                // UNCONNECTED siblings (elk.spacing.nodeNode is ignored by this
-                // elkjs build). It must be set on the scope (root / each compound)
-                // so unconnected deployment nodes / group members don't collapse to
-                // the 20px default. The explicit *BetweenLayers options below keep
-                // the spacing between CONNECTED (different-layer) nodes unchanged.
-                'elk.layered.spacing.baseValue': String(nodeGap),
-                'elk.spacing.nodeNode': String(nodeGap),
-                'elk.spacing.edgeEdge': String(edgeClearance),
-                'elk.spacing.edgeNode': String(edgeClearance),
-                'elk.layered.spacing.nodeNodeBetweenLayers': String(layerGap),
-                'elk.layered.spacing.edgeNodeBetweenLayers': String(edgeClearance),
-                'elk.layered.spacing.edgeEdgeBetweenLayers': String(edgeClearance),
-                'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP'
-            },
-            children: [],
-            edges: []
+        // Cluster tree: clusterId -> list of children (element ids / sub-cluster ids).
+        const childrenOf: Record<string, string[]> = {};
+        const owningCluster: Record<string, string> = {}; // element id -> owning cluster id
+        const getChildren = (id: string): string[] => (childrenOf[id] ||= []);
+        const addChild = (parent: string, child: string) => {
+            owningCluster[child] = parent;
+            getChildren(parent).push(child);
         };
 
-        const nodeById: Record<string, any> = {};
-        // elk node id -> parent elk node id (used for the LCA edge lift)
-        const parentOf: Record<string, string | undefined> = {};
+        const scopeClusterId = scopeElement && scopeAsFrame ? 'cluster_scope_' + this.getId(scopeElement) : undefined;
+        // The webview (structurizr-diagram.js addElementToBoundary with
+        // includeParentBoundary=true) also draws a boundary for the scope element's
+        // PARENT: on a component view and a container-scoped dynamic view it renders
+        // BOTH the container boundary and the enclosing software system boundary.
+        // The reference DOT export emits both clusters (cluster_<systemId> wrapping
+        // cluster_<containerId>), so replicate that here - otherwise the webview-drawn
+        // system frame is missing from the graphviz bounds, the paper/centring does
+        // not account for it, and the rendered diagram is offset by a per-diagram amount.
+        // The webview computes the frame size in reposition(): embedded content plus
+        // clusterPadding (50) on each side plus the name/metadata footer at the bottom;
+        // graphviz's cluster margin (25pt = 104px) covers that padding, so emitting the
+        // cluster is sufficient to reserve the space.
+        let scopeSystemId: string | undefined;
+        let scopeSystemClusterId: string | undefined;
+        if (scopeClusterId && isContainer(scopeElement)) {
+            const scopeSystem = this.resolveConatinerParent(scopeElement);
+            if (scopeSystem) {
+                scopeSystemId = this.getId(scopeSystem);
+                scopeSystemClusterId = 'cluster_scope_' + scopeSystemId;
+                addChild('root', scopeSystemClusterId);
+                addChild(scopeSystemClusterId, scopeClusterId);
+            } else {
+                addChild('root', scopeClusterId);
+            }
+        } else if (scopeClusterId) {
+            addChild('root', scopeClusterId);
+        }
 
-        const makeCompound = (node: any, id: string, el?: NamedElement) => {
-            node.children = [];
-            // Replicate the webview's reposition() frame padding so ELK reserves the
-            // same space the webview will use when it resizes a frame around its
-            // children (clusterPadding 50 on all sides + an extra bottom block for the
-            // node name/metadata text: 50 + 15 + fontSize*1.4 + fontSize*0.7 + 15).
-            // If ELK under-reserves this, the webview grows the frame and it overlaps
-            // the elements placed below it (e.g. deployment frames over infra nodes).
-            const fontSize = el ? this.resolveElementStyle(el).fontSize : 24;
-            const bottom = Math.round(50 + 15 + fontSize * 1.4 + fontSize * 0.7 + 15);
-            node.layoutOptions = {
-                'elk.padding': `[top=50,left=50,right=50,bottom=${bottom}]`,
-                // Drives the gap between UNCONNECTED children of this compound
-                // (see the note on the root layoutOptions).
-                'elk.layered.spacing.baseValue': String(nodeGap)
+        // Creates a (possibly nested) group cluster under `parent` and returns its id.
+        const ensureGroupCluster = (groupPath: string, parent: string | undefined): string => {
+            let current = parent;
+            for (const seg of groupPath.split('/').filter(s => s.length > 0)) {
+                const cid = 'cluster_group_' + (current ?? 'root') + '_' + seg;
+                if (owningCluster[cid] === undefined) addChild(current ?? 'root', cid);
+                current = cid;
+            }
+            return current!;
+        };
+
+        // First pass: deployment nodes become clusters BEFORE leaves attach.
+        const deployCluster: Record<string, string> = {};
+        for (const el of elements) {
+            if (!this.isCompound(el)) continue;
+            const id = this.getId(el);
+            const cid = 'cluster_deploy_' + id;
+            deployCluster[id] = cid;
+            const parentEl = this.resolveFrameParentId(el, scopeElement);
+            const base = parentEl !== undefined ? deployCluster[parentEl] : scopeClusterId;
+            const group = this.extractGroup(el);
+            const gid = group && group.length > 0 ? ensureGroupCluster(group, base) : undefined;
+            addChild(gid ?? base ?? 'root', cid);
+        }
+
+        // Sizes (in inches at 300dpi) and cluster assignment for all elements.
+        const sizes: Record<string, { w: string; h: string; label: string }> = {};
+        // deployment node id -> a representative inner instance, so edges that
+        // reference a deployment node are projected onto its content (like the
+        // reference's findElementInside).
+        const innerOf: Record<string, string> = {};
+        for (const el of elements) {
+            const id = this.getId(el);
+            const size = this.defaultElementSize(el);
+            // Strip the DSL string quotes from the name for the DOT label (the
+            // reference emits "id: Name" without the surrounding quotes).
+            const name = this.dotElementName(el).replace(/^"|"$/g, '');
+            sizes[id] = {
+                w: (size.width / STRUCTURIZR_DPI).toFixed(6),
+                h: (size.height / STRUCTURIZR_DPI).toFixed(6),
+                label: `${id}: ${name}`
             };
-        };
-
-        const attach = (node: any, parentId: string | undefined) => {
-            if (parentId !== undefined && nodeById[parentId] !== undefined) {
-                const parentNode = nodeById[parentId];
-                if (!parentNode.children) makeCompound(parentNode, parentId);
-                parentNode.children.push(node);
-                parentOf[node.id] = parentId;
-            } else {
-                graph.children.push(node);
-                parentOf[node.id] = undefined;
-            }
-        };
-
-        // Ensures a (possibly nested) group compound exists under `parentId` and
-        // returns the innermost group node id. Group ids are derived from the parent
-        // (not from the element) so all elements of the same group under the same
-        // parent share a single group compound.
-        const ensureGroupNode = (groupPath: string, parentId: string | undefined): string => {
-            const segments = groupPath.split('/').filter(s => s.length > 0);
-            let currentParent = parentId;
-            for (const seg of segments) {
-                const gid = 'group:' + (currentParent ?? 'root') + ':' + seg;
-                if (nodeById[gid] === undefined) {
-                    const gnode: any = { id: gid };
-                    makeCompound(gnode, gid);
-                    nodeById[gid] = gnode;
-                    attach(gnode, currentParent);
+            if (this.isCompound(el)) continue; // rendered as a cluster
+            if (deployCluster[id] === undefined) {
+                let parent = this.resolveDeploymentNodeParent(el);
+                while (parent) {
+                    const pid = this.getId(parent);
+                    if (deployCluster[pid] !== undefined && innerOf[pid] === undefined) innerOf[pid] = id;
+                    parent = this.resolveDeploymentNodeParent(parent);
                 }
-                currentParent = gid;
             }
-            return currentParent!;
+            const base = this.resolveFrameParentId(el, scopeElement);
+            const scopeId = scopeElement ? this.getId(scopeElement) : undefined;
+            // A direct child of the scope frame (container/component) goes inside
+            // the scope cluster; a child of a deployment node goes inside that
+            // deployment cluster; anything else (external element) is a root node.
+            let baseCluster: string | undefined;
+            if (scopeAsFrame && base !== undefined && base === scopeId) {
+                baseCluster = scopeClusterId;
+            } else if (base !== undefined) {
+                baseCluster = deployCluster[base];
+            }
+            // A standalone container that belongs to the scope's software system is
+            // written inside the enclosing system boundary (the reference
+            // AbstractDiagramExporter writes same-system containers into the system
+            // boundary cluster).
+            if (baseCluster === undefined && scopeSystemClusterId !== undefined && isContainer(el)) {
+                const sys = this.resolveConatinerParent(el);
+                if (sys && this.getId(sys) === scopeSystemId) {
+                    baseCluster = scopeSystemClusterId;
+                }
+            }
+            const group = this.extractGroup(el);
+            // Container/component views: the reference writes external (non-scope)
+            // elements as plain nodes without group clusters - only elements inside
+            // the scope frame keep their group clusters.
+            const inScope = scopeAsFrame ? baseCluster === scopeClusterId : true;
+            const gid = group && group.length > 0 && inScope ? ensureGroupCluster(group, baseCluster) : undefined;
+            addChild(gid ?? baseCluster ?? 'root', id);
+        }
+
+        const lines: string[] = [];
+        lines.push('digraph {');
+        lines.push('  compound=true');
+        lines.push(`  graph [splines=polyline,rankdir=${rankdir},ranksep=${ranksep},nodesep=${nodesep},fontsize=5]`);
+        lines.push('  node [shape=box,fontsize=5]');
+        lines.push('  edge []');
+        lines.push('');
+
+        const emitNode = (id: string, indent: string) => {
+            const s = sizes[id] || { w: '1.500000', h: '1.000000', label: id };
+            lines.push(`${indent}${idToken(id)} [width=${s.w},height=${s.h},fixedsize=true,id=${idToken(id)},label=${q(s.label)}]`);
         };
-
-        // Scope frame (software system on a container view / container on a
-        // component view) is rendered as a boundary -> top-level compound.
-        if (scopeElement && scopeAsFrame) {
-            const scopeId = this.getId(scopeElement);
-            const scopeNode: any = { id: scopeId };
-            makeCompound(scopeNode, scopeId, scopeElement);
-            nodeById[scopeId] = scopeNode;
-            graph.children.push(scopeNode);
-            parentOf[scopeId] = undefined;
-        }
-
-        // First pass: create compound (deployment node) nodes BEFORE any leaf/group
-        // attaches to them. Otherwise an instance processed before its deployment node
-        // would attach its group to the ROOT (the frame node does not exist yet), the
-        // deployment view would be laid out flat (frames not wrapping children), and the
-        // gap between the connected instances would be too small for the edge label.
-        for (const el of elements) {
-            if (nodeById[this.getId(el)] !== undefined) continue;
-            if (!this.isElkCompound(el)) continue;
-            const id = this.getId(el);
-            const size = this.defaultElementSize(el);
-            const node: any = { id, width: size.width, height: size.height };
-            makeCompound(node, id, el);
-            nodeById[id] = node;
-
-            const group = this.extractGroup(el);
-            if (group && group.length > 0) {
-                const frameParentId = this.resolveElkParentId(el, scopeElement);
-                const gid = ensureGroupNode(group, frameParentId);
-                attach(node, gid);
-            } else {
-                attach(node, this.resolveElkParentId(el, scopeElement));
+        const emitCluster = (cid: string, indent: string) => {
+            const pad = indent + '  ';
+            lines.push(`${indent}subgraph ${q(cid)} {`);
+            lines.push(`${pad}margin=25`);
+            for (const child of getChildren(cid)) {
+                if (child.startsWith('cluster_')) emitCluster(child, pad);
+                else emitNode(child, pad);
             }
+            lines.push(`${indent}}`);
+        };
+        // The reference emits clusters and standalone elements in a view-specific
+        // order (it influences graphviz rank/placement):
+        // - landscape/context (no scope frame): group clusters first, then standalone;
+        // - container/component (scope frame): external elements first, then the
+        //   scope boundary cluster.
+        const rootClusters: string[] = [];
+        const rootNodes: string[] = [];
+        for (const child of getChildren('root')) {
+            (child.startsWith('cluster_') ? rootClusters : rootNodes).push(child);
         }
-
-        // Second pass: leaves attach to the (already created) compound nodes.
-        for (const el of elements) {
-            const id = this.getId(el);
-            if (nodeById[id] !== undefined) {
-                continue; // already a frame (scope / compound) - do not duplicate
-            }
-            const size = this.defaultElementSize(el);
-            const node: any = { id, width: size.width, height: size.height };
-            nodeById[id] = node;
-
-            const group = this.extractGroup(el);
-            if (group && group.length > 0) {
-                const frameParentId = this.resolveElkParentId(el, scopeElement);
-                const gid = ensureGroupNode(group, frameParentId);
-                attach(node, gid);
-            } else {
-                attach(node, this.resolveElkParentId(el, scopeElement));
-            }
+        // Dynamic views (container scope) follow the reference DynamicView export:
+        // the scope boundary cluster is emitted first, then the external elements
+        // (the opposite of container/component views).
+        if (scopeAsFrame && !isDynamic) {
+            for (const id of rootNodes) emitNode(id, '  ');
+            for (const cid of rootClusters) emitCluster(cid, '  ');
+        } else {
+            for (const cid of rootClusters) emitCluster(cid, '  ');
+            for (const id of rootNodes) emitNode(id, '  ');
         }
+        lines.push('');
 
-        // Edges with an LCA lift so ELK routes cross-frame relationships.
+        // Edges. Matches the reference DOTExporter: `source -> destination [id=...]`
+        // edges (no labels). Deployment-node endpoints are projected onto a
+        // representative inner instance (reference findElementInside) AND anchored to
+        // the deployment node cluster with ltail/lhead=cluster_<deploymentNodeId>, so
+        // the arrow terminates at the deployment node frame border instead of routing
+        // through the frame to the inner instance (which would otherwise produce
+        // misleading parallel edges). Deduplicated by (id + direction): dynamic views
+        // emit forward AND response edges that share the same id.
+        const seen = new Set<string>();
         for (const item of relationships as any[]) {
             const relationship = item?.relationship ?? item;
-            const sourceId = this.getId(this.resolveSource(relationship));
-            const targetId = this.getId(this.resolveTarget(relationship));
-
-            let src = sourceId;
-            let tgt = targetId;
-            let container: string | undefined = undefined;
-            if (nodeById[src] !== undefined && nodeById[tgt] !== undefined) {
-                const lifted = this.liftEdgeToLca(src, tgt, parentOf);
-                // Keep the original element endpoints and route the edge inside the LCA
-                // compound (edge.container) so ELK's POLYLINE router avoids intermediate
-                // elements/groups. Lifting the endpoints to the LCA's direct children
-                // (the previous behaviour) made ELK route straight past interior
-                // obstacles - e.g. the "Uses" edge from Service 1 API to Service 2 API
-                // crossed Service 1 Database which sits between them.
-                if (lifted.lca !== undefined && lifted.lca !== sourceId && lifted.lca !== targetId) {
-                    container = lifted.lca;
-                } else {
-                    src = lifted.src;
-                    tgt = lifted.tgt;
-                }
-            }
-
-            const edge: any = {
-                // Use the wrapper item id so it matches view.relationships[].id
-                // (elementJson uses getId(item)) - the plugin writes vertices by id.
-                // Dynamic-view steps are synthetic objects carrying an explicit `id`
-                // (getId() on them would hash to the same value for every step), so
-                // prefer item.id when present and fall back to getId(item) for AST
-                // relationship wrappers.
-                id: (item as any)?.id ?? this.getId(item),
-                sources: [src],
-                targets: [tgt]
-            };
-            if (container !== undefined) edge.container = container;
-            // Keep the original endpoints so the plugin can map the routed path back.
-            edge._srcId = sourceId;
-            edge._tgtId = targetId;
-
-            const label = this.buildElkLabel(relationship);
-            if (label) edge.labels = [label];
-            graph.edges.push(edge);
+            const rawSourceId = this.getId(this.resolveSource(relationship));
+            const rawTargetId = this.getId(this.resolveTarget(relationship));
+            // Project deployment-node endpoints onto a representative inner instance
+            // (reference findElementInside); the edge id stays unchanged.
+            const sourceId = deployCluster[rawSourceId] !== undefined ? (innerOf[rawSourceId] ?? rawSourceId) : rawSourceId;
+            const targetId = deployCluster[rawTargetId] !== undefined ? (innerOf[rawTargetId] ?? rawTargetId) : rawTargetId;
+            if (sizes[sourceId] === undefined || sizes[targetId] === undefined) continue;
+            const edgeId = (item as any)?.id ?? this.getId(item);
+            const dedupeKey = `${edgeId}\u0000${sourceId}\u0000${targetId}`;
+            if (seen.has(dedupeKey)) continue;
+            seen.add(dedupeKey);
+            let clusterConfig = '';
+            if (deployCluster[rawSourceId] !== undefined) clusterConfig += `,ltail=${deployCluster[rawSourceId]}`;
+            if (deployCluster[rawTargetId] !== undefined) clusterConfig += `,lhead=${deployCluster[rawTargetId]}`;
+            lines.push(`  ${idToken(sourceId)} -> ${idToken(targetId)} [id=${idToken(edgeId)}${clusterConfig}]`);
         }
 
-        return graph;
+        lines.push('}');
+        return lines.join('\n');
     }
 
-    /** Resolves the ELK compound (frame) parent id of a view element, if any. */
-    private resolveElkParentId(el: any, scopeElement: NamedElement | undefined): string | undefined {
-        const parent = this.resolveElkParent(el, scopeElement);
+    /** Resolves the frame (compound) parent id of a view element, if any. */
+    private resolveFrameParentId(el: any, scopeElement: NamedElement | undefined): string | undefined {
+        const parent = this.resolveFrameParent(el, scopeElement);
         return parent ? this.getId(parent) : undefined;
     }
 
-    /**
-     * Lifts an edge (source -> target) onto the level of their lowest common
-     * ancestor so both endpoints become direct children of the LCA. ELK only
-     * routes edges between nodes at the same level of a compound; lifting the
-     * cross-frame edges onto the LCA makes ELK produce a real routed path.
-     */
-    private liftEdgeToLca(
-        sourceId: string,
-        targetId: string,
-        parentOf: Record<string, string | undefined>
-    ): { src: string; tgt: string; lca: string | undefined } {
-        const chainOf = (id: string): string[] => {
-            const chain: string[] = [];
-            let cur: string | undefined = id;
-            while (cur !== undefined) {
-                chain.push(cur);
-                cur = parentOf[cur];
-            }
-            return chain; // [id, parent, ..., root]
-        };
-
-        const srcChain = chainOf(sourceId);
-        const tgtChain = chainOf(targetId);
-        const tgtSet = new Set(tgtChain);
-
-        // LCA = first (deepest) node of srcChain also present in tgtChain.
-        let lca: string | undefined = srcChain[0];
-        for (const id of srcChain) {
-            if (tgtSet.has(id)) { lca = id; break; }
-        }
-
-        const srcRep = srcChain.indexOf(lca!) > 0 ? srcChain[srcChain.indexOf(lca!) - 1] : sourceId;
-        const tgtRep = tgtChain.indexOf(lca!) > 0 ? tgtChain[tgtChain.indexOf(lca!) - 1] : targetId;
-        return { src: srcRep, tgt: tgtRep, lca };
-    }
-
-    private mapElkDirection(rankDirection: string | undefined): string {
+    /** Maps a Structurizr rank direction to the graphviz rankdir code. */
+    private mapGraphvizDirection(rankDirection: string | undefined): string {
         switch (rankDirection) {
             case 'LeftRight': return 'RIGHT';
             case 'RightLeft': return 'LEFT';
@@ -2730,11 +2712,10 @@ class JsonGenerator {
         }
     }
 
-    /** Approximate rendered size of an element by type (used as an ELK node size). */
     /**
-     * Replicates structurizr.ui.findElementStyle() so ELK plans the exact size the
-     * webview renders: default 450x300, Person/Robot 400x400 when no size style is
-     * defined, DSL + theme style sizes merged per tag, and the shape-based cell size.
+     * Replicates structurizr.ui.findElementStyle() so the layout plans the exact size
+     * the webview renders: default 450x300, Person/Robot 400x400 when no size style
+     * is defined, DSL + theme style sizes merged per tag, and the shape-based cell size.
      */
     private defaultElementSize(el: NamedElement): { width: number; height: number } {
         const style = this.resolveElementStyle(el);
@@ -2767,10 +2748,16 @@ class JsonGenerator {
         // Instance elements also carry their parent element's tags.
         if (isSoftwareSystemInstance(el)) {
             const parent = el.softwareSystem?.ref;
-            if (parent) { const pt = this.extractTags(parent, 'Element', 'Software System'); if (pt) pt.split(',').forEach(add); }
+            if (parent) {
+                const pt = this.extractTags(parent, 'Element', 'Software System');
+                if (pt) pt.split(',').forEach(add);
+            }
         } else if (isContainerInstance(el)) {
             const parent = el.container?.ref;
-            if (parent) { const pt = this.extractTags(parent, 'Element', 'Container'); if (pt) pt.split(',').forEach(add); }
+            if (parent) {
+                const pt = this.extractTags(parent, 'Element', 'Container');
+                if (pt) pt.split(',').forEach(add);
+            }
         }
         return tags;
     }
@@ -2799,14 +2786,18 @@ class JsonGenerator {
         return map;
     }
 
-    /** Resolves the effective element style (width/height/shape/fontSize) — mirrors findElementStyle. */
-    private resolveElementStyle(el: NamedElement): { width: number; height: number; shape: string; fontSize: number } {
+    /** Resolves the effective element style (width/height/shape/fontSize/metadata) — mirrors findElementStyle. */
+    private resolveElementStyle(el: NamedElement): { width: number; height: number; shape: string; fontSize: number; metadata: boolean } {
         const map = this.ensureElementStyleMap();
         let width = 450;
         let height = 300;
         let defaultSizeInUse = true;
         let shape: string | undefined = undefined;
         let fontSize: number | undefined = undefined;
+        // The webview only reserves a metadata row when metadata text is actually
+        // rendered (reposition(): metadataText non-empty). Metadata is shown by
+        // default and hidden only when a style sets metadata: false.
+        let metadata = true;
         for (const tag of this.elementTagsFor(el)) {
             const s = map[tag];
             if (s) {
@@ -2814,16 +2805,17 @@ class JsonGenerator {
                 if (s.height !== undefined) { height = s.height; defaultSizeInUse = false; }
                 if (s.shape !== undefined) shape = s.shape;
                 if (s.fontSize !== undefined) fontSize = s.fontSize;
+                if (s.metadata !== undefined) metadata = s.metadata !== false;
             }
         }
         if (shape === undefined) shape = 'Box';
-        if (fontSize === undefined) fontSize = 24;
+        if (fontSize === undefined) fontSize = DEFAULT_ELEMENT_FONT_SIZE;
         // Mobile device size normalization (findElementStyle).
         if (shape === 'MobileDevicePortrait' && height < width) { const t = width; width = height; height = t; }
         if (shape === 'MobileDeviceLandscape' && height > width) { const t = width; width = height; height = t; }
         // Unstyled Person/Robot shapes are rendered 400x400.
         if (defaultSizeInUse && (shape === 'Person' || shape === 'Robot')) { width = 400; height = 400; }
-        return { width, height, shape, fontSize };
+        return { width, height, shape, fontSize, metadata };
     }
 
     /** Converts a resolved style into the actual rendered cell size for a shape. */
@@ -2842,13 +2834,20 @@ class JsonGenerator {
         }
     }
 
-    /** Whether an element is rendered as a compound (deployment nodes contain children). */
-    private isElkCompound(el: any): boolean {
+    /** Whether an element is rendered as a frame (deployment nodes contain children). */
+    private isCompound(el: any): boolean {
         return isDeploymentNode(el);
     }
 
-    /** Finds the ELK compound parent of a view element, if any. */
-    private resolveElkParent(el: any, scopeElement: NamedElement | undefined): NamedElement | undefined {
+    /** Display name for the DOT node label (instances inherit their container/system name). */
+    private dotElementName(el: any): string {
+        if (isContainerInstance(el)) return String((el as any).container?.ref?.name ?? (el as any)?.name ?? this.getId(el));
+        if (isSoftwareSystemInstance(el)) return String((el as any).softwareSystem?.ref?.name ?? (el as any)?.name ?? this.getId(el));
+        return String((el as any)?.name ?? this.getId(el));
+    }
+
+    /** Finds the frame parent of a view element, if any. */
+    private resolveFrameParent(el: any, scopeElement: NamedElement | undefined): NamedElement | undefined {
         // Container view: containers live inside the software system frame.
         if (isContainer(el) && scopeElement && isSoftwareSystem(scopeElement)) {
             return scopeElement;
@@ -2870,40 +2869,6 @@ class JsonGenerator {
             return this.resolveDeploymentNodeParent(el);
         }
         return undefined;
-    }
-
-    /**
-     * Builds the ELK edge label (relationship description) with an estimated size
-     * that matches what the webview renders. Width/height follow the resolved
-     * relationship style (fontSize, width, description/metadata flags) and the same
-     * text-measurement heuristics as the webview (breakText uses ~0.75em per char,
-     * wrapped at the relationship style width; calculateHeight uses lineSpacing 1.2).
-     * A margin is added so ELK keeps a visible gap between the label and the
-     * connected elements (ELK sizes the node gap to the reserved label width + 40).
-     */
-    private buildElkLabel(relationship: any): any | undefined {
-        const rel = relationship?.relationship ?? relationship;
-        const text = this.description(rel);
-        if (!text || text.trim().length === 0) return undefined;
-        const clean = text.replace(/\r?\n/g, ' ').trim();
-        const style = this.resolveRelationshipStyle(rel);
-        if (style.description === false) return undefined;
-
-        // breakText heuristic: characterWidth = fontSize * 0.75, wrapped at the
-        // relationship style width (default 200).
-        const characterWidth = style.fontSize * 0.75;
-        const textWidth = Math.min(clean.length * characterWidth, style.width);
-        const width = Math.max(textWidth, 20) + 40; // +40 total margin (~20px each side)
-
-        // Label height: description height + (technology line + padding), mirroring
-        // createArrow's totalHeight (calculateHeight uses lineSpacing 1.2).
-        const lines = style.width > 0 ? Math.max(1, Math.ceil((clean.length * characterWidth) / style.width)) : 1;
-        let height = style.fontSize + ((lines - 1) * style.fontSize * 1.2);
-        const technology = this.technology(rel);
-        if (technology && style.metadata !== false) {
-            height += 10 + style.fontSize * 0.7;
-        }
-        return { id: 'l1', text: clean, width, height: Math.max(height, 20) };
     }
 
     /** All tags a relationship matches in the webview (mirrors getAllTagsForRelationship). */
@@ -2968,208 +2933,332 @@ class JsonGenerator {
     }
 
     /**
-     * Runs ELK.layout() in the plugin for every view that has an attached elkGraph
-     * (i.e. views with an explicit autoLayout), writes the resulting coordinates and
-     * ELK-computed sizes into view.elements, drops automaticLayout (so the webview
-     * renders at these positions instead of re-laying out) and removes the transient
-     * elkGraph so it is not shipped to the webview.
-     */
-    private async applyElkAutoLayouts(jsonOutput: any): Promise<void> {
-        const viewArrays: any[] = [
-            jsonOutput.views?.systemLandscapeViews,
-            jsonOutput.views?.systemContextViews,
-            jsonOutput.views?.containerViews,
-            jsonOutput.views?.componentViews,
-            jsonOutput.views?.deploymentViews,
-            jsonOutput.views?.dynamicViews,
-            jsonOutput.views?.customViews
+    * Runs Graphviz (dot) in the plugin for every view that has an attached
+    * graphviz DOT (i.e. views with an explicit autoLayout), writes the resulting
+    * coordinates and sizes into view.elements, and drops automaticLayout (so the
+    * webview renders at these positions instead of re-laying out).
+    *
+    * The transient `graphviz` field holds the DOT string and is cleared after layout.
+    */
+   private async applyGraphvizAutoLayouts(jsonOutput: any): Promise<void> {
+        const viewArrays: { views: any[]; dynamic: boolean }[] = [
+            { views: jsonOutput.views?.systemLandscapeViews, dynamic: false },
+            { views: jsonOutput.views?.systemContextViews, dynamic: false },
+            { views: jsonOutput.views?.containerViews, dynamic: false },
+            { views: jsonOutput.views?.componentViews, dynamic: false },
+            { views: jsonOutput.views?.deploymentViews, dynamic: false },
+            { views: jsonOutput.views?.dynamicViews, dynamic: true },
+            { views: jsonOutput.views?.customViews, dynamic: false }
         ];
-        for (const views of viewArrays) {
+        for (const { views, dynamic } of viewArrays) {
             if (!Array.isArray(views)) continue;
             for (const view of views) {
                 // Some extractors return undefined for views that fail their scope
                 // guard - skip those entries.
-                if (!view || !view.elkGraph) continue;
+                if (!view || !view.graphviz) continue;
                 try {
-                    await this.applyElkLayoutToView(view);
+                    await this.applyGraphvizLayoutToView(view, dynamic);
                 } catch (err) {
-                    console.error(`[C4 ELK] Layout failed for view ${view.key}:`, err);
+                    console.error(`[C4 Graphviz] Layout failed for view ${view.key}:`, err);
                 }
-                delete view.elkGraph;
             }
         }
     }
 
     /**
-     * Runs ELK on a single view's graph and writes normalized coordinates/sizes/vertices
-     * into the view JSON. The pipeline is intentionally clean: build the ELK graph,
-     * run elk.layout(), then copy the resulting positions/sizes/vertices into the view.
-     * No post-processing is applied.
+     * Runs Graphviz on a single view's DOT graph and writes normalized
+     * coordinates/sizes/vertices into the view JSON. The pipeline is intentionally
+     * clean: build the DOT, run graphviz.layout(dot, 'json'), then copy the
+     * resulting positions/sizes/vertices into the view. No post-processing is applied.
+     *
+     * The `json` (-Tjson) output is used because it preserves the custom `id=`
+     * attributes we put on DOT nodes/edges, so relationships can be matched back
+     * to view.relationships BY ID. The plain format drops ids and cannot do this.
      */
-    private async applyElkLayoutToView(view: any): Promise<void> {
-        const elk = new ELK();
-        const result = await elk.layout(view.elkGraph);
+    private async applyGraphvizLayoutToView(view: any, isDynamic = false): Promise<void> {
+        const dot = view.graphviz as string;
+        if (!dot) return;
+        const graphviz = await Graphviz.load();
+        const json = JSON.parse(graphviz.layout(dot, 'json'));
 
-        // ELK returns compound children relative to their parent; accumulate the
-        // offsets to obtain absolute paper coordinates.
-        const positions: Record<string, { x: number; y: number }> = {};
-        const sizes: Record<string, { width: number; height: number }> = {};
-        const computeAbsolute = (node: any, parentX: number, parentY: number) => {
-            const x = parentX + (node.x || 0);
-            const y = parentY + (node.y || 0);
-            positions[node.id] = { x, y };
-            if (node.width !== undefined && node.height !== undefined) {
-                sizes[node.id] = { width: node.width, height: node.height };
-            }
-            (node.children || []).forEach((child: any) => computeAbsolute(child, x, y));
+        const margin = 400; // paper margin - the same gap on every side of the diagram
+        // Graphviz -Tjson coordinates are in points (72/inch) with the origin at
+        // the bottom-left (y grows UP); the webview paper origin is at the top-left.
+        // The DOT sizes are in a 300dpi inch space (STRUCTURIZR_DPI), so points are
+        // converted back with the reference's DPI_RATIO (300/72).
+        const PT = 300 / 72;
+
+        const parsePoint = (s: string): [number, number] => {
+            const [a, b] = s.split(',');
+            return [parseFloat(a), parseFloat(b)];
         };
-        (result.children || []).forEach((node: any) => computeAbsolute(node, 0, 0));
+        const parseBB = (s: string) => {
+            const [x1, y1, x2, y2] = s.split(',').map(Number);
+            return { x1, y1, x2, y2 };
+        };
+        // Graphviz polyline `pos`: "e,x1,y1 x2,y2 x3,y3 ..." - the leading "e,"
+        // token is the head (arrow tip) point; the remaining tokens are the
+        // polyline vertices in order tail -> head.
+        const parseSpline = (pos: string): { x: number; y: number }[] => {
+            const out: { x: number; y: number }[] = [];
+            for (const part of pos.trim().split(/\s+/)) {
+                const m = /^(?:e,)?([-.\d]+),([-.\d]+)$/.exec(part);
+                if (m) out.push({ x: parseFloat(m[1]), y: parseFloat(m[2]) });
+            }
+            return out;
+        };
 
-        // Content bounds over all nodes (elements + frames) so the paper fits the
-        // layout and the diagram is not rendered on the huge default 2000x2000.
-        const margin = 400;
+        // graphviz -Tjson coordinates are y-up points; the webview paper is y-down px.
+        // The graphviz default 4pt graph pad and the graph-height offset in the y-flip
+        // (SVG wrapper transform "translate(4 graphHeight+4)") both cancel out of every
+        // coordinate, vertex and paper bound - the symmetric paper centring below
+        // subtracts the same constant from the min/max. Only the y-flip itself (y-up ->
+        // y-down orientation) and the point->px scale (PT) are needed.
+        const yDown = (jsonY: number) => -jsonY * PT;
+        const xPx = (jsonX: number) => jsonX * PT;
+
+        // Nodes (objects with pos/width/height + our id) and clusters (bb + nodes).
+        const nodeById: Record<string, { x: number; y: number; w: number; h: number }> = {};
+        const idByGvid: Record<number, string> = {};
+        const clusters: { name: string; gvid: number; bb: { x1: number; y1: number; x2: number; y2: number }; nodes: number[] }[] = [];
+        for (const obj of (json.objects ?? []) as any[]) {
+            if (!obj) continue;
+            if (obj.pos && obj.width && obj.height && obj.id !== undefined) {
+                const [cx, cy] = parsePoint(obj.pos); // center, points
+                nodeById[obj.id] = { x: cx, y: cy, w: parseFloat(obj.width) * 72, h: parseFloat(obj.height) * 72 };
+                if (obj._gvid !== undefined) idByGvid[obj._gvid] = String(obj.id);
+            } else if (obj.bb && Array.isArray(obj.nodes)) {
+                clusters.push({ name: obj.name, gvid: obj._gvid, bb: parseBB(obj.bb), nodes: obj.nodes as number[] });
+            }
+        }
+
+        // Leaf element boxes in the paper coordinate space (y-down).
+        const rects: Record<string, { x: number; y: number; w: number; h: number }> = {};
+        for (const id of Object.keys(nodeById)) {
+            const c = nodeById[id];
+            const w = c.w * PT, h = c.h * PT;
+            rects[id] = { x: xPx(c.x - c.w / 2), y: yDown(c.y + c.h / 2), w, h };
+        }
+
+        // Build the cluster tree from graphviz bb containment, then reproduce the
+        // webview frame sizes (structurizr-diagram.js reposition()): embedded content
+        // plus clusterPadding (50) on each side, plus a footer at the bottom of
+        // 50+15+nameFontSize+metadataFontSize+15 (=122 for boundaries/deployment
+        // nodes, =108 for groups). These frames are drawn by the webview (even though
+        // the DOT only carries them as clusters), so they must be part of the paper
+        // bounds and are where deployment nodes are placed.
+        const contains = (a: { x1: number; y1: number; x2: number; y2: number }, b: { x1: number; y1: number; x2: number; y2: number }) =>
+            a.x1 <= b.x1 && a.y1 <= b.y1 && a.x2 >= b.x2 && a.y2 >= b.y2;
+        const area = (c: { bb: { x1: number; y1: number; x2: number; y2: number } }) =>
+            (c.bb.x2 - c.bb.x1) * (c.bb.y2 - c.bb.y1);
+        const sorted = [...clusters].sort((a, b) => area(a) - area(b)); // innermost first
+        const childrenOf: Record<string, string[]> = {};
+        for (const c of sorted) {
+            let parent: string | undefined;
+            let parentArea = Infinity;
+            for (const p of sorted) {
+                if (p === c || !contains(p.bb, c.bb)) continue;
+                if (area(p) < parentArea) { parentArea = area(p); parent = p.name; }
+            }
+            if (parent) (childrenOf[parent] ||= []).push(c.name);
+        }
+        const frameBounds: Record<string, { x: number; y: number; w: number; h: number }> = {};
+        // Replicates the webview's reposition() bottom footer for a frame.
+        const padFor = (name: string) => {
+            const nameFontSize = Math.floor(DEFAULT_ELEMENT_FONT_SIZE * NAME_FONT_SIZE_DIFFERENCE_RATIO);
+            const metadataFontSize = Math.floor(DEFAULT_ELEMENT_FONT_SIZE * METADATA_FONT_SIZE_DIFFERENCE_RATIO);
+            const hasMetadata = !name.startsWith('cluster_group_');
+            return {
+                top: WEBVIEW_CLUSTER_PADDING, left: WEBVIEW_CLUSTER_PADDING, right: WEBVIEW_CLUSTER_PADDING,
+                bottom: WEBVIEW_CLUSTER_PADDING + WEBVIEW_FRAME_MARGIN + nameFontSize + (hasMetadata ? metadataFontSize : 0) + WEBVIEW_FRAME_MARGIN
+            };
+        };
+        const leafSet: Record<string, Set<number>> = {};
+        for (const c of clusters) leafSet[c.name] = new Set(c.nodes);
+        for (const c of sorted) {
+            const childLeaves = new Set<number>();
+            for (const ch of childrenOf[c.name] ?? []) {
+                for (const g of leafSet[ch] ?? []) childLeaves.add(g);
+            }
+            let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+            for (const g of c.nodes) {
+                if (childLeaves.has(g)) continue; // belongs to a nested cluster
+                const id = idByGvid[g];
+                const r = id !== undefined ? rects[id] : undefined;
+                if (!r) continue;
+                mnX = Math.min(mnX, r.x); mnY = Math.min(mnY, r.y);
+                mxX = Math.max(mxX, r.x + r.w); mxY = Math.max(mxY, r.y + r.h);
+            }
+            for (const ch of childrenOf[c.name] ?? []) {
+                const fb = frameBounds[ch];
+                if (!fb) continue;
+                mnX = Math.min(mnX, fb.x); mnY = Math.min(mnY, fb.y);
+                mxX = Math.max(mxX, fb.x + fb.w); mxY = Math.max(mxY, fb.y + fb.h);
+            }
+            if (mnX === Infinity) continue; // empty cluster - the webview removes it
+            const pad = padFor(c.name);
+            frameBounds[c.name] = { x: mnX - pad.left, y: mnY - pad.top, w: mxX - mnX + pad.left + pad.right, h: mxY - mnY + pad.top + pad.bottom };
+        }
+
+        // The true diagram bounds: leaf boxes, webview frames, relationship vertices
+        // (bends) and relationship labels all extend the drawn diagram, so they all
+        // drive the paper size (with an equal gap on every side).
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const id of Object.keys(positions)) {
-            const p = positions[id];
-            const s = sizes[id];
-            if (!p || !s) continue;
-            minX = Math.min(minX, p.x);
-            minY = Math.min(minY, p.y);
-            maxX = Math.max(maxX, p.x + s.width);
-            maxY = Math.max(maxY, p.y + s.height);
-        }
-        // Extend the bounds with the routed edge bend points and label boxes so the
-        // paper is large enough for the FULL paths - otherwise edges whose bends /
-        // labels reach beyond the element boxes (cross-hierarchy edges are routed
-        // far around the compounds) are clipped or drawn off the paper.
-        for (const edge of (result.edges || [])) {
-            const eoffset = positions[edge.container] || { x: 0, y: 0 };
-            (edge.sections || []).forEach((section: any) => {
-                (section.bendPoints || []).forEach((p: any) => {
-                    const bx = p.x + eoffset.x, by = p.y + eoffset.y;
-                    minX = Math.min(minX, bx);
-                    minY = Math.min(minY, by);
-                    maxX = Math.max(maxX, bx);
-                    maxY = Math.max(maxY, by);
-                });
-            });
-            const lbl = edge.labels && edge.labels[0];
-            if (lbl && lbl.x !== undefined && lbl.y !== undefined) {
-                const hw = (lbl.width ?? 0) / 2, hh = (lbl.height ?? 0) / 2;
-                const lx = lbl.x + eoffset.x, ly = lbl.y + eoffset.y;
-                minX = Math.min(minX, lx - hw);
-                minY = Math.min(minY, ly - hh);
-                maxX = Math.max(maxX, lx + hw);
-                maxY = Math.max(maxY, ly + hh);
-            }
-        }
-        const offsetX = minX === Infinity ? 0 : -minX + margin;
-        const offsetY = minY === Infinity ? 0 : -minY + margin;
+        const include = (x: number, y: number, w = 0, h = 0) => {
+            minX = Math.min(minX, x); minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h);
+        };
+        for (const id of Object.keys(rects)) include(rects[id].x, rects[id].y, rects[id].w, rects[id].h);
+        for (const name of Object.keys(frameBounds)) include(frameBounds[name].x, frameBounds[name].y, frameBounds[name].w, frameBounds[name].h);
 
-        for (const el of view.elements) {
-            const pos = positions[el.id];
-            if (pos) {
-                el.x = Math.floor(pos.x + offsetX);
-                el.y = Math.floor(pos.y + offsetY);
-            }
-            const size = sizes[el.id];
-            if (size) {
-                el.width = size.width;
-                el.height = size.height;
-            }
+        // Edges: match to view.relationships BY ID (the DOT edges carry
+        // id=<relationshipId>). The relationship label footprint is centred on the
+        // source->target midpoint (the webview draws it at distance 0.5); label size
+        // is computed from the relationship's resolved style, mirroring the webview's
+        // createArrow (labelSize width = style.width * 1.2, height = description height
+        // + technology height). Vertices (real bends) are only written for static views
+        // - dynamic views keep straight lines, matching the reference.
+        // Lookup the model relationship by id (the DOT edge id is the relationship id)
+        // so its style/description can be resolved.
+        const relationshipById: Record<string, any> = {};
+        for (const rel of this.relationships) {
+            const id = this.getId(rel);
+            if (relationshipById[id] === undefined) relationshipById[id] = rel;
         }
-
-        // Write the routed edge bend points into view.relationships so the webview
-        // draws edges along the ELK path. Only bendPoints are used, NOT
-        // startPoint/endPoint: JointJS computes the boundary connection points itself
-        // from the element boxes. Edge id matches view.relationships[].id.
+        const relById: Record<string, any> = {};
         if (view.relationships) {
-            const relById: Record<string, any> = {};
-            for (const rel of view.relationships) {
-                if (rel && rel.id) relById[rel.id] = rel;
-            }
-            // Paper-space rects for ALL nodes (leaves + compounds). Compounds are
-            // needed as polyline endpoints too: deployment-node endpoints are
-            // compounds, and using their centres keeps the label projection valid.
-            const paperRects: Record<string, { x: number; y: number; w: number; h: number }> = {};
-            for (const id of Object.keys(positions)) {
-                const p = positions[id];
-                const s = sizes[id];
-                if (p && s) paperRects[id] = { x: p.x + offsetX, y: p.y + offsetY, w: s.width, h: s.height };
-            }
+            for (const rel of view.relationships) { if (rel && rel.id) relById[rel.id] = rel; }
+        }
+        const rawVerticesById: Record<string, { x: number; y: number }[]> = {};
+        for (const ge of (json.edges ?? []) as any[]) {
+            if (!ge.pos) continue;
+            const pts = parseSpline(ge.pos);
+            if (pts.length < 2) continue;
+            const route = [...pts.slice(1), pts[0]]; // tail -> head (drop the "e," head)
+            const srcCenter = nodeById[idByGvid[ge.tail]];
+            const tgtCenter = nodeById[idByGvid[ge.head]];
 
-            for (const edge of (result.edges || [])) {
-                const rel = relById[edge.id];
-                if (!rel) continue;
-                const offset = positions[edge.container] || { x: 0, y: 0 };
-                const vertices: any[] = [];
-                (edge.sections || []).forEach((section: any) => {
-                    (section.bendPoints || []).forEach((p: any) => vertices.push({ x: p.x + offset.x + offsetX, y: p.y + offset.y + offsetY }));
-                });
-                if (vertices.length > 0) rel.vertices = vertices;
-
-                // Let ELK's own label placement drive the webview label position.
-                // ELK knows the label size (edge.labels) and returns the label centre
-                // (x/y) in the same coordinate space as the edge bend points. Project
-                // that point onto the routed polyline and write its arc-length fraction
-                // (0..100) as rel.position - the webview renders labels at position/100
-                // along the path, so this reproduces ELK's placement instead of our own
-                // midpoint search.
-                const label = edge.labels && edge.labels[0];
-                const srcRect = paperRects[edge._srcId];
-                const tgtRect = paperRects[edge._tgtId];
-                if (label && srcRect && tgtRect && label.x !== undefined && label.y !== undefined) {
-                    const poly = [
-                        { x: srcRect.x + srcRect.w / 2, y: srcRect.y + srcRect.h / 2 },
-                        ...vertices,
-                        { x: tgtRect.x + tgtRect.w / 2, y: tgtRect.y + tgtRect.h / 2 }
-                    ];
-                    const labelCenter = { x: label.x + offset.x + offsetX, y: label.y + offset.y + offsetY };
-                    // Cumulative arc length at each vertex.
-                    const acc: number[] = [0];
-                    let total = 0;
-                    for (let i = 0; i < poly.length - 1; i++) {
-                        total += Math.hypot(poly[i + 1].x - poly[i].x, poly[i + 1].y - poly[i].y);
-                        acc.push(total);
-                    }
-                    let bestFrac = 0.5;
-                    if (total > 0) {
-                        let bestDist = Infinity;
-                        for (let i = 0; i < poly.length - 1; i++) {
-                            const a = poly[i], b = poly[i + 1];
-                            const abx = b.x - a.x, aby = b.y - a.y;
-                            const len2 = abx * abx + aby * aby;
-                            let t = 0;
-                            if (len2 > 0) {
-                                t = ((labelCenter.x - a.x) * abx + (labelCenter.y - a.y) * aby) / len2;
-                                t = Math.max(0, Math.min(1, t));
-                            }
-                            const px = a.x + abx * t, py = a.y + aby * t;
-                            const d = Math.hypot(labelCenter.x - px, labelCenter.y - py);
-                            if (d < bestDist) {
-                                bestDist = d;
-                                bestFrac = (acc[i] + Math.hypot(px - a.x, py - a.y)) / total;
-                            }
+            if (srcCenter && tgtCenter) {
+                const mx = (srcCenter.x + tgtCenter.x) / 2;
+                const my = (srcCenter.y + tgtCenter.y) / 2;
+                // Label footprint from the relationship style (no label -> no footprint).
+                let labelW = 240, labelH = 0;
+                const modelRel = relationshipById[ge.id];
+                if (modelRel) {
+                    const style = this.resolveRelationshipStyle(modelRel);
+                    const clean = String(this.description(modelRel) ?? '').replace(/\r?\n/g, ' ').trim();
+                    if (style.description !== false && clean.length > 0) {
+                        labelW = Math.max(20, style.width) * 1.2;
+                        const characterWidth = style.fontSize * 0.75;
+                        const lines = style.width > 0 ? Math.max(1, Math.ceil((clean.length * characterWidth) / style.width)) : 1;
+                        labelH = style.fontSize + ((lines - 1) * style.fontSize * 1.2);
+                        const technology = this.technology(modelRel);
+                        if (technology && style.metadata !== false) {
+                            labelH += 10 + style.fontSize * METADATA_FONT_SIZE_DIFFERENCE_RATIO;
                         }
                     }
-                    const pos = Math.round(bestFrac * 100);
-                    if (pos >= 0 && pos <= 100 && pos !== 50) rel.position = pos;
+                } else {
+                    labelH = 50; // unknown relationship - reserve a default box
                 }
+                if (labelH > 0) {
+                    include(xPx(mx) - labelW / 2, yDown(my) - labelH / 2, labelW, labelH);
+                }
+            }
+
+            if (isDynamic) continue;
+            const rel = relById[ge.id];
+            if (!rel) continue;
+            const onBox = (pt: { x: number; y: number }, c: { x: number; y: number; w: number; h: number } | undefined) =>
+                c !== undefined && Math.abs(pt.x - c.x) <= c.w / 2 + 22 && Math.abs(pt.y - c.y) <= c.h / 2 + 22;
+
+            // Drop the source connection point (JointJS computes the connection to
+            // the source box itself). The last point is either the target box
+            // boundary or the cluster border for cross-cluster edges - keep it in
+            // the latter case so the route terminates at the cluster border.
+            const startIdx = onBox(route[0], srcCenter) ? 1 : 0;
+            const endExcl = onBox(route[route.length - 1], tgtCenter) ? route.length - 1 : route.length;
+            const interior = route.slice(startIdx, endExcl);
+
+            // Mirrors SVGReader's `if (d.length == 3)`: only edges routed with a real
+            // bend keep vertices; straight edges are drawn by JointJS directly. In
+            // -Tjson the polyline of a straight edge still has several sampled points,
+            // so the straight test is: no interior point deviates more than the
+            // threshold from the source->target line. The threshold (35pt) is generous:
+            // graphviz fans near-parallel edges (e.g. two edges from one node to two
+            // targets that are almost aligned) across the nodesep gap with a small
+            // (~15-30pt) deviation - those small "separation" bends are suppressed so
+            // the webview draws the edge as a clean straight line, while genuinely
+            // routed bends (cross-cluster detours) are still preserved.
+            let hasBend = false;
+            if (srcCenter && tgtCenter) {
+                const abx = tgtCenter.x - srcCenter.x, aby = tgtCenter.y - srcCenter.y;
+                const len2 = abx * abx + aby * aby;
+                if (len2 > 0) {
+                    for (const pt of interior) {
+                        let t = ((pt.x - srcCenter.x) * abx + (pt.y - srcCenter.y) * aby) / len2;
+                        t = Math.max(0, Math.min(1, t));
+                        const px = srcCenter.x + abx * t, py = srcCenter.y + aby * t;
+                        if (Math.hypot(pt.x - px, pt.y - py) > BEND_DEVIATION_THRESHOLD) { hasBend = true; break; }
+                    }
+                } else {
+                    hasBend = interior.length > 1;
+                }
+            }
+            if (!hasBend) continue;
+
+            const raw = interior.map(pt => ({ x: xPx(pt.x), y: yDown(pt.y) }));
+            for (const v of raw) include(v.x, v.y);
+            rawVerticesById[ge.id] = raw;
+        }
+
+        if (minX === Infinity) { minX = margin; minY = margin; maxX = margin; maxY = margin; }
+
+        // Paper = the diagram bounds plus the SAME margin on all four sides, with the
+        // diagram strictly centred (the reference SVGReader's deltaX/deltaY used
+        // +minX, which shifted the content by minX - the diagram was never centred).
+        const paperW = Math.max(2 * margin, (maxX - minX) + 2 * margin);
+        const paperH = Math.max(2 * margin, (maxY - minY) + 2 * margin);
+        const shiftX = margin - minX;
+        const shiftY = margin - minY;
+
+        for (const el of view.elements) {
+            const r = rects[el.id];
+            if (r) {
+                el.x = Math.floor(r.x + shiftX);
+                el.y = Math.floor(r.y + shiftY);
+                el.width = Math.round(r.w);
+                el.height = Math.round(r.h);
+                continue;
+            }
+            // Deployment nodes are clusters - place them at their webview frame
+            // top-left (reposition() computes the same box from the embedded cells).
+            const fb = frameBounds['cluster_deploy_' + el.id];
+            if (fb) {
+                el.x = Math.floor(fb.x + shiftX);
+                el.y = Math.floor(fb.y + shiftY);
             }
         }
 
-        // Paper size fitted to the content so the webview (setPaperSize) renders
-        // the diagram centred with a margin instead of on the default 2000x2000.
-        if (minX !== Infinity) {
-            view.dimensions = {
-                width: Math.ceil((maxX - minX) + margin * 2),
-                height: Math.ceil((maxY - minY) + margin * 2)
-            };
+        if (!isDynamic) {
+            for (const id of Object.keys(rawVerticesById)) {
+                const rel = relById[id];
+                if (!rel) continue;
+                rel.vertices = rawVerticesById[id].map(v => ({ x: Math.round(v.x + shiftX), y: Math.round(v.y + shiftY) }));
+            }
         }
+
+        view.dimensions = {
+            width: Math.ceil(paperW),
+            height: Math.ceil(paperH)
+        };
 
         // Layout is already applied here - the webview must render at the given
         // coordinates instead of re-running its own auto-layout.
         view.automaticLayout = undefined;
+
+        // The DOT string was only an intermediate layout input - drop it from the
+        // generated JSON so no transitive graphviz artifact leaks into the output.
+        delete view.graphviz;
     }
 
     /**
@@ -4805,7 +4894,8 @@ class JsonGenerator {
             case 'bt': return 'BottomTop';
             case 'tb': return 'TopBottom';
             default:
-                return 'LeftRight';
+                // Structurizr autoLayout default direction is TopBottom.
+                return 'TopBottom';
         }
     }
 
@@ -4829,8 +4919,8 @@ class JsonGenerator {
                 relationships: Array.from(relationships).map(el => this.elementJson(el)),
                 externalSoftwareSystemBoundariesVisible: true,
                 automaticLayout: this.transformAutoLayout(view),
-                // Transient: consumed by applyElkAutoLayouts in the plugin, removed before shipping.
-                elkGraph: this.buildElkGraphForView(this.transformAutoLayout(view), scopeSystem, false, elements, relationships)
+                // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
+                graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeSystem, false, elements, relationships)
             };
         });
         return views && views?.length > 0 ? views : undefined; 
@@ -4857,8 +4947,8 @@ class JsonGenerator {
                     relationships: Array.from(relationships).map(el => this.elementJson(el)),
                     externalSoftwareSystemBoundariesVisible: true,
                     automaticLayout: this.transformAutoLayout(view),
-                    // Transient: consumed by applyElkAutoLayouts in the plugin, removed before shipping.
-                    elkGraph: this.buildElkGraphForView(this.transformAutoLayout(view), scopeSystem, true, elements, relationships)
+                    // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
+                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeSystem, true, elements, relationships)
                 }
             });
         return views && views.length > 0 ? views : undefined;
@@ -4885,8 +4975,8 @@ class JsonGenerator {
                     relationships: Array.from(relationships).map(el => this.elementJson(el)),
                     externalSoftwareSystemBoundariesVisible: true,
                     automaticLayout: this.transformAutoLayout(view),
-                    // Transient: consumed by applyElkAutoLayouts in the plugin, removed before shipping.
-                    elkGraph: this.buildElkGraphForView(this.transformAutoLayout(view), scopeContainer, true, elements, relationships)
+                    // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
+                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeContainer, true, elements, relationships)
                 };
             });
         return views && views.length > 0 ? views : undefined;
@@ -4953,8 +5043,8 @@ class JsonGenerator {
                     elements: Array.from(elements).map(el => this.elementJson(el)),// elements,,
                     relationships: Array.from(relationships).map(el => this.elementJson(el)),
                     automaticLayout: this.transformAutoLayout(view),
-                    // Transient: consumed by applyElkAutoLayouts in the plugin, removed before shipping.
-                    elkGraph: this.buildElkGraphForView(this.transformAutoLayout(view), undefined, false, elements, relationships)
+                    // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
+                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships)
                 };
             });
         return views && views.length > 0 ? views : undefined;
@@ -4973,19 +5063,11 @@ class JsonGenerator {
                 const scopeElement = view.element?.ref;
                 const content = this.resolveDynamic(view);
                 // Dynamic views are always laid out automatically (no manual positions
-                // in the DSL), so run them through the same ELK pipeline as the other
-                // view types. When the DSL does not declare `autolayout`, fall back to
-                // the webview defaults (LeftRight / 100 / 50 / 50) so the behaviour is
-                // identical to the previous dagre forceApplyAutomaticLayout path.
-                const autoLayout = this.transformAutoLayout(view) ?? {
-                    applied: false,
-                    implementation: "Graphviz",
-                    rankDirection: "LeftRight",
-                    rankSeparation: 100,
-                    nodeSeparation: 50,
-                    edgeSeparation: 50,
-                    vertices: true
-                };
+                // in the DSL), so run them through the same Graphviz pipeline as the
+                // other view types. transformAutoLayout returns the DSL parameters or
+                // the
+                // Structurizr defaults (TopBottom / 300 / 300) when absent.
+                const autoLayout = this.transformAutoLayout(view);
                 return {
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.[0]?.value) ?? "Dynamic View",
@@ -4994,9 +5076,11 @@ class JsonGenerator {
                     elements: content.elements,
                     relationships: content.relationships,
                     automaticLayout: this.transformAutoLayout(view),
-                    // Transient: consumed by applyElkAutoLayouts in the plugin, removed before shipping.
-                    // No scope frame for dynamic views - elements are laid out flat on the root.
-                    elkGraph: this.buildElkGraphForView(autoLayout, undefined, false, content.elkElements, content.elkEdges)
+                    // Transient: consumed by applyGraphvizAutoLayouts in the plugin, removed before shipping.
+                    // Dynamic views use the scope element as a frame (like the reference
+                    // cluster_<containerId>), so pass scopeAsFrame=true; the scope
+                    // cluster is emitted first (reference DynamicView export order).
+                    graphviz: this.buildGraphvizDot(autoLayout, scopeElement, true, content.graphvizElements, content.graphvizEdges, true)
                 };
             });
 
@@ -5030,12 +5114,12 @@ class JsonGenerator {
     private resolveDynamic(view: DynamicView) {
         const steps: any[] = [];
         const uniqueElements = new Set<NamedElement>();
-        // Edges for the ELK layout graph, one per dynamic step. Each edge is a
+        // Edges for the Graphviz layout graph, one per dynamic step. Each edge is a
         // minimal synthetic relationship (source/target AST refs + the step text)
-        // that buildElkGraphForView consumes via resolveSource/resolveTarget. The
-        // `id` matches the step's view.relationships[].id so the ELK layout writes
-        // vertices back onto the same step entries.
-        const elkEdges: any[] = [];
+        // that buildGraphvizDot consumes via resolveSource/resolveTarget. The `id`
+        // matches the step's view.relationships[].id so the layout writes vertices
+        // back onto the same step entries.
+        const graphvizEdges: any[] = [];
 
         // Global counter for top-level sequential steps
         let globalSequence = 1;
@@ -5091,11 +5175,11 @@ class JsonGenerator {
                             description: stepDescription,
                             response: isResponse
                         });
-                        // Layout edge: direction source -> target of the step, so ELK
-                        // places the participants left-to-right in step order. The
+                        // Layout edge: direction source -> target of the step, so the
+                        // layout places the participants in step order. The
                         // label text mirrors what the webview renders ("N: text").
                         const labelText = stepDescription ? `${finalOrder}: ${stepDescription}` : undefined;
-                        elkEdges.push({
+                        graphvizEdges.push({
                             id: this.getId(modelRel),
                             source: { ref: source },
                             target: { ref: target },
@@ -5121,8 +5205,8 @@ class JsonGenerator {
         return {
             elements: elements,
             relationships: steps,
-            elkElements: uniqueElements,
-            elkEdges
+            graphvizElements: uniqueElements,
+            graphvizEdges
         };
     }
 

@@ -14,7 +14,7 @@
 	limitations under the License.
 */
 
-import { commands, ExtensionContext, workspace, window, Uri } from "vscode";
+import { commands, ExtensionContext, ViewColumn, workspace, window, Uri } from "vscode";
 import { C4Snippets } from "./c4-snippets";
 import { CapabilityProvider } from "./capabilities";
 import { DIAGRAM_PREVIEW } from "./config";
@@ -207,6 +207,15 @@ export function init(context: ExtensionContext): void {
 
             // Update the diagram preview webview
             await preview.updateWebView(json, viewKey, docUri);
+
+            // // Open a side-panel with the raw JSON for debugging
+            // const content = JSON.stringify(json, null, 2);
+            // const doc = await workspace.openTextDocument({ content, language: 'json' });
+            //
+            // await window.showTextDocument(doc, {
+            //     viewColumn: ViewColumn.Beside,
+            //     preview: true
+            // });
         })
     );
 

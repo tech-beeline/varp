@@ -28,6 +28,18 @@ import { URI, Utils } from 'vscode-uri';
  * - Cross-file reference resolution via !include and extendsUri
  * - 'this' keyword resolution for sourceThis/targetThis in relationships
  */
+/**
+ * Per-document package of the LOCAL scope: FQN/name descriptions for all named elements
+ * under a scope-traversal root plus the suffix-alias map for ancestor scopes. The package
+ * is a constant of the root (it does not depend on the referencing context), so it is cached
+ * per root node and reused by every reference resolution within a single build (WorkspaceCache
+ * is cleared on document update).
+ */
+interface LocalScopePackage {
+    localDescriptions: AstNodeDescription[];
+    suffixAliasesByScope: Map<AstNode, AstNodeDescription[]>;
+}
+
 export class C4ScopeProvider extends DefaultScopeProvider {
     protected readonly services: LangiumCoreServices;
     // Cache for identifier style (hierarchical/flat) per document scope
@@ -36,6 +48,11 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     private readonly extendedElementsCache: WorkspaceCache<string, AstNodeDescription[]>;
     // Cache for include-resolved elements
     private readonly includeCache: WorkspaceCache<string, AstNodeDescription[]>;
+    // Cache for the local element package (FQN/name descriptions + suffix aliases) per root
+    // node. Built once per root per build (see buildLocalScopePackage) - this removes the
+    // O(references x elements) blow-up where every getScope() call re-traversed the whole
+    // AST and recomputed FQNs from scratch.
+    private readonly localScopeCache: WorkspaceCache<string, LocalScopePackage>;
 
     constructor(services: LangiumCoreServices) {
         super(services);
@@ -44,7 +61,8 @@ export class C4ScopeProvider extends DefaultScopeProvider {
         // Initialize caches. Automatically cleared on ANY project change via WorkspaceCache.
         this.styleCache = new WorkspaceCache<string, boolean>(services.shared);
         this.extendedElementsCache = new WorkspaceCache<string, AstNodeDescription[]>(services.shared);
-        this.includeCache = new WorkspaceCache<string, AstNodeDescription[]>(services.shared);     
+        this.includeCache = new WorkspaceCache<string, AstNodeDescription[]>(services.shared);
+        this.localScopeCache = new WorkspaceCache<string, LocalScopePackage>(services.shared);
     }
 
     /**
@@ -242,8 +260,6 @@ export class C4ScopeProvider extends DefaultScopeProvider {
 
             if (root) {
                 const globalDescriptions: AstNodeDescription[] = [];
-                // Map: enclosing NamedElement -> list of suffix aliases for nested elements
-                const suffixAliasesByScope = new Map<AstNode, AstNodeDescription[]>();
 
                 // --- 1. RESOLVE !include FILES ---
                 // External elements get global FQN only. No suffix aliases are created for them
@@ -264,19 +280,17 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                     globalDescriptions.push(...extDescriptions);
                 }
 
-                // 3. COLLECT LOCAL ELEMENTS with suffix alias scoping
-                // For each NamedElement in the root, determine if hierarchical or flat mode,
-                // then create FQN descriptions and optional suffix aliases for ancestor scopes.
-                AstUtils.streamAllContents(root)
-                    .filter(isNamedElement)
-                    .forEach((element) => {
-                        const isHierarchical = this.isHierarchicalMode(element, element.$cstNode?.offset);
-                        const document = AstUtils.getDocument(element);
-                        const elementDescriptions = this.exportElementDescriptions(
-                            element, document, isHierarchical, suffixAliasesByScope
-                        );
-                        globalDescriptions.push(...elementDescriptions);
-                    });
+                // 3. COLLECT LOCAL ELEMENTS with suffix alias scoping (cached per root node).
+                // The local package is a constant of the root - it does not depend on the
+                // referencing context - so it is built once per root per build (see
+                // buildLocalScopePackage) instead of being re-traversed on every reference.
+                // The cache key is the root document URI plus the root node's type/offset,
+                // because one document can resolve to different roots (ModelBlock vs Workspace
+                // vs C4Document) depending on where the reference sits.
+                const rootDocUri = currentDoc.uri.toString();
+                const rootKey = `${rootDocUri}#${root.$type}@${root.$cstNode?.offset ?? -1}`;
+                const pkg = this.localScopeCache.get(rootKey, () => this.buildLocalScopePackage(root));
+                globalDescriptions.push(...pkg.localDescriptions);
 
                 const globalScope = this.getGlobalScope(this.reflection.getReferenceType(context), context);
 
@@ -289,7 +303,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 const enclosingChain: AstNode[] = [];
                 let cur: AstNode | undefined = context.container;
                 while (cur) {
-                    if (isNamedElement(cur) && suffixAliasesByScope.has(cur)) {
+                    if (isNamedElement(cur) && pkg.suffixAliasesByScope.has(cur)) {
                         enclosingChain.push(cur);
                     }
                     cur = cur.$container;
@@ -298,7 +312,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 // Wrap from farthest ancestor to nearest (reverse order),
                 // so the nearest ancestor becomes the innermost (highest priority) scope.
                 for (let i = enclosingChain.length - 1; i >= 0; i--) {
-                    const aliases = suffixAliasesByScope.get(enclosingChain[i])!;
+                    const aliases = pkg.suffixAliasesByScope.get(enclosingChain[i])!;
                     scope = new MapScope(aliases, scope);
                 }
 
@@ -306,6 +320,37 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             }
         }
         return super.getScope(context);
+    }
+
+    /**
+     * Builds the per-root LOCAL scope package for a scope-traversal root (ModelBlock, Workspace
+     * or C4Document): FQN/name descriptions for every local NamedElement plus the suffix-alias
+     * map for ancestor scopes. The result is a constant of the root (identifier style and element
+     * set), so it is cached in localScopeCache and reused across all reference resolutions within
+     * a single build.
+     *
+     * @param root The scope-traversal root (ModelBlock, Workspace or C4Document)
+     * @returns The local scope package for the root's document
+     */
+    private buildLocalScopePackage(root: AstNode): LocalScopePackage {
+        const localDescriptions: AstNodeDescription[] = [];
+        // Map: enclosing NamedElement -> list of suffix aliases for nested elements
+        const suffixAliasesByScope = new Map<AstNode, AstNodeDescription[]>();
+
+        // For each NamedElement in the root, determine if hierarchical or flat mode,
+        // then create FQN descriptions and optional suffix aliases for ancestor scopes.
+        AstUtils.streamAllContents(root)
+            .filter(isNamedElement)
+            .forEach((element) => {
+                const isHierarchical = this.isHierarchicalMode(element, element.$cstNode?.offset);
+                const document = AstUtils.getDocument(element);
+                const elementDescriptions = this.exportElementDescriptions(
+                    element, document, isHierarchical, suffixAliasesByScope
+                );
+                localDescriptions.push(...elementDescriptions);
+            });
+
+        return { localDescriptions, suffixAliasesByScope };
     }
 
     /**

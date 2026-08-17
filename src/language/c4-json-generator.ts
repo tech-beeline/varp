@@ -120,6 +120,8 @@ class JsonGenerator {
     private readonly propertiesViews: Record<string, string> = {};
     private readonly elements: NamedElement[] = [];
     private readonly relationships: Relationship[] = [];
+    /** Index of relationships by resolved source element id (built once per generate call). */
+    private readonly relationshipsBySource: Map<string, Relationship[]> = new Map();
     /** Maps include file URI → list of Include directives that reference it (for resolving !elements/!relationships context) */
     private readonly includeContexts: Map<string, Include[]> = new Map();
     /** Range-based impliedRelationships flags per document URI: URI → sorted list of {fromOffset, toOffset, enabled} */
@@ -162,7 +164,6 @@ class JsonGenerator {
      * elements, relationships) and then assembles the final model + views output.
      */
     public async generate(workspace: Workspace): Promise<any> {
-
         this.collectConstants(workspace);
         this.collectStyles(workspace);
         this.collectThemes(workspace);
@@ -180,6 +181,9 @@ class JsonGenerator {
             : '/';
 
         this.collectElementsRelationships(workspace);
+        // Index relationships by their resolved source element so the per-element
+        // extractRelationshipsFor* lookups don't scan the whole relationship list.
+        this.buildRelationshipsBySource();
         this.collectImpliedFlags(workspace);
 
         // Resolve DeploymentGroupOrTag ambiguity for instance nodes (ContainerInstance,
@@ -1220,6 +1224,28 @@ class JsonGenerator {
     private readonly resolveSource = (rel : Relationship | ImplicitRelationship) => (isImplicitRelationship(rel) || rel.source?.ref === undefined || rel.sourceThis) ? this.resolveContextElement(rel) : rel.source.ref;
 
     /**
+     * Builds the relationship-by-source index once per generate() call. Maps each element id
+     * (via getId of the resolved relationship source) to the list of relationships originating
+     * from that element. The extractRelationshipsFor* methods then look up their relationships
+     * directly instead of scanning this.relationships for every element - turning the per-view
+     * O(elements x relationships) resolution into O(elements + relationships).
+     */
+    private buildRelationshipsBySource(): void {
+        this.relationshipsBySource.clear();
+        for (const rel of this.relationships) {
+            const source = this.resolveSource(rel);
+            if (!source) continue;
+            const key = this.getId(source);
+            const list = this.relationshipsBySource.get(key);
+            if (list) {
+                list.push(rel);
+            } else {
+                this.relationshipsBySource.set(key, [rel]);
+            }
+        }
+    }
+
+    /**
      * Extracts all relationships for a given Container, including:
      * - Direct relationships where the Container is the source
      * - Implied relationships propagated up/down the container hierarchy:
@@ -1233,7 +1259,7 @@ class JsonGenerator {
      */
     private extractRelationshipsForContainer(container: Container) {
         const rels: ImpliedRelationship[] = [];
-        for (const rel of this.relationships) {
+        for (const rel of this.relationshipsBySource.get(this.getId(container)) ?? []) {
             const sourceContainer = this.resolveSource(rel);
             if (sourceContainer === container) {
                 const target = this.resolveTarget(rel);
@@ -1320,7 +1346,7 @@ class JsonGenerator {
      */
     private extractRelationshipsForComponent(component: Component) {
         const rels: ImpliedRelationship[] = [];
-        for (const rel of this.relationships) {
+        for (const rel of this.relationshipsBySource.get(this.getId(component)) ?? []) {
             const sourceComponent = this.resolveSource(rel);
             if (sourceComponent === component) {
                 const target = this.resolveTarget(rel);
@@ -1422,7 +1448,7 @@ class JsonGenerator {
      */
     private extractRelationshipsForSoftwareSystem(softwareSystem: SoftwareSystem) {
         const rels: ImpliedRelationship[] = [];
-        for (const rel of this.relationships) {
+        for (const rel of this.relationshipsBySource.get(this.getId(softwareSystem)) ?? []) {
             const sourceSoftwareSystem = this.resolveSource(rel);
             if (sourceSoftwareSystem === softwareSystem) {
                 const target = this.resolveTarget(rel);
@@ -1475,7 +1501,7 @@ class JsonGenerator {
      */
     private extractRelationshipsForPerson(person: Person) {
         const rels: ImpliedRelationship[] = [];
-        for (const rel of this.relationships) {
+        for (const rel of this.relationshipsBySource.get(this.getId(person)) ?? []) {
             const sourcePerson = this.resolveSource(rel);            
             if (sourcePerson === person) {
                 const target = this.resolveTarget(rel);
@@ -1526,7 +1552,7 @@ class JsonGenerator {
      */
     private extractRelationshipsForCustom(custom: CustomElement) {
         const rels: ImpliedRelationship[] = [];
-        for (const rel of this.relationships) {
+        for (const rel of this.relationshipsBySource.get(this.getId(custom)) ?? []) {
             const sourceCustom = this.resolveSource(rel);
             if (sourceCustom === custom) {
                 const target = this.resolveTarget(rel);
@@ -1573,7 +1599,7 @@ class JsonGenerator {
      */
     private extractRelationshipsForDeploymentNode(deploymentNode: DeploymentNode) {
         const rels: ImpliedRelationship[] = [];
-        for (const rel of this.relationships) {
+        for (const rel of this.relationshipsBySource.get(this.getId(deploymentNode)) ?? []) {
             const sourceDeploymentNode = this.resolveSource(rel);
             if (sourceDeploymentNode === deploymentNode) {
                 const target = this.resolveTarget(rel);
@@ -1599,7 +1625,7 @@ class JsonGenerator {
      */
     private extractRelationshipsForInfrastructureNode(infrastructureNode: InfrastructureNode) {
         const rels: ImpliedRelationship[] = [];
-        for (const rel of this.relationships) {
+        for (const rel of this.relationshipsBySource.get(this.getId(infrastructureNode)) ?? []) {
             const sourceInfrastructureNode = this.resolveSource(rel);
             if (sourceInfrastructureNode === infrastructureNode) {
                 const target = this.resolveTarget(rel);
@@ -1638,7 +1664,7 @@ class JsonGenerator {
         const softwareSystemInstanceRels: ImpliedRelationship[] = [];
 
         // collect direct explicit relationships where this instance is the source
-        for (const rel of this.relationships) {
+        for (const rel of this.relationshipsBySource.get(this.getId(softwareSystemInstance)) ?? []) {
             const sourceSoftwareSystemInstance = this.resolveSource(rel);            
             if (sourceSoftwareSystemInstance === softwareSystemInstance) {
                 const target = this.resolveTarget(rel);
@@ -1732,7 +1758,7 @@ class JsonGenerator {
         const rels: ImpliedRelationship[] = [];
 
         // collect direct explicit relationships where this instance is the source
-        for (const rel of this.relationships) {
+        for (const rel of this.relationshipsBySource.get(this.getId(containerInstance)) ?? []) {
             const sourceContainerInstance = this.resolveSource(rel);
             if (sourceContainerInstance === containerInstance) {
                 const target = this.resolveTarget(rel);
@@ -4158,12 +4184,10 @@ class JsonGenerator {
 
                 // add any external element that has a relationship with an already visible component
                 const include = new Set<RelationshipMember>();
-                this.elements.filter(isAllowed).forEach(el => {
-                    relationshipsAllowed.forEach(r => {
-                        if (r.source === el && r.target && elementsAtView.has(r.target)) include.add(el);
-                        if (r.target === el && r.source && elementsAtView.has(r.source)) include.add(el);
-                    });
-                });
+                for (const r of relationshipsAllowed) {
+                    if (r.target && elementsAtView.has(r.target) && isAllowed(r.source)) include.add(r.source);
+                    if (r.source && elementsAtView.has(r.source) && isAllowed(r.target)) include.add(r.target);
+                }
                 include.forEach(el => elementsAtView.add(el));
 
                 // add relationships between visible elements
@@ -4255,12 +4279,10 @@ class JsonGenerator {
 
                 // add any external element that has a relationship with an already visible container
                 const include = new Set<RelationshipMember>();
-                this.elements.filter(isAllowed).forEach(el => {
-                    relationshipsAllowed.forEach(r => {
-                        if (r.source === el && elementsAtView.has(r.target)) include.add(el);
-                        else if (r.target === el && elementsAtView.has(r.source)) include.add(el);
-                    });
-                });
+                for (const r of relationshipsAllowed) {
+                    if (elementsAtView.has(r.target) && isAllowed(r.source)) include.add(r.source);
+                    if (elementsAtView.has(r.source) && isAllowed(r.target)) include.add(r.target);
+                }
                 include.forEach(el => elementsAtView.add(el));
 
                 // add relationships between visible elements
@@ -4421,15 +4443,13 @@ class JsonGenerator {
                 elementsAtView.add(scopeSoftwareSystem);
 
                 // add any top-level element that has a direct relationship with the scope system
-                this.elements.filter(isInScope).forEach(el => {
-                    rels.forEach(r => {
-                        if (r.source === el && r.target === scopeSoftwareSystem) {
-                            elementsAtView.add(el);
-                        } else if (r.target === el && r.source === scopeSoftwareSystem) {
-                            elementsAtView.add(el);
-                        }
-                    });
-                });
+                for (const r of rels) {
+                    if (r.source === scopeSoftwareSystem) {
+                        if (isInScope(r.target)) elementsAtView.add(r.target);
+                    } else if (r.target === scopeSoftwareSystem) {
+                        if (isInScope(r.source)) elementsAtView.add(r.source);
+                    }
+                }
 
                 // add relationships between visible elements
                 rels.forEach(r => {
@@ -4580,12 +4600,10 @@ class JsonGenerator {
                 
                 // add any CustomElement that has a relationship with an already visible element
                 const include = new Set<RelationshipMember>();
-                this.elements.filter(isAllowed).forEach(el => {
-                    relationshipsAllowed.forEach(r => {
-                        if (r.source === el && elementsAtView.has(r.target)) include.add(el);
-                        if (r.target === el && elementsAtView.has(r.source)) include.add(el);
-                    });
-                });
+                for (const r of relationshipsAllowed) {
+                    if (elementsAtView.has(r.target) && isAllowed(r.source)) include.add(r.source);
+                    if (elementsAtView.has(r.source) && isAllowed(r.target)) include.add(r.target);
+                }
                 include.forEach(el => elementsAtView.add(el));
 
                 // add relationships between visible elements
@@ -4743,12 +4761,10 @@ class JsonGenerator {
 
                 // add any additional element that has a relationship with an already visible element
                 const include = new Set<RelationshipMember>();
-                this.elements.filter(isAllowed).forEach(el => {
-                    rels.forEach(r => {
-                        if (r.source === el && elementsAtView.has(r.target)) include.add(el);
-                        if (r.target === el && elementsAtView.has(r.source)) include.add(el);
-                    });
-                });
+                for (const r of rels) {
+                    if (elementsAtView.has(r.target) && isAllowed(r.source)) include.add(r.source);
+                    if (elementsAtView.has(r.source) && isAllowed(r.target)) include.add(r.target);
+                }
                 include.forEach(el => elementsAtView.add(el));
 
                 // add relationships between visible elements

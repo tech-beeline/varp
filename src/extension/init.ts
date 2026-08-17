@@ -83,20 +83,25 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
         if (!preview || !preview.isOpen()) {
             return;
         }
-        if (preview.getCurrentDocUri() !== uri) {
-            // The fresh JSON belongs to a different workspace document.
+
+        if (preview.getCurrentDocUri() === uri) {
+            // Fast path: the notification belongs to the bound document.
+            const mode = getAutoRefreshMode();
+            const dirty = isDocumentDirty(uri);
+            const pending = preview.isPendingJson();
+            // A pending preview (opened before its JSON was ready) must receive
+            // the JSON regardless of mode. Otherwise: onChange renders on every
+            // update, onSave only when the document is clean (saved).
+            if (pending || mode === 'onChange' || !dirty) {
+                await refreshDiagram(uri, json);
+            }
             return;
         }
 
-        const mode = getAutoRefreshMode();
-        const dirty = isDocumentDirty(uri);
-        const pending = preview.isPendingJson();
-        // A pending preview (opened before its JSON was ready) must receive the
-        // JSON regardless of mode. Otherwise: onChange renders on every update,
-        // onSave only when the document is clean (saved).
-        if (pending || mode === 'onChange' || !dirty) {
-            await refreshDiagram(uri, json);
-        }
+        // The notification is for a different document (common with many dsl files
+        // or fragment edits). Re-sync the open preview from the server cache so it
+        // updates as soon as fresh JSON for its bound document is available.
+        scheduleSyncPreviewFromServer();
     });
 }
 
@@ -112,21 +117,101 @@ function isDocumentDirty(uri: string): boolean {
     return doc ? doc.isDirty : false;
 }
 
+/**
+ * Finds the view in freshly generated JSON that corresponds to the currently
+ * displayed view. View keys embed a CST-offset hash that changes when the source
+ * is edited, so the exact key can go stale; matching is done on the stable base
+ * prefix (`<TargetName>-<ViewType>`).
+ */
+function resolveFreshViewKey(json: any, currentKey: string | undefined): string | undefined {
+    if (!currentKey) {
+        return undefined;
+    }
+    const dash = currentKey.lastIndexOf('-');
+    const prefix = dash > 0 ? currentKey.substring(0, dash) : currentKey;
+    for (const bucket of Object.values((json?.views ?? {}) as Record<string, unknown>)) {
+        if (!Array.isArray(bucket)) {
+            continue;
+        }
+        for (const v of bucket as any[]) {
+            if (!v || typeof v.key !== 'string') {
+                continue;
+            }
+            if (prefix ? v.key.startsWith(prefix + '-') : v.key === currentKey) {
+                return v.key;
+            }
+        }
+    }
+    return undefined;
+}
+
 /** Renders fresh JSON into the open preview bound to the given root document URI. */
 async function refreshDiagram(uri: string, json: any): Promise<void> {
     const preview = diagramPreview;
     if (!preview || !preview.isOpen()) {
         return;
     }
-    const viewKey = preview.getCurrentViewKey();
-    if (!viewKey) {
+    const currentKey = preview.getCurrentViewKey();
+    if (!currentKey) {
         return;
     }
-    const themes = await getThemesForPreview(json?.views?.configuration?.themes);
-    if (themes !== undefined) {
-        preview.setThemes(themes);
-    }
+    // View keys change when the source shifts, so resolve the matching key in the
+    // fresh JSON; updateWebView stores it for subsequent refreshes.
+    const viewKey = resolveFreshViewKey(json, currentKey) ?? currentKey;
+    // Themes are fetched once when the preview is opened and are already stored
+    // on the preview (included in every postMessage), so re-rendering the same
+    // diagram must not block on re-fetching theme files.
     await preview.updateWebView(json, viewKey, uri);
+}
+
+// Debounces the re-sync so bursts of contentUpdated (many dsl files) do not
+// trigger a fetch+render per notification.
+let syncPreviewTimer: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleSyncPreviewFromServer(): void {
+    if (syncPreviewTimer) {
+        return;
+    }
+    syncPreviewTimer = setTimeout(() => {
+        syncPreviewTimer = undefined;
+        void syncPreviewFromServer();
+    }, 300);
+}
+
+/**
+ * Re-syncs the open preview with the latest JSON the language server has for the
+ * document the preview is bound to. Used when a contentUpdated notification
+ * arrives for a different document (many dsl files, fragment edits) - the bound
+ * document's own notification may not be emitted reliably. Renders only when the
+ * cached JSON content actually changed.
+ */
+async function syncPreviewFromServer(): Promise<void> {
+    const preview = diagramPreview;
+    if (!preview || !preview.isOpen()) {
+        return;
+    }
+    const uri = preview.getCurrentDocUri();
+    const currentKey = preview.getCurrentViewKey();
+    if (!uri || !currentKey || !languageClient) {
+        return;
+    }
+    try {
+        const res: any = await languageClient.sendRequest('custom/getContentForUri', { uri });
+        if (!res?.json) {
+            return;
+        }
+        // LSP serialization always yields a fresh object reference, so compare by
+        // content to avoid re-rendering when nothing changed.
+        const current = preview.getCurrentJson();
+        if (current !== undefined && JSON.stringify(current) === JSON.stringify(res.json)) {
+            return;
+        }
+        const viewKey = resolveFreshViewKey(res.json, currentKey) ?? currentKey;
+        latestJsonByUri.set(uri, res.json);
+        await preview.updateWebView(res.json, viewKey, uri);
+    } catch (err) {
+        console.warn('[C4 Preview] sync-from-server failed:', err);
+    }
 }
 
 /**
@@ -153,7 +238,8 @@ async function deliverPreviewJsonWhenReady(uri: string | undefined, viewKey: str
                 if (themes !== undefined) {
                     preview.setThemes(themes);
                 }
-                await preview.updateWebView(res.json, viewKey, uri);
+                const freshKey = resolveFreshViewKey(res.json, viewKey) ?? viewKey;
+                await preview.updateWebView(res.json, freshKey, uri);
                 return;
             }
         } catch {
@@ -261,21 +347,19 @@ export function init(context: ExtensionContext): void {
      * Triggered by the CodeLens "Show As Structurizr Diagram" button in the editor.
      */
     context.subscriptions.push(
-        commands.registerCommand(DIAGRAM_PREVIEW, async (json: any, viewKey: string, docUri?: string) => {
+        commands.registerCommand(DIAGRAM_PREVIEW, async (viewKey: string, docUri?: string) => {
             // Open the panel immediately so the webview can show the "Rendering"
             // indicator while the JSON is still being generated.
             preview.openPreview(viewKey, docUri);
 
-            // Fetch the freshest JSON from the language server instead of trusting
-            // the payload baked into the CodeLens command - it can be stale or
-            // missing (async race between lens provision and generation).
-            let payload = json;
+            // Fetch the latest generated JSON from the language server cache; if it
+            // is not ready yet, the panel stays open and the JSON is delivered as
+            // soon as it is generated (see deliverPreviewJsonWhenReady).
+            let payload: any;
             if (languageClient) {
                 try {
                     const res = await languageClient.sendRequest('custom/getContentForUri', { uri: docUri ?? '' });
-                    if (res?.json) {
-                        payload = res.json;
-                    }
+                    payload = res?.json;
                 } catch (err) {
                     console.warn('[C4 Preview] fresh JSON fetch failed:', err);
                 }

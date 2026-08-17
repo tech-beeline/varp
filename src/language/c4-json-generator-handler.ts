@@ -65,7 +65,7 @@ export class C4GeneratorHandler {
                 // If the file has no explicit Workspace but has elements,
                 // we need to find the document that includes this file.
                 if(root.workspaces?.length === 1) {
-                    workspaceNode = root.workspaces.at(0); 
+                    workspaceNode = root.workspaces.at(0);
                 }
             }
 

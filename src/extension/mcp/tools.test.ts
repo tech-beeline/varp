@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { C4ModelSource } from './model';
 import { flattenModel } from './model';
 import { loadWorkspaceJson } from './test-fixtures';
+import type { McpLogger } from './tools';
 import {
     listProjectsHandler,
     parseToolResult,
@@ -77,5 +78,20 @@ describe('MCP tools (from simple-workspace DSL fixture)', () => {
         const emptySource = mockSource(null);
         const result = parseToolResult(await readElementHandler(emptySource, { id: '1' }));
         expect(result.error).toBeTruthy();
+    });
+
+    it('handlers emit info events to an optional logger', async () => {
+        const events: { level: string; data: unknown }[] = [];
+        const logger: McpLogger = (level, data) => { events.push({ level, data }); };
+        await readProjectSummaryHandler(source, {}, logger);
+        expect(events.map((e) => e.level)).toEqual(['info', 'info']);
+    });
+
+    it('handlers emit a warning when the model is missing', async () => {
+        const events: { level: string; data: unknown }[] = [];
+        const logger: McpLogger = (level, data) => { events.push({ level, data }); };
+        const emptySource = mockSource(null);
+        await readProjectSummaryHandler(emptySource, {}, logger);
+        expect(events.some((e) => e.level === 'warning')).toBe(true);
     });
 });

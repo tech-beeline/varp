@@ -4,9 +4,27 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { C4ModelSource } from './model';
 import { registerTools } from './tools';
+import { registerReadTools } from './tools-read';
+import { registerResources } from './resources';
+import { registerPrompts } from './prompts';
 
 export const MCP_SERVER_NAME = 'c4-varp';
 export const MCP_DEFAULT_PORT = 47474;
+
+/**
+ * Instructions advertised to MCP clients describing how to use the C4 tools.
+ */
+const MCP_INSTRUCTIONS = `c4-varp MCP - read-only navigation of Structurizr C4 models.
+
+Conventions:
+- All tools are read-only and idempotent.
+- "uri" (the project) is optional and defaults to the first available project.
+- Use "list-projects" to discover projects, then "read-project-summary" for an
+  overview (element counts by type, total relationships, views), then
+  "search-element" / "read-element" to inspect specific elements and their
+  outgoing relationships and the views that include them.
+- Project resources are available at c4://projects and c4://project/{uri}.
+- Prompts: summarize-project, explore-element.`;
 
 export interface C4McpServerHandle {
     port: number;
@@ -28,9 +46,16 @@ export async function startC4McpServer(
 ): Promise<C4McpServerHandle> {
     const server = new McpServer(
         { name: MCP_SERVER_NAME, version },
-        { capabilities: { tools: {} } },
+        {
+            instructions: MCP_INSTRUCTIONS,
+            capabilities: { tools: {}, resources: {}, prompts: {}, completions: {}, logging: {} },
+        },
     );
+    server.server.onerror = (err) => console.error('[C4 MCP] protocol error:', err);
     registerTools(server, source);
+    registerReadTools(server, source);
+    registerResources(server, source);
+    registerPrompts(server, source);
 
     const transports = new Map<string, StreamableHTTPServerTransport>();
     let httpServer: Server;

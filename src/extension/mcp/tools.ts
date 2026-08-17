@@ -1,10 +1,13 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { C4ModelSource } from './model';
 import { flattenModel } from './model';
 
-function text(result: unknown): CallToolResult {
+/** Logger abstraction fed into tool handlers; wired to MCP `logging` notifications. */
+export type McpLogger = (level: LoggingLevel, data: unknown) => void;
+
+export function text(result: unknown): CallToolResult {
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
 }
 
@@ -18,7 +21,7 @@ export function parseToolResult(result: CallToolResult): any {
 }
 
 /** Resolves the target project URI, defaulting to the first available project. */
-async function resolveProject(source: C4ModelSource, uri?: string): Promise<string> {
+export async function resolveProject(source: C4ModelSource, uri?: string): Promise<string> {
     if (uri) {
         return uri;
     }
@@ -26,18 +29,36 @@ async function resolveProject(source: C4ModelSource, uri?: string): Promise<stri
     return projects[0] ?? '';
 }
 
-export async function listProjectsHandler(source: C4ModelSource): Promise<CallToolResult> {
+/**
+ * Zod schema for the optional `uri` project argument on tools.
+ *
+ * Note: tool arguments have NO protocol-level completions. `completion/complete`
+ * only supports prompt arguments (`ref/prompt`) and resource templates
+ * (`ref/resource`) - see CompleteRequestParamsSchema in the MCP SDK. Project-URI
+ * completions are therefore exposed via the prompts (`summarize-project`,
+ * `explore-element`) and the `c4://project/{uri}` resource template instead.
+ */
+export function uriArgSchema() {
+    return z.string().optional().describe('Project (root workspace) URI. Defaults to the first available project.');
+}
+
+export async function listProjectsHandler(source: C4ModelSource, logger?: McpLogger): Promise<CallToolResult> {
+    logger?.('info', { tool: 'list-projects', event: 'start' });
     const projects = await source.listProjects();
+    logger?.('info', { tool: 'list-projects', event: 'complete', projectCount: projects.length });
     return text({ projects });
 }
 
 export async function readProjectSummaryHandler(
     source: C4ModelSource,
     args: { uri?: string },
+    logger?: McpLogger,
 ): Promise<CallToolResult> {
+    logger?.('info', { tool: 'read-project-summary', event: 'start', uri: args.uri });
     const projectUri = await resolveProject(source, args.uri);
     const json = await source.getContent(projectUri);
     if (!json) {
+        logger?.('warning', { tool: 'read-project-summary', event: 'no-model', projectUri });
         return text({ error: `No model found for ${projectUri}` });
     }
     const model = flattenModel(projectUri, json);
@@ -45,6 +66,7 @@ export async function readProjectSummaryHandler(
     for (const e of model.elements) {
         elementsByType[e.type] = (elementsByType[e.type] ?? 0) + 1;
     }
+    logger?.('info', { tool: 'read-project-summary', event: 'complete', projectUri, elementCount: model.elements.length });
     return text({
         project: model.project,
         elementCount: model.elements.length,
@@ -58,10 +80,13 @@ export async function readProjectSummaryHandler(
 export async function searchElementHandler(
     source: C4ModelSource,
     args: { search: string; uri?: string },
+    logger?: McpLogger,
 ): Promise<CallToolResult> {
+    logger?.('info', { tool: 'search-element', event: 'start', search: args.search, uri: args.uri });
     const projectUri = await resolveProject(source, args.uri);
     const json = await source.getContent(projectUri);
     if (!json) {
+        logger?.('warning', { tool: 'search-element', event: 'no-model', projectUri });
         return text({ error: `No model found for ${projectUri}` });
     }
     const model = flattenModel(projectUri, json);
@@ -73,6 +98,7 @@ export async function searchElementHandler(
         e.tags.some(t => t.toLowerCase().includes(q)),
     );
     const truncated = matches.length > 100;
+    logger?.('info', { tool: 'search-element', event: 'complete', projectUri, resultCount: Math.min(matches.length, 100), truncated });
     return text({
         project: projectUri,
         results: matches.slice(0, 100).map(e => ({ id: e.id, name: e.name, type: e.type, tags: e.tags, path: e.path })),
@@ -83,25 +109,32 @@ export async function searchElementHandler(
 export async function readElementHandler(
     source: C4ModelSource,
     args: { id: string; uri?: string },
+    logger?: McpLogger,
 ): Promise<CallToolResult> {
+    logger?.('info', { tool: 'read-element', event: 'start', id: args.id, uri: args.uri });
     const projectUri = await resolveProject(source, args.uri);
     const json = await source.getContent(projectUri);
     if (!json) {
+        logger?.('warning', { tool: 'read-element', event: 'no-model', projectUri });
         return text({ error: `No model found for ${projectUri}` });
     }
     const model = flattenModel(projectUri, json);
     const element = model.elements.find(e => e.id === args.id);
     if (!element) {
+        logger?.('warning', { tool: 'read-element', event: 'not-found', id: args.id });
         return text({ error: `Element ${args.id} not found in ${projectUri}` });
     }
     const includedInViews = model.views
         .filter(v => v.elementIds.includes(args.id))
         .map(v => ({ key: v.key, type: v.type }));
+    logger?.('info', { tool: 'read-element', event: 'complete', id: args.id, includedInViewCount: includedInViews.length });
     return text({ element, includedInViews });
 }
 
 /** Registers the read-only C4 model tools on the MCP server. */
 export function registerTools(server: McpServer, source: C4ModelSource): void {
+    const logger: McpLogger = (level, data) => void server.sendLoggingMessage({ level, data });
+
     server.registerTool(
         'list-projects',
         {
@@ -109,7 +142,7 @@ export function registerTools(server: McpServer, source: C4ModelSource): void {
             description: 'List all root workspace documents (projects) that currently have a resolved C4 model.',
             inputSchema: z.object({}),
         },
-        async () => listProjectsHandler(source),
+        async () => listProjectsHandler(source, logger),
     );
 
     server.registerTool(
@@ -117,11 +150,9 @@ export function registerTools(server: McpServer, source: C4ModelSource): void {
         {
             title: 'Read C4 project summary',
             description: 'Summary of a project: element counts by type, total relationships, and available views.',
-            inputSchema: z.object({
-                uri: z.string().optional().describe('Project (root workspace) URI. Defaults to the first available project.'),
-            }),
+            inputSchema: z.object({ uri: uriArgSchema() }),
         },
-        async (args: { uri?: string }) => readProjectSummaryHandler(source, args),
+        async (args: { uri?: string }) => readProjectSummaryHandler(source, args, logger),
     );
 
     server.registerTool(
@@ -131,10 +162,10 @@ export function registerTools(server: McpServer, source: C4ModelSource): void {
             description: 'Search elements in a project by id, name, type or tags.',
             inputSchema: z.object({
                 search: z.string().describe('Text to match against id, name, type and tags.'),
-                uri: z.string().optional().describe('Project URI. Defaults to the first available project.'),
+                uri: uriArgSchema(),
             }),
         },
-        async (args: { search: string; uri?: string }) => searchElementHandler(source, args),
+        async (args: { search: string; uri?: string }) => searchElementHandler(source, args, logger),
     );
 
     server.registerTool(
@@ -144,9 +175,9 @@ export function registerTools(server: McpServer, source: C4ModelSource): void {
             description: 'Full details of an element: attributes, outgoing relationships, and the views that include it.',
             inputSchema: z.object({
                 id: z.string().describe('Element id (Structurizr id).'),
-                uri: z.string().optional().describe('Project URI. Defaults to the first available project.'),
+                uri: uriArgSchema(),
             }),
         },
-        async (args: { id: string; uri?: string }) => readElementHandler(source, args),
+        async (args: { id: string; uri?: string }) => readElementHandler(source, args, logger),
     );
 }

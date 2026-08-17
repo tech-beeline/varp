@@ -5076,7 +5076,7 @@ class JsonGenerator {
                     elements: content.elements,
                     relationships: content.relationships,
                     automaticLayout: this.transformAutoLayout(view),
-                    // Transient: consumed by applyGraphvizAutoLayouts in the plugin, removed before shipping.
+                    // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     // Dynamic views use the scope element as a frame (like the reference
                     // cluster_<containerId>), so pass scopeAsFrame=true; the scope
                     // cluster is emitted first (reference DynamicView export order).

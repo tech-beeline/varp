@@ -110,11 +110,10 @@ C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json) => {
 // ─── Custom LSP Request Handler ────────────────────────────────────────────
 // Register a custom LSP request that the extension calls when it needs
 // the latest generated JSON (e.g., on file save, for diagram preview refresh).
-// Returns the cached JSON content and any Structurizr dot (.dot) graph data
-// for rendering.
+// Returns the cached JSON content for rendering.
 connection.onRequest('custom/getContentForUri', (params: { uri: string }) => {
     const content = C4.generation.C4GeneratorHandler.getContentForUri(params.uri);
-    return content ? { json: content.json } : null;
+    return content ? { json: content } : null;
 });
 
 // Enumerate root workspace documents that currently have generated JSON.

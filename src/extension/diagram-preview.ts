@@ -35,6 +35,11 @@ export class DiagramPreview {
   private panelReady = false;
   private pendingMessage: { json: any; viewKey: string } | undefined;
 
+  // True while the preview is open but its first JSON payload has not been
+  // delivered yet - the webview shows the "Rendering" indicator until then.
+  // Set by openPreview(), cleared when updateWebView() delivers the JSON.
+  private pendingJson = false;
+
   private readonly title: string = 'Diagram Preview';
   private readonly id: string = 'structurizrPreview';
 
@@ -82,6 +87,7 @@ export class DiagramPreview {
           this.currentDocUri = docUri;
         }
         this.panel ??= this.createPanel();
+        this.pendingJson = false;
         if (this.panelReady) {
           this.panel.webview.postMessage( { 'json' : json, 'viewKey' : viewKey });
         } else {
@@ -89,6 +95,26 @@ export class DiagramPreview {
           // deliver it as soon as the webview signals it is ready.
           this.pendingMessage = { json, viewKey };
         }
+  }
+
+  /**
+   * Opens the preview panel for a view without a JSON payload yet. The webview
+   * shows the "Rendering" indicator until updateWebView() delivers the JSON
+   * (via the custom/contentUpdated push notification or a retry fetch).
+   */
+  public openPreview(viewKey: string, docUri?: string): void {
+        this.currentViewKey = viewKey;
+        this.currentJson = undefined;
+        if (docUri) {
+          this.currentDocUri = docUri;
+        }
+        this.pendingJson = true;
+        this.panel ??= this.createPanel();
+  }
+
+  /** Whether the preview is open and waiting for its first JSON payload. */
+  public isPendingJson(): boolean {
+        return this.pendingJson;
   }
 
   public getCurrentViewKey(): string | undefined {
@@ -119,11 +145,10 @@ export class DiagramPreview {
       }
     );
 
-    // Layout engine is now entirely the ELK pipeline in the TypeScript generator:
-    // the generator bakes element positions/vertices into the view JSON and clears
-    // view.automaticLayout, so the webview renders those coordinates as-is. No ELK
-    // library is loaded in the webview anymore; the vendored dagre layout remains
-    // only as a fallback for views without pre-computed positions.
+    // Layout runs in the TypeScript generator: it bakes element positions and
+    // vertices into the view JSON and clears view.automaticLayout, so the webview
+    // renders those coordinates as-is. The vendored dagre layout is kept only as
+    // a fallback for views without pre-computed positions.
     panel.webview.html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -148,16 +173,55 @@ export class DiagramPreview {
 
     <title>${this.title}</title>
     <style>
+        /* Shown while the diagram JSON is still loading / being rendered. */
+        #rendering {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--vscode-font-family, -apple-system, sans-serif);
+            font-size: 18px;
+            color: var(--vscode-foreground, #cccccc);
+            background: var(--vscode-editor-background, #1e1e1e);
+            z-index: 1000;
+        }
+        #rendering .rendering-letter {
+            display: inline-block;
+            animation: rendering-pulse 1.6s ease-in-out infinite;
+        }
+        /* Staggered delays make the highlight shimmer across the word. */
+        #rendering .rendering-letter:nth-child(1) { animation-delay: 0s; }
+        #rendering .rendering-letter:nth-child(2) { animation-delay: 0.08s; }
+        #rendering .rendering-letter:nth-child(3) { animation-delay: 0.16s; }
+        #rendering .rendering-letter:nth-child(4) { animation-delay: 0.24s; }
+        #rendering .rendering-letter:nth-child(5) { animation-delay: 0.32s; }
+        #rendering .rendering-letter:nth-child(6) { animation-delay: 0.4s; }
+        #rendering .rendering-letter:nth-child(7) { animation-delay: 0.48s; }
+        #rendering .rendering-letter:nth-child(8) { animation-delay: 0.56s; }
+        #rendering .rendering-letter:nth-child(9) { animation-delay: 0.64s; }
+        @keyframes rendering-pulse {
+            0%, 100% { opacity: 0.35; }
+            50% { opacity: 1; }
+        }
     </style>
 </head>
 <body>
+    <div id="rendering"><span class="rendering-letter">R</span><span class="rendering-letter">e</span><span class="rendering-letter">n</span><span class="rendering-letter">d</span><span class="rendering-letter">e</span><span class="rendering-letter">r</span><span class="rendering-letter">i</span><span class="rendering-letter">n</span><span class="rendering-letter">g</span></div>
     <div id="svg"></div>
-    <div id="diagram" style="visibility: hidden;"></div>    
+    <div id="diagram" style="visibility: hidden;"></div>
 </body>
 </html>
 
 <script>
         var diagram;
+        // Key of the view currently displayed; used to keep the user's zoom/pan
+        // when the same view is re-rendered (e.g., auto-refresh) and reset the
+        // viewport only when switching to a different view.
+        var displayedViewKey;
         const vscode = acquireVsCodeApi();
         window.addEventListener('message', event => {
             const message = event.data;
@@ -197,10 +261,22 @@ export class DiagramPreview {
                 crop: false,
                 dimensions: false
             }
+            const view = structurizr.diagram.getCurrentViewOrFilter
+                ? structurizr.diagram.getCurrentViewOrFilter()
+                : structurizr.diagram.getCurrentView();
+            const viewKey = view ? view.key : undefined;
+            const sameView = viewKey === displayedViewKey;
+            displayedViewKey = viewKey;
+
             structurizr.diagram.exportCurrentDiagramToSVG(options, function(svgMarkup) {
               $('#diagram').empty();
               $('#svg').html(svgMarkup);
-              panzoom.reset({ animate: false });
+              $('#rendering').hide();
+              // Keep the user's zoom/pan when re-rendering the same view; only
+              // reset the viewport when switching to a different view.
+              if (!sameView) {
+                panzoom.reset({ animate: false });
+              }
             });
         }
 
@@ -219,6 +295,7 @@ export class DiagramPreview {
       this.panel = undefined;
       this.panelReady = false;
       this.pendingMessage = undefined;
+      this.pendingJson = false;
     });
 
     // Ready handshake: deliver any buffered JSON payload once the webview

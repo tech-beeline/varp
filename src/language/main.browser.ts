@@ -109,7 +109,7 @@ C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json) => {
 // can retrieve cached JSON for diagram preview refresh on file save.
 connection.onRequest('custom/getContentForUri', (params: { uri: string }) => {
     const content = C4.generation.C4GeneratorHandler.getContentForUri(params.uri);
-    return content ? { json: content.json } : null;
+    return content ? { json: content } : null;
 });
 
 // Enumerate root workspace documents that currently have generated JSON.

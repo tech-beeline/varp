@@ -186,7 +186,7 @@
             "onChange",
             "onSave"
           ],
-          "default": "onSave",
+          "default": "onChange",
           "scope": "resource",
           "description": "When to automatically refresh the diagram preview: on every change of the open document (onChange) or when the document is saved to disk (onSave)"
         },

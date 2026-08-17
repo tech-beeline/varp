@@ -25,8 +25,18 @@ export interface McpElement {
     /** Hierarchical path, e.g. ['Software System', 'Container']. */
     path: string[];
     properties?: Record<string, string>;
-    /** Outgoing relationships. */
+    /** Outgoing relationships (this element as the source). */
     relationships: McpRelationship[];
+    /** Incoming relationships (this element as the destination), computed from the model. */
+    incomingRelationships: McpRelationship[];
+}
+
+export interface McpViewRelationship {
+    id?: string;
+    sourceId: string;
+    destinationId: string;
+    description?: string;
+    order?: string;
 }
 
 export interface McpView {
@@ -35,6 +45,7 @@ export interface McpView {
     title?: string;
     description?: string;
     elementIds: string[];
+    relationships: McpViewRelationship[];
 }
 
 export interface McpProject {
@@ -105,6 +116,7 @@ export function flattenModel(uri: string, json: any): FlattenedModel {
                 description: r?.description,
                 tags: splitTags(r?.tags),
             })),
+            incomingRelationships: [],
         });
     };
 
@@ -126,9 +138,23 @@ export function flattenModel(uri: string, json: any): FlattenedModel {
             walkDeployment(n?.children ?? [], nodePath);
             (n?.infrastructureNodes ?? []).forEach((inf: any) =>
                 addElement(inf, 'InfrastructureNode', [...nodePath, inf?.name ?? '']));
+            (n?.softwareSystemInstances ?? []).forEach((inst: any) =>
+                addElement(inst, 'SoftwareSystemInstance', [...nodePath, inst?.name ?? '']));
+            (n?.containerInstances ?? []).forEach((inst: any) =>
+                addElement(inst, 'ContainerInstance', [...nodePath, inst?.name ?? '']));
         });
     };
     walkDeployment(model.deploymentNodes ?? [], []);
+
+    // Second pass: compute incoming relationships (by destination id).
+    for (const e of elements) {
+        for (const r of e.relationships) {
+            const target = elements.find(t => t.id === r.destinationId);
+            if (target) {
+                target.incomingRelationships.push(r);
+            }
+        }
+    }
 
     const collectViews = (arr: any[], type: string): void => {
         (arr ?? []).forEach((v: any) => {
@@ -138,6 +164,13 @@ export function flattenModel(uri: string, json: any): FlattenedModel {
                 title: v?.title,
                 description: v?.description,
                 elementIds: (v?.elements ?? []).map((e: any) => String(e?.id ?? '')),
+                relationships: (v?.relationships ?? []).map((r: any) => ({
+                    id: r?.id,
+                    sourceId: String(r?.sourceId ?? ''),
+                    destinationId: String(r?.destinationId ?? ''),
+                    description: r?.description,
+                    order: r?.order,
+                })),
             });
         });
     };

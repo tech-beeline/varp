@@ -89,17 +89,20 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
         }
 
         const mode = getAutoRefreshMode();
-        // onChange: render on every update; onSave: render only when the document
-        // is clean (saved) — the save event handles the actual render.
-        if (mode === 'onChange' || !isDocumentDirty(uri)) {
+        const dirty = isDocumentDirty(uri);
+        const pending = preview.isPendingJson();
+        // A pending preview (opened before its JSON was ready) must receive the
+        // JSON regardless of mode. Otherwise: onChange renders on every update,
+        // onSave only when the document is clean (saved).
+        if (pending || mode === 'onChange' || !dirty) {
             await refreshDiagram(uri, json);
         }
     });
 }
 
-/** Returns the configured auto-refresh mode (defaults to onSave). */
+/** Returns the configured auto-refresh mode (defaults to onChange). */
 function getAutoRefreshMode(): 'onChange' | 'onSave' {
-    const value = workspace.getConfiguration('varp.diagram').get<string>('autoRefresh', 'onSave');
+    const value = workspace.getConfiguration('varp.diagram').get<string>('autoRefresh', 'onChange');
     return value === 'onChange' ? 'onChange' : 'onSave';
 }
 
@@ -120,6 +123,36 @@ async function refreshDiagram(uri: string, json: any): Promise<void> {
         return;
     }
     await preview.updateWebView(json, viewKey, uri);
+}
+
+/**
+ * Polls the language server for the JSON of a preview that was opened before the
+ * JSON was ready and delivers it to the panel once available. The push
+ * notification (custom/contentUpdated) also delivers it; this is a fallback for
+ * notifications that fired before the panel opened or were otherwise missed.
+ */
+async function deliverPreviewJsonWhenReady(uri: string | undefined, viewKey: string): Promise<void> {
+    if (!uri || !languageClient) {
+        return;
+    }
+    const preview = diagramPreview;
+    for (let attempt = 0; attempt < 20; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        if (!preview || !preview.isOpen() || !preview.isPendingJson()) {
+            return; // already delivered or the panel was closed
+        }
+        try {
+            const res: any = await languageClient.sendRequest('custom/getContentForUri', { uri });
+            if (res?.json) {
+                latestJsonByUri.set(uri, res.json);
+                await preview.updateWebView(res.json, viewKey, uri);
+                return;
+            }
+        } catch {
+            // transient failure - keep polling until the timeout below
+        }
+    }
+    console.warn(`[C4 Preview] timed out waiting for JSON of view ${viewKey}`);
 }
 
 /**
@@ -153,30 +186,31 @@ export function init(context: ExtensionContext): void {
             if (document.languageId !== 'c4') {
                 return;
             }
-            if (getAutoRefreshMode() !== 'onSave') {
-                return;
-            }
             const currentDocUri = preview.getCurrentDocUri();
             if (!currentDocUri || document.uri.toString() !== currentDocUri) {
+                // The preview is bound to a different document; fragment edits are
+                // handled by the custom/contentUpdated push instead.
                 return;
             }
-
             const uri = document.uri.toString();
-            const json = latestJsonByUri.get(uri);
-            if (json) {
-                await refreshDiagram(uri, json);
-                return;
-            }
-            // Fallback: pull fresh JSON from the language server (best effort) if no
-            // push notification has been received yet for this document.
+
+            // Always pull the freshest JSON from the language server on save so
+            // the preview reflects the saved content even if no push has arrived.
             try {
                 const response: any = await languageClient?.sendRequest('custom/getContentForUri', { uri });
                 if (response?.json) {
                     latestJsonByUri.set(uri, response.json);
                     await refreshDiagram(uri, response.json);
+                    return;
                 }
             } catch (err) {
                 console.error(`[C4 AutoRefresh] Error fetching content on save:`, err);
+            }
+
+            // JSON not generated yet - render it as soon as it becomes available.
+            const viewKey = preview.getCurrentViewKey();
+            if (viewKey) {
+                void deliverPreviewJsonWhenReady(uri, viewKey);
             }
         })
     );
@@ -197,16 +231,40 @@ export function init(context: ExtensionContext): void {
      */
     context.subscriptions.push(
         commands.registerCommand(DIAGRAM_PREVIEW, async (json: any, viewKey: string, docUri?: string) => {
-            // Guard clause: skip if no JSON data provided
-            if (!json) {
-                return;
-            }
-            if (docUri) {
-                latestJsonByUri.set(docUri, json);
+            // Open the panel immediately so the webview can show the "Rendering"
+            // indicator while the JSON is still being generated.
+            preview.openPreview(viewKey, docUri);
+
+            // Fetch the freshest JSON from the language server instead of trusting
+            // the payload baked into the CodeLens command - it can be stale or
+            // missing (async race between lens provision and generation).
+            let payload = json;
+            if (languageClient) {
+                try {
+                    const res = await languageClient.sendRequest('custom/getContentForUri', { uri: docUri ?? '' });
+                    if (res?.json) {
+                        payload = res.json;
+                    }
+                } catch (err) {
+                    console.warn('[C4 Preview] fresh JSON fetch failed:', err);
+                }
             }
 
-            // Update the diagram preview webview
-            await preview.updateWebView(json, viewKey, docUri);
+            if (payload) {
+                if (docUri) {
+                    latestJsonByUri.set(docUri, payload);
+                }
+                try {
+                    await preview.updateWebView(payload, viewKey, docUri);
+                } catch (err) {
+                    console.error(`[C4 Preview] webview update FAILED for view ${viewKey}:`, err);
+                }
+                return;
+            }
+
+            // JSON is not ready yet - keep the panel open with the "Rendering"
+            // indicator and deliver it once generation completes.
+            void deliverPreviewJsonWhenReady(docUri, viewKey);
 
             // // Open a side-panel with the raw JSON for debugging
             // const content = JSON.stringify(json, null, 2);

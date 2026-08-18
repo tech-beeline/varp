@@ -16,7 +16,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, readdirSync, statSync, writeFileSync } from 'fs';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
 import { EmptyFileSystem } from 'langium';
 import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
@@ -24,14 +24,31 @@ import { C4JsonGenerator } from './c4-json-generator';
 import { compareJson } from './c4-json-compare';
 import { isWorkspace } from '../generated/ast';
 
-const services = createC4Services({ connection: undefined as any, ...EmptyFileSystem }).C4;
-
 async function loadDSL(filePath: string): Promise<any> {
-    const content = readFileSync(filePath, 'utf-8');
-    const uri = URI.file(resolve(filePath));
-    const doc = services.shared.workspace.LangiumDocumentFactory.fromString(content, uri);
-    await services.shared.workspace.DocumentBuilder.build([doc]);
-    const root = doc.parseResult.value;
+    const dir = dirname(filePath);
+    // Discover all .dsl files in the fixture directory so multi-file workspaces
+    // (extends/includes chains) can resolve their parent/included documents. A
+    // fresh service container per fixture avoids cross-fixture doc accumulation.
+    const dslNames = readdirSync(dir).filter(f => f.endsWith('.dsl'));
+    const services = createC4Services({ connection: undefined as any, ...EmptyFileSystem }).C4;
+    const docs = dslNames.map(name => {
+        const file = resolve(dir, name);
+        const content = readFileSync(file, 'utf-8');
+        return services.shared.workspace.LangiumDocumentFactory.fromString(content, URI.file(file));
+    });
+    // Register every document so multi-file workspaces (extends/includes chains)
+    // can resolve their parent documents via LangiumDocuments (the WorkspaceManager
+    // does this automatically in the real LSP).
+    for (const d of docs) {
+        services.shared.workspace.LangiumDocuments.addDocument(d);
+    }
+    await services.shared.workspace.DocumentBuilder.build(docs);
+    const entryUri = URI.file(resolve(filePath)).toString();
+    const entry = docs.find(d => d.uri.toString() === entryUri);
+    if (!entry) {
+        throw new Error(`Entry document not found for ${filePath}`);
+    }
+    const root = entry.parseResult.value;
     if (isWorkspace(root)) {
         const generator = new C4JsonGenerator(services);
         return generator.generate(root);

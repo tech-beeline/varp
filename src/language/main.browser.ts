@@ -62,24 +62,19 @@ const originalReadFile = (baseProvider as any).readFile.bind(baseProvider);
     
     // Handle http/https URLs via fetch with caching
     if (uriString.startsWith('http://') || uriString.startsWith('https://')) {
-        console.log(`[FileSystem] Request for URL: ${uriString.substring(0, 100)}`);
-        
         // Check cache first
         const cached = fetchCache.get(uriString);
         if (cached && Date.now() - cached.timestamp < INCLUDE_CACHE_TTL) {
-            console.log(`[FileSystem] Cache hit: ${uriString.substring(0, 80)}`);
             return cached.content;
         }
 
         // Fetch from remote URL using the browser's built-in fetch API
-        console.log(`[FileSystem] Fetching URL: ${uriString.substring(0, 100)}`);
         const response = await fetch(uriString);
         if (!response.ok) {
             throw new Error(`Failed to fetch ${uriString}: ${response.status}`);
         }
         const text = await response.text();
-        console.log(`[FileSystem] Downloaded ${(text.length/1024).toFixed(1)} KB`);
-        
+
         // Store in cache
         fetchCache.set(uriString, { content: text, timestamp: Date.now() });
         return text;

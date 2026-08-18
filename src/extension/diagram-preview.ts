@@ -233,6 +233,15 @@ export class DiagramPreview {
         // when the same view is re-rendered (e.g., auto-refresh) and reset the
         // viewport only when switching to a different view.
         var displayedViewKey;
+        // View keys embed a CST-offset hash that changes whenever the source is
+        // edited (the view's offset shifts), so the same logical view can be
+        // re-delivered under a different full key. The stable base prefix
+        // (<TargetName>-<ViewType>) is what identifies a view across re-renders.
+        function baseViewKey(key) {
+            if (!key) return key;
+            var dash = key.lastIndexOf('-');
+            return dash > 0 ? key.substring(0, dash) : key;
+        }
         const vscode = acquireVsCodeApi();
         window.addEventListener('message', event => {
             const message = event.data;
@@ -330,7 +339,9 @@ export class DiagramPreview {
                 ? structurizr.diagram.getCurrentViewOrFilter()
                 : structurizr.diagram.getCurrentView();
             const viewKey = view ? view.key : undefined;
-            const sameView = viewKey === displayedViewKey;
+            // Compare the stable base prefix, not the full key: the CST-offset hash
+            // suffix changes on every edit even for the same logical view.
+            const sameView = baseViewKey(viewKey) === baseViewKey(displayedViewKey);
             displayedViewKey = viewKey;
 
             structurizr.diagram.exportCurrentDiagramToSVG(options, function(svgMarkup) {

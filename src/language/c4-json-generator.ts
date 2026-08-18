@@ -122,6 +122,8 @@ class JsonGenerator {
     private readonly relationships: Relationship[] = [];
     /** Index of relationships by resolved source element id (built once per generate call). */
     private readonly relationshipsBySource: Map<string, Relationship[]> = new Map();
+    /** URI string of the root workspace document - elements defined there keep the short id hash. */
+    private rootDocUri: string | undefined;
     /** Maps include file URI → list of Include directives that reference it (for resolving !elements/!relationships context) */
     private readonly includeContexts: Map<string, Include[]> = new Map();
     /** Range-based impliedRelationships flags per document URI: URI → sorted list of {fromOffset, toOffset, enabled} */
@@ -164,6 +166,7 @@ class JsonGenerator {
      * elements, relationships) and then assembles the final model + views output.
      */
     public async generate(workspace: Workspace): Promise<any> {
+        this.rootDocUri = AstUtils.getDocument(workspace)?.uri.toString();
         this.collectConstants(workspace);
         this.collectStyles(workspace);
         this.collectThemes(workspace);
@@ -1109,31 +1112,37 @@ class JsonGenerator {
      */
     private generateFlatId(element: any): string {
         let hashInput: string;
+        // The CST offset is only unique within the element's own document - two
+        // structurally identical files (e.g. in a multi-level !extends chain) can
+        // place different elements at the same byte offset, so the defining document
+        // must be part of the hash to keep IDs unique across the whole workspace.
+        // Elements in the root workspace document keep the original short hash.
+        const docPart = this.docKeyPart(element);
 
         if (isImplicitRelationship(element)) {
-            // Implicit relationship: hash includes source + target element IDs and CST offset
+            // Implicit relationship: hash includes source + target element IDs, document key and CST offset
             const source = this.resolveSource(element);
             const target = this.resolveTarget(element);
             const sourceId = source ? this.generateFlatId(source) : 'unknown_src';
             const targetId = target ? this.generateFlatId(target) : 'unknown_dst';
             const offset = element.$cstNode?.offset ?? '0';
-            hashInput = `implicit|${sourceId}|${targetId}|${offset}`;
-        } 
+            hashInput = `implicit|${sourceId}|${targetId}|${docPart}${offset}`;
+        }
         else if (isRelationship(element)) {
-            // Explicit relationship: hash includes source + target element IDs and CST offset
+            // Explicit relationship: hash includes source + target element IDs, document key and CST offset
             const source = this.resolveSource(element);
             const target = this.resolveTarget(element);
             const sourceId = source ? this.generateFlatId(source) : 'unknown_src';
             const targetId = target ? this.generateFlatId(target) : 'unknown_dst';
             const offset = element.$cstNode?.offset ?? '0';
-            hashInput = `relationship|${sourceId}|${targetId}|${offset}`;
-        } 
+            hashInput = `relationship|${sourceId}|${targetId}|${docPart}${offset}`;
+        }
         else {
             // Static/physical element (Person, SoftwareSystem, Container, DeploymentNode, etc.):
-            // hash is based on $type + CST offset alone
+            // hash is based on $type + document key + CST offset
             const type = element?.$type || 'element';
             const offset = element?.$cstNode?.offset ?? '0';
-            hashInput = `${type}|${offset}`;
+            hashInput = `${type}|${docPart}${offset}`;
         }
 
         // Generate a stable hash from the input string
@@ -1154,6 +1163,24 @@ class JsonGenerator {
     private getId(element: any): string {
         if (!element) return 'unknown';
         return this.generateFlatId(element);
+    }
+
+    /**
+     * Returns a document disambiguator for an element's id hash: empty for elements
+     * defined in the root workspace document (keeps single-file ids unchanged), otherwise
+     * the file name of the defining document. This prevents id collisions between
+     * structurally identical files in multi-level !extends / !include chains while
+     * remaining path-independent (only the file name is hashed).
+     */
+    private docKeyPart(element: any): string {
+        try {
+            const doc = AstUtils.getDocument(element);
+            if (!doc || !this.rootDocUri) return '';
+            if (doc.uri.toString() === this.rootDocUri) return '';
+            return Utils.basename(doc.uri) + '|';
+        } catch {
+            return '';
+        }
     }
 
     /**

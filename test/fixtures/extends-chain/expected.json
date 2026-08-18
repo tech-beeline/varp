@@ -1,0 +1,55 @@
+{
+  "name": "Name",
+  "description": "Description",
+  "model": {
+    "properties": {},
+    "people": [
+      {
+        "id": "person_187c83e5",
+        "name": "User 3",
+        "tags": "Element,Person",
+        "relationships": []
+      },
+      {
+        "id": "person_4f64a8fa",
+        "name": "User 2",
+        "tags": "Element,Person",
+        "relationships": []
+      },
+      {
+        "id": "person_48ba2a04",
+        "name": "User 1",
+        "tags": "Element,Person",
+        "relationships": []
+      }
+    ]
+  },
+  "views": {
+    "systemLandscapeViews": [
+      {
+        "key": "Landscape-SystemLandscape-91e39541",
+        "elements": [
+          {
+            "id": "person_4f64a8fa",
+            "x": 400,
+            "y": 400,
+            "width": 450,
+            "height": 300
+          }
+        ],
+        "relationships": [],
+        "dimensions": {
+          "width": 1250,
+          "height": 1100
+        }
+      }
+    ],
+    "configuration": {
+      "properties": {},
+      "styles": {
+        "elements": [],
+        "relationships": []
+      }
+    }
+  }
+}

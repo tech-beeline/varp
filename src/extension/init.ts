@@ -375,6 +375,16 @@ export function init(context: ExtensionContext): void {
                         preview.setThemes(themes);
                     }
                     await preview.updateWebView(payload, viewKey, docUri);
+
+                    // Open a side-panel with the raw JSON for debugging
+                    // const content = JSON.stringify(payload, null, 2);
+                    // const doc = await workspace.openTextDocument({ content, language: 'json' });
+                    
+                    // await window.showTextDocument(doc, {
+                    //     viewColumn: ViewColumn.Beside,
+                    //     preview: true
+                    // });
+                    
                 } catch (err) {
                     console.error(`[C4 Preview] webview update FAILED for view ${viewKey}:`, err);
                 }
@@ -384,15 +394,6 @@ export function init(context: ExtensionContext): void {
             // JSON is not ready yet - keep the panel open with the "Rendering"
             // indicator and deliver it once generation completes.
             void deliverPreviewJsonWhenReady(docUri, viewKey);
-
-            // // Open a side-panel with the raw JSON for debugging
-            // const content = JSON.stringify(json, null, 2);
-            // const doc = await workspace.openTextDocument({ content, language: 'json' });
-            //
-            // await window.showTextDocument(doc, {
-            //     viewColumn: ViewColumn.Beside,
-            //     preview: true
-            // });
         })
     );
 

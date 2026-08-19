@@ -40,6 +40,46 @@ interface LocalScopePackage {
     suffixAliasesByScope: Map<AstNode, AstNodeDescription[]>;
 }
 
+/**
+ * Reference type names that must be resolved through the custom C4 scope
+ * provider.
+ *
+ * The check is done via reflection.getReferenceType(context), which returns
+ * the DECLARED reference type verbatim (it does NOT expand unions). So both
+ * are required:
+ *  - the union aliases 'NamedElement' / 'RelationshipMember' - for the many
+ *    references declared as [NamedElement:...] / [RelationshipMember:...];
+ *  - the concrete member type names - for references declared with a concrete
+ *    type (e.g. [SoftwareSystem:...], [ArchetypeDefinition:...]).
+ *
+ * Using the declared type instead of a hard-coded property-name list keeps the
+ * provider in sync with the grammar and lets non-element references fall back
+ * to DefaultScopeProvider.
+ */
+const ELEMENT_REFERENCE_TYPES = new Set([
+    // Union aliases declared in the grammar
+    'NamedElement',
+    'RelationshipMember',
+    // Concrete members of the NamedElement union
+    'Person',
+    'SoftwareSystem',
+    'Container',
+    'Component',
+    'DeploymentNode',
+    'InfrastructureNode',
+    'SoftwareSystemInstance',
+    'ContainerInstance',
+    'GenericInstance',
+    'Relationship',
+    'ElementExtension',
+    'ArchetypeInstance',
+    'ArchetypeDefinition',
+    'CustomElement',
+    'Group',
+    'DeploymentGroup',
+    'DeploymentEnvironment'
+]);
+
 export class C4ScopeProvider extends DefaultScopeProvider {
     protected readonly services: LangiumCoreServices;
     // Cache for identifier style (hierarchical/flat) per document scope
@@ -244,12 +284,11 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             }
         }
 
-        // Check if this property references a NamedElement
-        const isElementRef = [
-            'person','source', 'target', 'softwareSystem', 'container', 'component',
-            'workspace', 'archetype', 'baseArchetype', 'elements', 'element',
-            'from', 'targetThis', 'sourceThis', 'element', 'group', 'deploymentGroup', 'environment', 'softwareSystemInstance', 'containerInstance', 'deploymentEnvironment', 'deploymentGroups', 'DeploymentEnvironment'
-        ].includes(context.property);
+        // Check whether this reference targets a C4 named element by its
+        // DECLARED TYPE (see ELEMENT_REFERENCE_TYPES above), instead of a
+        // hard-coded property-name list.
+        const referenceType = this.reflection.getReferenceType(context);
+        const isElementRef = ELEMENT_REFERENCE_TYPES.has(referenceType);
 
         if (isElementRef) {
             const workspace = AstUtils.getContainerOfType(context.container, isWorkspace);
@@ -292,7 +331,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 const pkg = this.localScopeCache.get(rootKey, () => this.buildLocalScopePackage(root));
                 globalDescriptions.push(...pkg.localDescriptions);
 
-                const globalScope = this.getGlobalScope(this.reflection.getReferenceType(context), context);
+                const globalScope = this.getGlobalScope(referenceType, context);
 
                 // 4. Build chained MapScope: from nearest enclosing NamedElement to root.
                 // Langium's scope lookup works bottom-up — the innermost scope is searched first.

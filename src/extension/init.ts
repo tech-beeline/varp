@@ -478,7 +478,7 @@ export function init(context: ExtensionContext): void {
                 return;
             }
             
-            const buffer = Buffer.from(xml, 'utf-8');
+            const buffer = new TextEncoder().encode(xml);
             await workspace.fs.writeFile(uri, buffer);
             
             window.showInformationMessage(`Exported diagram to DrawIO format.`);
@@ -530,7 +530,7 @@ export function init(context: ExtensionContext): void {
 
             if (!uri) return;
 
-            const buffer = Buffer.from(svgResult, 'utf-8');
+            const buffer = new TextEncoder().encode(svgResult);
             await workspace.fs.writeFile(uri, buffer);
 
             window.showInformationMessage('Exported diagram to SVG format.');

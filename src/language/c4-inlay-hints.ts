@@ -30,7 +30,7 @@ export class C4InlayHintProvider extends AbstractInlayHintProvider {
     private readonly hintableTypes = new Set([
         'Workspace', 'Person', 'SoftwareSystem', 'Container', 'Component',
         'Relationship', 'ImplicitRelationship', 'DynamicStep',
-        'DeploymentNode', 'InfrastructureNode', 'SoftwareInstance', 
+        'DeploymentNode', 'InfrastructureNode',
         'ContainerInstance', 'SoftwareSystemInstance', 'ArchetypeInstance',
         'Group', 'DeploymentEnvironment', 'DeploymentGroup',
         'SystemLandscapeView', 'SystemContextView', 'ContainerView', 

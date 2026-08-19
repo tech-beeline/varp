@@ -3,7 +3,6 @@ out/**
 tsconfig.json
 esbuild.mjs
 langium-config.json
-language-configuration.json
 .gitignore
 .env.example
 .vscode/**

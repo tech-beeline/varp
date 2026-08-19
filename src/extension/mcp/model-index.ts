@@ -44,7 +44,10 @@ function pathsEqual(a: string[], b: string[]): boolean {
 
 /** True when `ancestor`'s path is a strict prefix of `descendant`'s path. */
 function isStrictPrefix(ancestor: string[], descendant: string[]): boolean {
-    if (ancestor.length >= descendant.length) {
+    // An empty path (root-level element) is not a strict ancestor of anything:
+    // `[].every(...)` is vacuously true and would mark every root element as an
+    // ancestor of every other element.
+    if (ancestor.length === 0 || ancestor.length >= descendant.length) {
         return false;
     }
     return ancestor.every((v, i) => v === descendant[i]);

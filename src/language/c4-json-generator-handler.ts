@@ -15,7 +15,7 @@
 */
 
 import { LangiumDocument, LangiumCoreServices, WorkspaceCache, AstUtils } from 'langium';
-import { isWorkspace, C4Document, isC4Document } from '../generated/ast';
+import { isWorkspace, C4Document, isC4Document, isInclude, Include } from '../generated/ast';
 import { LangiumServices } from 'langium/lsp';
 import { URI, Utils } from 'vscode-uri';
 
@@ -128,9 +128,9 @@ export class C4GeneratorHandler {
     private findRootWorkspace(currentUri: string): LangiumDocument | undefined {
         const allDocs = this.services.shared.workspace.LangiumDocuments.all.toArray();
 
-        // Check if the file itself is a workspace
+        // Check if the file itself is a workspace (bare Workspace or C4Document wrapping one)
         const self = allDocs.find(d => d.uri.toString() === currentUri);
-        if (self && (isWorkspace(self.parseResult.value) || (self.parseResult.value as any).workspace)) {
+        if (self && this.getWorkspaceNode(self)) {
             return self;
         }
 
@@ -139,20 +139,20 @@ export class C4GeneratorHandler {
             const root = doc.parseResult.value as any;
             if (!root) continue;
 
-            // Check !include directives
-            const includes = root.model?.at(0)?.includes || root.workspace?.model?.at(0)?.includes || [];
+            // Check !include directives anywhere in the AST (model, views, styles, etc.)
+            const includes: Include[] = AstUtils.streamAllContents(root).filter(isInclude).toArray();
             for (const inc of includes) {
-                const resolvedUri = Utils.resolvePath(Utils.dirname(doc.uri), inc.file).toString();
+                const resolvedUri = Utils.resolvePath(Utils.dirname(doc.uri), this.stripQuotes(inc.file)).toString();
                 if (resolvedUri === currentUri) {
                     // Found the parent! Recursively search for grandparent (in case of chains)
                     return this.findRootWorkspace(doc.uri.toString()) || doc;
                 }
             }
 
-            // Check extendsUri chain
-            const extendsUri = root.extendsUri || root.workspace?.extendsUri;
-            if (extendsUri) {
-                const resolvedExtends = Utils.resolvePath(Utils.dirname(doc.uri), extendsUri).toString();
+            // Check extendsUri chain on the workspace node
+            const workspace = this.getWorkspaceNode(doc);
+            if (workspace?.extendsUri) {
+                const resolvedExtends = Utils.resolvePath(Utils.dirname(doc.uri), this.stripQuotes(workspace.extendsUri)).toString();
                 if (resolvedExtends === currentUri) {
                     return this.findRootWorkspace(doc.uri.toString()) || doc;
                 }
@@ -160,6 +160,26 @@ export class C4GeneratorHandler {
         }
 
         return undefined;
+    }
+
+    /**
+     * Returns the Workspace AST node of a document (bare root or wrapped inside a
+     * C4Document), or undefined if the document has no workspace.
+     */
+    private getWorkspaceNode(doc: LangiumDocument): any | undefined {
+        const root = doc.parseResult.value as any;
+        if (isWorkspace(root)) {
+            return root;
+        }
+        if (isC4Document(root) && Array.isArray(root.workspaces) && root.workspaces.length > 0) {
+            return root.workspaces[0];
+        }
+        return undefined;
+    }
+
+    /** Strips surrounding quotes from a path/URI value (Path may be a quoted STRING). */
+    private stripQuotes(value: string | undefined): string {
+        return value ? value.replace(/^["']|["']$/g, '') : '';
     }
 
     /**

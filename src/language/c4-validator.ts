@@ -580,9 +580,10 @@ export class C4Validator {
         });
     }
 
-    /** Validates uniqueness of container names within a SoftwareSystem */
+    /** Validates uniqueness of container names and identifiers within a SoftwareSystem */
     checkUniqueContainersInSystem(softwareSystem: SoftwareSystem, accept: ValidationAcceptor): void {
         const containerNames = new Set<string>();
+        const containerIds = new Set<string>();
         const containers = (softwareSystem as any).elements || [];
         for (const container of containers) {
             if (container.name) {
@@ -593,16 +594,19 @@ export class C4Validator {
                 }
             }
             if (container.id) {
-                if (containerNames.has(container.id)) {
+                if (containerIds.has(container.id)) {
                     accept('error', `The identifier '${container.id}' is already in use in this software system.`, { node: container, property: 'id' });
+                } else {
+                    containerIds.add(container.id);
                 }
             }
         }
     }
 
-    /** Validates uniqueness of component names within a Container */
+    /** Validates uniqueness of component names and identifiers within a Container */
     checkUniqueComponentsInContainer(container: any, accept: ValidationAcceptor): void {
         const componentNames = new Set<string>();
+        const componentIds = new Set<string>();
         const components = container.elements || [];
         for (const component of components) {
             if (component.name) {
@@ -613,8 +617,10 @@ export class C4Validator {
                 }
             }
             if (component.id) {
-                if (componentNames.has(component.id)) {
+                if (componentIds.has(component.id)) {
                     accept('error', `The identifier '${component.id}' is already in use in this container.`, { node: component, property: 'id' });
+                } else {
+                    componentIds.add(component.id);
                 }
             }
         }

@@ -5,6 +5,8 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { C4ModelSource } from './model';
 import { registerTools } from './tools';
 import { registerReadTools } from './tools-read';
+import { registerGraphTools } from './tools-graph';
+import { registerJsonTools } from './tools-json';
 import { registerResources } from './resources';
 import { registerPrompts } from './prompts';
 
@@ -54,6 +56,8 @@ export async function startC4McpServer(
     server.server.onerror = (err) => console.error('[C4 MCP] protocol error:', err);
     registerTools(server, source);
     registerReadTools(server, source);
+    registerGraphTools(server, source);
+    registerJsonTools(server, source);
     registerResources(server, source);
     registerPrompts(server, source);
 

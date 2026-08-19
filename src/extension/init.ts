@@ -93,7 +93,9 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
             // the JSON regardless of mode. Otherwise: onChange renders on every
             // update, onSave only when the document is clean (saved).
             if (pending || mode === 'onChange' || !dirty) {
-                await refreshDiagram(uri, json);
+                // Coalesce to the latest JSON: a burst of contentUpdated (e.g. fast
+                // typing) only triggers ONE postMessage + webview re-render.
+                scheduleRefresh(uri, json);
             }
             return;
         }
@@ -115,6 +117,29 @@ function getAutoRefreshMode(): 'onChange' | 'onSave' {
 function isDocumentDirty(uri: string): boolean {
     const doc = workspace.textDocuments.find(d => d.uri.toString() === uri);
     return doc ? doc.isDirty : false;
+}
+
+// Coalesces auto-refresh renders to the latest JSON without adding latency: the
+// flush is scheduled on the next microtask, so notifications delivered within the
+// same tick (a burst of contentUpdated) only produce ONE postMessage + webview
+// re-render with the freshest payload - intermediate versions are skipped.
+let pendingRefresh: { uri: string; json: any } | undefined;
+let refreshQueued = false;
+
+function scheduleRefresh(uri: string, json: any): void {
+    pendingRefresh = { uri, json };
+    if (refreshQueued) {
+        return;
+    }
+    refreshQueued = true;
+    queueMicrotask(() => {
+        refreshQueued = false;
+        const pending = pendingRefresh;
+        pendingRefresh = undefined;
+        if (pending) {
+            void refreshDiagram(pending.uri, pending.json);
+        }
+    });
 }
 
 /**

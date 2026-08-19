@@ -3,8 +3,11 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { C4ModelSource } from './model';
+import { flattenModel } from './model';
 import { loadWorkspaceJson } from './test-fixtures';
 import { registerTools } from './tools';
+import { registerGraphTools } from './tools-graph';
+import { registerJsonTools } from './tools-json';
 import { registerResources } from './resources';
 import { registerPrompts } from './prompts';
 
@@ -32,6 +35,8 @@ describe('MCP protocol capabilities (end-to-end over in-memory transport)', () =
             { capabilities: { tools: {}, resources: {}, prompts: {}, completions: {}, logging: {} } },
         );
         registerTools(server, source);
+        registerGraphTools(server, source);
+        registerJsonTools(server, source);
         registerResources(server, source);
         registerPrompts(server, source);
 
@@ -64,6 +69,44 @@ describe('MCP protocol capabilities (end-to-end over in-memory transport)', () =
         expect(names).toEqual(expect.arrayContaining([
             'list-projects', 'read-project-summary', 'search-element', 'read-element',
         ]));
+    });
+
+    it('serves and calls the graph/query tools', async () => {
+        const res = await client.listTools();
+        const names = res.tools.map((t) => t.name);
+        expect(names).toEqual(expect.arrayContaining([
+            'query-graph', 'query-incomers-graph', 'query-outgoers-graph',
+            'find-relationships', 'find-relationship-paths',
+            'query-by-metadata', 'query-by-tags', 'query-by-tag-pattern',
+        ]));
+
+        const model = flattenModel(PROJECT_URI, workspaceJson);
+        const webApp = model.elements.find((e) => e.name === 'Web Application');
+        expect(webApp).toBeDefined();
+        const call: any = await client.callTool({
+            name: 'query-graph',
+            arguments: { id: webApp!.id, mode: 'parent', uri: PROJECT_URI },
+        });
+        const payload = JSON.parse(call.content[0].text);
+        expect(payload.parent.name).toBe('Software System');
+    });
+
+    it('serves and calls the raw-JSON tools', async () => {
+        const res = await client.listTools();
+        const names = res.tools.map((t) => t.name);
+        expect(names).toEqual(expect.arrayContaining(['read-model-json', 'read-view-json']));
+
+        const model = flattenModel(PROJECT_URI, workspaceJson);
+        const containerView = model.views.find((v) => v.type === 'container');
+        expect(containerView).toBeDefined();
+        const call: any = await client.callTool({
+            name: 'read-view-json',
+            arguments: { key: containerView!.key, uri: PROJECT_URI },
+        });
+        const payload = JSON.parse(call.content[0].text);
+        expect(payload.view.key).toBe(containerView!.key);
+        expect(payload.view.elements.length).toBeGreaterThan(0);
+        expect(payload.view.dimensions).toBeDefined();
     });
 
     it('reads the c4://projects resource', async () => {

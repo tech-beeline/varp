@@ -130,13 +130,6 @@ connection.onRequest('custom/getThemes', async (params: { themes: string[] }) =>
     return { themes };
 });
 
-// Enumerate root workspace documents that currently have generated JSON.
-// Used by MCP tools (e.g., list-projects) to discover available projects.
-connection.onRequest('custom/listProjects', () => {
-    const projects = C4.generation.C4GeneratorHandler.getCachedUris();
-    return { projects };
-});
-
 // ─── Start Language Server ────────────────────────────────────────────────
 // Start listening for LSP messages. In the browser, this sets up the connection
 // to the extension host running in the same web worker context.

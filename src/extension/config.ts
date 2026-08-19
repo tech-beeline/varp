@@ -14,8 +14,13 @@
 	limitations under the License.
 */
 
-export const DIAGRAM_PREVIEW = "varp.diagram-preview";
-export const COPY_CAPABILITY_CODE = "varp.copy-capability-code";
-export const SHOW_PATTERN_DESCRIPTION = "varp.show-pattern-description";
-export const GET_PATTERN_DSL = "varp.get-pattern-dsl";
-export const REFRESH_PATTERNS = "varp.refresh-patterns";
+// Command identifiers now live in the shared module so the language server can
+// use them without importing from the extension layer. Re-exported here for
+// backward compatibility with the existing extension imports.
+export {
+    DIAGRAM_PREVIEW,
+    COPY_CAPABILITY_CODE,
+    SHOW_PATTERN_DESCRIPTION,
+    GET_PATTERN_DSL,
+    REFRESH_PATTERNS
+} from '../shared/commands';

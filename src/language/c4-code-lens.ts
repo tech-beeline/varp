@@ -20,7 +20,7 @@ import { type CodeLensProvider } from 'langium/lsp';
 import { CodeLens, Command, type CodeLensParams, Range as LspRange } from 'vscode-languageserver';
 import { isRenderedView } from '../generated/ast';
 import { C4Services } from './c4-module';
-import { DIAGRAM_PREVIEW } from '../extension/config';
+import { DIAGRAM_PREVIEW } from '../shared/commands';
 
 /**
  * Provides CodeLens buttons above each diagram view in the editor.

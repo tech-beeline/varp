@@ -92,3 +92,12 @@ async function stop(): Promise<void> {
     }
     emitter?.fire();
 }
+
+/**
+ * Stops the built-in MCP server if it is running. Safe to call when the
+ * extension is deactivated (or whenever the server should be torn down) so
+ * the 127.0.0.1 HTTP listener does not outlive the extension.
+ */
+export async function disposeMCP(): Promise<void> {
+    await stop();
+}

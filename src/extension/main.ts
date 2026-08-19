@@ -18,7 +18,7 @@ import * as path from 'path';
 import { LanguageClient, type LanguageClientOptions, type ServerOptions, TransportKind } from 'vscode-languageclient/node';
 import { commands, ExtensionContext } from 'vscode';
 import { init, setLanguageClient } from './init';
-import { initMCP } from './mcp/controller';
+import { disposeMCP, initMCP } from './mcp/controller';
 
 let client: LanguageClient;
 
@@ -70,9 +70,15 @@ export function activate(context: ExtensionContext): void {
     commands.executeCommand('setContext', 'extension:c4', true);
 }
 
-export function deactivate(): Thenable<void> | undefined {
-    if (!client) {
-        return undefined;
+export async function deactivate(): Promise<void> {
+    // Stop the built-in MCP server (127.0.0.1 HTTP listener) so it does not
+    // outlive the extension and keep its port free.
+    try {
+        await disposeMCP();
+    } catch (err) {
+        console.error('[C4 Extension] MCP dispose error on deactivate:', err);
     }
-    return client.stop();
+    if (client) {
+        await client.stop();
+    }
 }

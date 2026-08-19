@@ -15,7 +15,7 @@
 */
 
 import { DefaultNameProvider, AstNode, AstUtils } from 'langium';
-import { isIdentifiersProperty, isWorkspace } from '../generated/ast.js';
+import { isIdentifiersProperty, isWorkspace } from '../generated/ast';
 import { StringUtils } from './c4-utils';
 
 /**

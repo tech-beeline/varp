@@ -15,7 +15,7 @@
 */
 
 import { AstNode, AstUtils, type ValidationAcceptor, type ValidationChecks } from 'langium';
-import { ElementStyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isDeploymentGroup, isDeploymentNode, isDeploymentView, isDynamicView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, RelationshipStyle, ViewsBlock, type C4AstType, type Workspace, PropertyItem, ModelBlock, isDeploymentEnvironment, Include, SoftwareSystem } from '../generated/ast';
+import { ElementStyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, RelationshipStyle, ViewsBlock, type C4AstType, type Workspace, PropertyItem, ModelBlock, isDeploymentEnvironment, Include, SoftwareSystem } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
 import { Utils } from 'vscode-uri';
@@ -690,7 +690,9 @@ export class C4Validator {
 
     /** Safely extracts the key from a view, returning undefined for view types without keys */
     private safeGetKey(view: any): string | undefined {
-        if (isSystemContextView(view) || isContainerView(view) || isComponentView(view) || isSystemLandscapeView(view) || isDeploymentView(view) || isDynamicView(view)) {
+        if (isSystemContextView(view) || isContainerView(view) || isComponentView(view) ||
+            isSystemLandscapeView(view) || isDeploymentView(view) || isDynamicView(view) ||
+            isFilteredView(view) || isCustomView(view) || isImageView(view)) {
             return (view).key;
         }
         return undefined;

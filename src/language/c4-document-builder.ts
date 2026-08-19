@@ -34,7 +34,9 @@ import { isInclude, Include } from '../generated/ast';
  */
 export class C4DocumentBuilder extends DefaultDocumentBuilder {
     
-    // Track loaded includes to avoid reloading
+    // Tracks include/extends targets that were loaded successfully (keyed by the
+    // resolved URI). Failures are NOT recorded, so a transient error is retried
+    // on the next build cycle instead of being silently dropped for the session.
     private loadedIncludes = new Set<string>();
 
     override async update(changed: URI[], deleted: URI[], cancelToken?: any): Promise<void> {
@@ -117,23 +119,32 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
         const filePath = inc.file?.replace(/^["']|["']$/g, '');
         if (!filePath) return undefined;
 
-        // Check if we already attempted to load this include
-        if (this.loadedIncludes.has(filePath)) return undefined;
-        this.loadedIncludes.add(filePath);
+        let targetUri: URI;
+        try {
+            targetUri = this.resolveTargetUri(filePath, sourceUri);
+        } catch {
+            return undefined; // unresolvable path - retry on the next cycle
+        }
+        // Key by the resolved absolute URI, so the same relative path used from
+        // different parent directories never collides.
+        const loadedKey = targetUri.toString();
+
+        // Skip if the document was already loaded into the index (success earlier)
+        if (this.langiumDocuments?.hasDocument(targetUri)) {
+            return undefined;
+        }
+        // Skip if this resolved URI was loaded successfully earlier in the session
+        if (this.loadedIncludes.has(loadedKey)) {
+            return undefined;
+        }
 
         try {
-            const targetUri = this.resolveTargetUri(filePath, sourceUri);
-
-            // Skip if already in document index
-            if (this.langiumDocuments?.hasDocument(targetUri)) {
-                return undefined;
-            }
-
             // Try to read as a single file first
             try {
                 const content = await this.fileSystemProvider.readFile(targetUri);
                 const childDoc = this.langiumDocumentFactory.fromString(content, targetUri);
                 this.langiumDocuments?.addDocument(childDoc);
+                this.loadedIncludes.add(loadedKey);
                 console.log(`[C4 Builder] Loaded include: ${filePath}`);
                 return targetUri;
             } catch (readError: any) {
@@ -145,16 +156,21 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
                 // For local files not found, try appending .dsl extension
                 if ((readError.code === 'ENOENT' || readError.code === 'FILE_NOT_FOUND') && !filePath.startsWith('http')) {
                     const withExt = URI.parse(targetUri.toString() + '.dsl');
-                    if (!this.langiumDocuments?.hasDocument(withExt)) {
-                        try {
-                            const content = await this.fileSystemProvider.readFile(withExt);
-                            const childDoc = this.langiumDocumentFactory.fromString(content, withExt);
-                            this.langiumDocuments?.addDocument(childDoc);
-                            console.log(`[C4 Builder] Loaded include (with .dsl): ${filePath}.dsl`);
-                            return withExt;
-                        } catch { /* ignore */ }
+                    if (this.langiumDocuments?.hasDocument(withExt)) {
+                        this.loadedIncludes.add(withExt.toString());
+                        return undefined;
                     }
+                    try {
+                        const content = await this.fileSystemProvider.readFile(withExt);
+                        const childDoc = this.langiumDocumentFactory.fromString(content, withExt);
+                        this.langiumDocuments?.addDocument(childDoc);
+                        this.loadedIncludes.add(withExt.toString());
+                        console.log(`[C4 Builder] Loaded include (with .dsl): ${filePath}.dsl`);
+                        return withExt;
+                    } catch { /* not found - retry on the next cycle */ }
                 }
+                // Failed (missing file / transient error) - NOT marked as loaded,
+                // so the next update cycle retries this include.
                 return undefined;
             }
         } catch (e) {
@@ -217,7 +233,6 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
 
         const visitedKey = `extends:${targetUri.toString()}`;
         if (this.loadedIncludes.has(visitedKey)) return undefined;
-        this.loadedIncludes.add(visitedKey);
 
         try {
             // Use FileSystemProvider for all extends types (local paths and URLs).
@@ -227,6 +242,9 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
             if (content !== undefined) {
                 const childDoc = this.langiumDocumentFactory.fromString(content, targetUri);
                 this.langiumDocuments?.addDocument(childDoc);
+                // Only mark as loaded on success; transient failures are retried
+                // on the next build cycle.
+                this.loadedIncludes.add(visitedKey);
                 newUris.push(targetUri);
                 console.log(`[C4 Builder] Loaded extends: ${cleanUri}`);
                 return targetUri;

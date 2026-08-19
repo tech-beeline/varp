@@ -14,8 +14,9 @@
 	limitations under the License.
 */
 
-import { DefaultNameProvider, AstNode } from 'langium';
+import { DefaultNameProvider, AstNode, AstUtils } from 'langium';
 import { isIdentifiersProperty, isWorkspace } from '../generated/ast.js';
+import { StringUtils } from './c4-utils';
 
 /**
  * Custom name provider for C4 DSL.
@@ -29,8 +30,14 @@ export class C4NameProvider extends DefaultNameProvider {
             return 'identifiers-settings'; 
         }
         if (isWorkspace(node) && !node.name) {
-            return crypto.randomUUID(); // Technical name for unnamed workspaces
-        }        
+            // Stable technical name for unnamed workspaces: derived from the
+            // document URI plus the CST offset (so several unnamed workspaces in
+            // one file stay distinct). Deterministic across rebuilds - unlike a
+            // random UUID - and independent of the browser secure-context crypto API.
+            const docUri = AstUtils.getDocument(node)?.uri.toString() ?? 'workspace';
+            const offset = node.$cstNode?.offset ?? 0;
+            return `ws-${StringUtils.stringHash(`${docUri}#${offset}`)}`;
+        }
         return super.getName(node);
     }
 }

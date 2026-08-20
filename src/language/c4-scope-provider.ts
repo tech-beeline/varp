@@ -18,7 +18,7 @@ import {
     DefaultScopeProvider, Scope, ReferenceInfo, AstUtils, 
     AstNode, LangiumCoreServices, AstNodeDescription, MapScope, WorkspaceCache, 
     LangiumDocument} from 'langium';
-import { isModelBlock, isWorkspace, isNamedElement, Workspace, NamedElement, isArchetypeDefinition, isDeploymentEnvironment, isInclude, Include, isC4Document, isConstant, isGroup } from '../generated/ast';
+import { isModelBlock, isWorkspace, isNamedElement, Workspace, NamedElement, isArchetypeDefinition, isDeploymentEnvironment, isInclude, Include, isC4Document, isConstant, isGroup, isIdentifiersProperty } from '../generated/ast';
 import { URI, Utils } from 'vscode-uri';
 
 /**
@@ -38,6 +38,16 @@ import { URI, Utils } from 'vscode-uri';
 interface LocalScopePackage {
     localDescriptions: AstNodeDescription[];
     suffixAliasesByScope: Map<AstNode, AstNodeDescription[]>;
+}
+
+/**
+ * Per-document identifier-style regions: a base region at offset -1 (inherited
+ * from the extendsUri chain) plus one region per !identifiers directive, sorted
+ * by CST offset. An element's style is the region with the greatest offset not
+ * exceeding the element's own CST offset.
+ */
+interface StyleRegions {
+    regions: { offset: number; hierarchical: boolean }[];
 }
 
 /**
@@ -82,8 +92,14 @@ const ELEMENT_REFERENCE_TYPES = new Set([
 
 export class C4ScopeProvider extends DefaultScopeProvider {
     protected readonly services: LangiumCoreServices;
-    // Cache for identifier style (hierarchical/flat) per document scope
-    private readonly styleCache: WorkspaceCache<string, boolean>;
+    // Cache of identifier-style regions per document (base style inherited from
+    // extendsUri + sorted !identifiers directive offsets). Answers an element's
+    // style via binary search instead of climbing the container chain per
+    // element (O(elements x depth) -> O(log directives)).
+    private readonly styleRegionsCache: WorkspaceCache<string, StyleRegions>;
+    // Cache of !constant/!const/!var declarations per document, so ${NAME}
+    // substitution does not re-scan every document on each lookup.
+    private readonly constantsCache: WorkspaceCache<string, Map<string, string>>;
     // Cache for extends-resolved elements to avoid repeated traversal
     private readonly extendedElementsCache: WorkspaceCache<string, AstNodeDescription[]>;
     // Cache for include-resolved elements
@@ -99,7 +115,8 @@ export class C4ScopeProvider extends DefaultScopeProvider {
         this.services = services;
 
         // Initialize caches. Automatically cleared on ANY project change via WorkspaceCache.
-        this.styleCache = new WorkspaceCache<string, boolean>(services.shared);
+        this.styleRegionsCache = new WorkspaceCache<string, StyleRegions>(services.shared);
+        this.constantsCache = new WorkspaceCache<string, Map<string, string>>(services.shared);
         this.extendedElementsCache = new WorkspaceCache<string, AstNodeDescription[]>(services.shared);
         this.includeCache = new WorkspaceCache<string, AstNodeDescription[]>(services.shared);
         this.localScopeCache = new WorkspaceCache<string, LocalScopePackage>(services.shared);
@@ -423,19 +440,15 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             const uriString = uri.toString();
             visitedUris.add(uriString);
 
-            // Try IndexManager first (fast path — the document may already be indexed)
-            const rootDesc = this.indexManager.allElements(undefined, new Set([uriString])).head();
-            
-            // Fallback: get document directly from LangiumDocuments (works synchronously)
-            const langiumDoc = rootDesc?.node
-                ? AstUtils.getDocument(rootDesc.node)
-                : this.services.shared.workspace.LangiumDocuments.getDocument(uri);
+            // Get the document directly from LangiumDocuments - the document builder
+            // already loaded it (including remote URLs) under this exact URI.
+            const langiumDoc = this.services.shared.workspace.LangiumDocuments.getDocument(uri);
 
             if (langiumDoc?.parseResult.value) {
                 const rootNode = langiumDoc.parseResult.value;
 
                 // Each external file determines its own identifier style independently
-                const remoteHierarchical = this.isHierarchicalModeCached(rootNode);
+                const remoteHierarchical = this.isHierarchicalMode(rootNode);
                 // Traverse all named elements and register them (FQN only, no suffix aliases)
                 AstUtils.streamAllContents(rootNode)
                     .filter(isNamedElement)
@@ -508,83 +521,88 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     }
 
     /**
-     * Cached wrapper for isHierarchicalMode. Keyed by document URI + CST node offset.
-     */
-    private isHierarchicalModeCached(node: AstNode): boolean {
-        if (!node.$cstNode) return this.isHierarchicalMode(node);
-
-        const doc = AstUtils.getDocument(node);
-        const cacheKey = `${doc.uri.toString()}:${node.$cstNode.offset}`;
-
-        return this.styleCache.get(cacheKey, () => this.isHierarchicalMode(node));
-    }
-
-    /**
      * Determines whether the current scope uses hierarchical (!identifiers hierarchical)
-     * or flat (!identifiers flat) identifier style. Searches up the AST container chain
-     * and through extendsUri chain for !identifiers directives.
+     * or flat (!identifiers flat) identifier style for the node at the given CST offset.
+     *
+     * Without an explicit offset (external file / whole-document lookup) the LAST
+     * region is used - the final !identifiers directive in the file, or the
+     * extendsUri-inherited style when the file has none.
      */
     private isHierarchicalMode(node: AstNode, offset?: number): boolean {
-        const visitedUris = new Set<string>();
         const doc = AstUtils.getDocument(node);
-        visitedUris.add(doc.uri.toString());
-
-        // If offset not specified, use -1 to search for the "last style in block/file"
-        const searchOffset = offset ?? -1;
-        
-        return this.findStyleRecursive(node, searchOffset, visitedUris) ?? false;
+        return this.styleAtOffset(doc, offset ?? Number.MAX_SAFE_INTEGER);
     }
 
     /**
-     * Recursively searches for !identifiers directives by climbing the AST container chain
-     * and following extendsUri. Returns true if hierarchical mode was last set, false if flat.
+     * Returns the identifier-style regions of a document: a base region at offset -1
+     * (inherited from the extendsUri chain) plus one region per !identifiers directive,
+     * sorted by CST offset. Cached per document URI.
      */
-    private findStyleRecursive(node: AstNode, offset: number, visitedUris: Set<string>): boolean | undefined {
-        let current: AstNode | undefined = node;
+    private getStyleRegions(doc: LangiumDocument, visitedUris?: Set<string>): StyleRegions {
+        return this.styleRegionsCache.get(doc.uri.toString(), () => {
+            const visited = visitedUris ?? new Set<string>();
+            visited.add(doc.uri.toString());
 
-        // 1. Search upward through the current AST tree
-        while (current) {
-            // Check for 'identifiers' property (present in Workspace and ModelBlock per grammar)
-            const identifiers = (current as any).identifiers;
-            if (Array.isArray(identifiers) && identifiers.length > 0) {
-                let lastStyle: string | undefined;
-
-                for (const idProp of identifiers) {
-                    // If offset === -1 (external file), take the last directive.
-                    // Otherwise check that the directive is physically ABOVE our element.
-                    if (offset === -1 || (idProp.$cstNode && idProp.$cstNode.offset < offset)) {
-                        lastStyle = idProp.style;
-                    }
-                }
-                
-                if (lastStyle) {
-                    return lastStyle === 'hierarchical';
-                }
+            const regions: { offset: number; hierarchical: boolean }[] = [
+                { offset: -1, hierarchical: this.computeBaseStyle(doc, visited) ?? false }
+            ];
+            const root = doc.parseResult.value;
+            if (root) {
+                AstUtils.streamAllContents(root)
+                    .filter(isIdentifiersProperty)
+                    .forEach((prop) => {
+                        regions.push({ offset: prop.$cstNode?.offset ?? 0, hierarchical: prop.style === 'hierarchical' });
+                    });
             }
+            regions.sort((a, b) => a.offset - b.offset);
+            return { regions };
+        });
+    }
 
-            // 2. If we reached Workspace, check the extendsUri chain
-            if (isWorkspace(current)) {
-                if (current.extendsUri) {
-                    const uri = this.resolvePathToUri(current.extendsUri, current);
-                    if (uri && !visitedUris.has(uri.toString())) {
-                        visitedUris.add(uri.toString());
-
-                        const langiumDoc = this.services.shared.workspace.LangiumDocuments.getDocument(uri);
-                        const rootNode = langiumDoc?.parseResult.value;
-                        
-                        if (rootNode) {
-                            // In external files, search the entire scope (offset = -1)
-                            const result = this.findStyleRecursive(rootNode, -1, visitedUris);
-                            if (result !== undefined) return result;
-                        }
-                    }
-                }
-                break; // Exit the loop — nothing above Workspace in C4 DSL
+    /** Binary-search lookup: the last region whose offset is <= the given offset. */
+    private styleAtOffset(doc: LangiumDocument, offset: number): boolean {
+        const regions = this.getStyleRegions(doc).regions;
+        let lo = 0;
+        let hi = regions.length - 1;
+        let result = regions[0];
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            if (regions[mid].offset <= offset) {
+                result = regions[mid];
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
             }
-            
-            current = current.$container;
         }
+        return result.hierarchical;
+    }
 
+    /**
+     * Computes the identifier style inherited from the extendsUri chain: the style of
+     * the parent workspace (its last region), recursively. Returns undefined when there
+     * is no parent or the chain is already visited (cycle prevention).
+     */
+    private computeBaseStyle(doc: LangiumDocument, visitedUris: Set<string>): boolean | undefined {
+        const workspace = this.findWorkspaceNode(doc.parseResult.value);
+        if (!workspace?.extendsUri) return undefined;
+
+        const uri = this.resolveWorkspaceUri(workspace);
+        if (!uri || visitedUris.has(uri.toString())) return undefined;
+        visitedUris.add(uri.toString());
+
+        const parentDoc = this.services.shared.workspace.LangiumDocuments.getDocument(uri);
+        if (!parentDoc?.parseResult.value) return undefined;
+
+        const parentRegions = this.getStyleRegions(parentDoc, visitedUris);
+        return parentRegions.regions[parentRegions.regions.length - 1].hierarchical;
+    }
+
+    /** Returns the Workspace AST node of a document (bare root or inside a C4Document), if any. */
+    private findWorkspaceNode(root: any): Workspace | undefined {
+        if (isWorkspace(root)) return root;
+        if (isC4Document(root) && Array.isArray(root.workspaces) && root.workspaces.length > 0) {
+            return root.workspaces[0];
+        }
         return undefined;
     }
 
@@ -595,11 +613,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     private resolveWorkspaceUri(workspace: Workspace): URI | undefined {
         if (!workspace.extendsUri) return undefined;
 
-        const rawPath = this.substituteConstants(workspace.extendsUri.replace(/['"]/g, ''), workspace);
-        const currentDocUri = AstUtils.getDocument(workspace).uri;
-
-        const baseDir = Utils.dirname(currentDocUri);
-        return Utils.resolvePath(baseDir, rawPath);
+        return this.resolveTargetUri(workspace.extendsUri, workspace);
     }
 
     /**
@@ -607,7 +621,21 @@ export class C4ScopeProvider extends DefaultScopeProvider {
      * Handles quote stripping and ${CONST} placeholder substitution.
      */
     private resolvePathToUri(rawPath: string, contextNode: AstNode): URI | undefined {
+        return this.resolveTargetUri(rawPath, contextNode);
+    }
+
+    /**
+     * Resolves a raw path (relative path or http(s) URL) to an absolute URI,
+     * relative to the document that contains `contextNode`. Remote http(s)
+     * URLs are parsed as-is, so remote !include / extendsUri targets resolve
+     * to the same URI the document builder loads them under (see
+     * C4DocumentBuilder.resolveTargetUri).
+     */
+    private resolveTargetUri(rawPath: string, contextNode: AstNode): URI | undefined {
         const path = this.substituteConstants(rawPath.replace(/['"]/g, ''), contextNode);
+        if (path.startsWith('http://') || path.startsWith('https://')) {
+            return URI.parse(path);
+        }
         const currentDocUri = AstUtils.getDocument(contextNode).uri;
         const baseDir = Utils.dirname(currentDocUri);
         try {
@@ -626,9 +654,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     private substituteConstants(input: string, contextNode: AstNode): string {
         if (!input.includes('${')) return input;
         const doc = AstUtils.getDocument(contextNode);
-        const localRoot = doc.parseResult?.value;
-        const localConstants = new Map<string, string>();
-        if (localRoot) this.collectConstants(localRoot, localConstants);
+        const localConstants = this.getConstantsForDoc(doc.uri.toString());
 
         return input.replace(/\$\{([^}]+)\}/g, (match, key) => {
             const name = key.trim();
@@ -648,19 +674,30 @@ export class C4ScopeProvider extends DefaultScopeProvider {
         });
     }
 
+    /**
+     * Returns the constants (!constant/!const/!var) declared in the document with the
+     * given URI. Cached per document, so ${NAME} lookups do not re-scan the AST on
+     * every call.
+     */
+    private getConstantsForDoc(docUri: string): Map<string, string> {
+        return this.constantsCache.get(docUri, () => {
+            const constants = new Map<string, string>();
+            for (const doc of this.services.shared.workspace.LangiumDocuments.all.toArray()) {
+                if (doc.uri.toString() !== docUri) continue;
+                const root = doc.parseResult?.value;
+                if (root) this.collectConstants(root, constants);
+                break;
+            }
+            return constants;
+        });
+    }
+
     /** Looks up a constant by name in all workspace documents except the one specified */
     private lookupConstantInWorkspace(name: string, skipDocUri: string): string | undefined {
-        const documents = this.services.shared.workspace.LangiumDocuments.all.toArray();
-        for (const otherDoc of documents) {
+        for (const otherDoc of this.services.shared.workspace.LangiumDocuments.all.toArray()) {
             if (otherDoc.uri.toString() === skipDocUri) continue;
-            const root = otherDoc.parseResult?.value;
-            if (!root) continue;
-            for (const c of AstUtils.streamAllContents(root).filter(isConstant)) {
-                const cname = (c.name ?? '').toString().replace(/['"]/g, '');
-                if (cname !== name) continue;
-                const rawValue = (c.value ?? '').toString();
-                return typeof rawValue === 'string' ? rawValue.replace(/^['"]|['"]$/g, '') : rawValue;
-            }
+            const constants = this.getConstantsForDoc(otherDoc.uri.toString());
+            if (constants.has(name)) return constants.get(name);
         }
         return undefined;
     }

@@ -15,10 +15,11 @@
 */
 
 import type { AstNode, LangiumCoreServices, LangiumDocument, MaybePromise } from 'langium';
-import { GrammarUtils, UriUtils, AstUtils } from 'langium';
+import { GrammarUtils, AstUtils } from 'langium';
 import { type DocumentLinkProvider } from 'langium/lsp';
 import { DocumentLink, type DocumentLinkParams } from 'vscode-languageserver';
-import { isConstant, isInclude, isWorkspace } from '../generated/ast';
+import { isInclude, isWorkspace } from '../generated/ast';
+import * as includeResolver from './c4-include-resolver';
 
 /**
  * Provides clickable document links for !include directives and extendsUri properties.
@@ -34,48 +35,34 @@ export class C4DocumentLinkProvider implements DocumentLinkProvider {
 
     /**
      * Finds all !include file paths and extendsUri values in the document and creates
-     * clickable links. Resolves relative paths to absolute URIs and substitutes
-     * ${CONST} placeholders with values from local and workspace constants.
+     * clickable links. Resolves through the single shared include-resolution pipeline
+     * (quotes, ${CONST}, http(s), relative paths) so links match what the document
+     * builder actually loads and what the validator/generator resolve.
      */
     getDocumentLinks(document: LangiumDocument, params: DocumentLinkParams): MaybePromise<DocumentLink[]> {
         const links: DocumentLink[] = [];
         const root = document.parseResult.value;
-        const localConstants = collectConstants(root);
 
-        const resolvePlaceholders = (input: string): string =>
-            substituteConstants(input, localConstants, (name) => this.lookupInWorkspace(name, document.uri.toString()));
+        const resolveToUri = (rawPath: string, node: AstNode): string | undefined =>
+            includeResolver.resolveTargetUri(rawPath, node, {
+                constants: (path, n) => includeResolver.substituteConstants(this.services.shared, path, n),
+            })?.toString();
 
         for (const node of AstUtils.streamAst(root)) {
             if (isInclude(node)) {
                 const fileNode = GrammarUtils.findNodeForProperty(node.$cstNode, 'file');
                 if (fileNode && node.file) {
-                    try {
-                        let targetUriStr = resolvePlaceholders(node.file.replace(/['"]/g, ''));
-                        if (!targetUriStr.startsWith('http://') && !targetUriStr.startsWith('https://')) {
-                            targetUriStr = UriUtils.resolvePath(UriUtils.dirname(document.uri), targetUriStr).toString();
-                        }
-                        links.push(DocumentLink.create(
-                            fileNode.range,
-                            targetUriStr
-                        ));
-                    } catch (e) {
-                        // Ignore invalid URIs
+                    const targetUri = resolveToUri(node.file, node);
+                    if (targetUri) {
+                        links.push(DocumentLink.create(fileNode.range, targetUri));
                     }
                 }
             } else if (isWorkspace(node)) {
                 const extendsNode = GrammarUtils.findNodeForProperty(node.$cstNode, 'extendsUri');
                 if (extendsNode && node.extendsUri) {
-                    try {
-                        let targetUriStr = resolvePlaceholders(node.extendsUri.replace(/['"]/g, ''));
-                        if (!targetUriStr.startsWith('http://') && !targetUriStr.startsWith('https://')) {
-                            targetUriStr = UriUtils.resolvePath(UriUtils.dirname(document.uri), targetUriStr).toString();
-                        }
-                        links.push(DocumentLink.create(
-                            extendsNode.range,
-                            targetUriStr
-                        ));
-                    } catch (e) {
-                        // Ignore invalid URIs
+                    const targetUri = resolveToUri(node.extendsUri, node);
+                    if (targetUri) {
+                        links.push(DocumentLink.create(extendsNode.range, targetUri));
                     }
                 }
             }
@@ -83,53 +70,4 @@ export class C4DocumentLinkProvider implements DocumentLinkProvider {
 
         return links;
     }
-
-    /**
-     * Looks up a constant by name in all workspace documents except the current one.
-     * Used as a fallback when a ${CONST} placeholder is not found locally.
-     */
-    private lookupInWorkspace(name: string, skipDocUri: string): string | undefined {
-        const documents = this.services.shared.workspace.LangiumDocuments.all.toArray();
-        for (const otherDoc of documents) {
-            if (otherDoc.uri.toString() === skipDocUri) continue;
-            const root = otherDoc.parseResult?.value;
-            if (!root) continue;
-            for (const c of AstUtils.streamAllContents(root).filter(isConstant)) {
-                const cname = (c.name ?? '').toString().replace(/['"]/g, '');
-                if (cname !== name) continue;
-                const rawValue = (c.value ?? '').toString();
-                return typeof rawValue === 'string' ? rawValue.replace(/^['"]|['"]$/g, '') : rawValue;
-            }
-        }
-        return undefined;
-    }
-}
-
-/**
- * Collects all !constant/!const declarations from the given AST root into a map.
- */
-function collectConstants(root: AstNode): Map<string, string> {
-    const constants = new Map<string, string>();
-    AstUtils.streamAllContents(root).filter(isConstant).forEach((c) => {
-        const name = (c.name ?? '').toString().replace(/['"]/g, '');
-        const rawValue = (c.value ?? '').toString();
-        const value = typeof rawValue === 'string' ? rawValue.replace(/^['"]|['"]$/g, '') : rawValue;
-        if (name) constants.set(name, value);
-    });
-    return constants;
-}
-
-/**
- * Substitutes ${NAME} placeholders in the input string.
- * Checks local constants first, then falls back to the provided lookup function.
- * Unknown placeholders are left as-is.
- */
-function substituteConstants(input: string, localConstants: Map<string, string>, fallback: (name: string) => string | undefined): string {
-    if (!input.includes('${')) return input;
-    return input.replace(/\$\{([^}]+)\}/g, (match, key) => {
-        const trimmed = key.trim();
-        if (localConstants.has(trimmed)) return localConstants.get(trimmed)!;
-        const fromWorkspace = fallback(trimmed);
-        return fromWorkspace ?? match;
-    });
 }

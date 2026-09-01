@@ -72,6 +72,7 @@ import {
     isRelationshipsDirective,
     RelationshipsDirective} from '../generated/ast';
 import { C4Services } from './c4-module';
+import * as includeResolver from './c4-include-resolver';
 import { SHAPE_NORMALIZE, BORDER_NORMALIZE, ROUTING_NORMALIZE } from './c4-validator';
 
 // Constants from the original Structurizr Java library
@@ -522,20 +523,15 @@ class JsonGenerator {
      * Looks up the target document in LangiumDocuments and returns its parsed AST root.
      */
     private resolveIncludedRoot(contextNode: AstNode, relativePath: string): AstNode | undefined {
-        const sourceDoc = AstUtils.getDocument(contextNode);
-        const substituted = this.substitute(relativePath) ?? relativePath;
-        const baseDir = Utils.dirname(sourceDoc.uri);
-        const targetUri = Utils.resolvePath(baseDir, substituted);
-        try {
-            let doc = this.services.shared.workspace.LangiumDocuments.getDocument(targetUri);
-            if (!doc && !substituted.toLowerCase().endsWith('.dsl')) {
-                doc = this.services.shared.workspace.LangiumDocuments.getDocument(Utils.resolvePath(baseDir, substituted + '.dsl'));
-            }
-            return doc?.parseResult.value;
-        } catch (e) {
-            console.error(`[C4 Gen] Could not resolve include file: ${relativePath}`);
-            return undefined;
-        }
+        // Single shared resolution pipeline (quotes, ${CONST} from the document
+        // index, http(s), relative paths, .dsl fallback) - matches the document
+        // builder, validator and scope provider, so remote and ${CONST}-based
+        // includes resolve to the SAME URI the builder loaded (unlike the
+        // generator's own output-templating substitute).
+        return includeResolver.resolveIncludedRoot(this.services.shared, relativePath, contextNode, {
+            withDslFallback: true,
+            constants: (path, node) => includeResolver.substituteConstants(this.services.shared, path, node),
+        });
     }
 
     /**

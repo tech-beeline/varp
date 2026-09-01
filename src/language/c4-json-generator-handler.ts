@@ -14,10 +14,11 @@
 	limitations under the License.
 */
 
-import { LangiumDocument, LangiumCoreServices, WorkspaceCache, AstUtils } from 'langium';
-import { isWorkspace, C4Document, isC4Document, isInclude, Include } from '../generated/ast';
+import { LangiumDocument, WorkspaceCache } from 'langium';
+import { isWorkspace, C4Document, isC4Document } from '../generated/ast';
 import { LangiumServices } from 'langium/lsp';
-import { URI, Utils } from 'vscode-uri';
+import { URI } from 'vscode-uri';
+import * as includeResolver from './c4-include-resolver';
 
 /**
  * Handles JSON generation lifecycle: listens to document build phases (post-validation),
@@ -121,45 +122,24 @@ export class C4GeneratorHandler {
     }
 
     /**
-     * Traverses the document index to find the root workspace document that either
-     * directly contains the given URI or includes a file chain leading to it.
-     * Supports both !include chains and extendsUri workspace inheritance.
+     * Returns the root workspace document for the given URI: the document itself
+     * when it contains a Workspace node, otherwise the topmost ancestor of its
+     * !include/extendsUri chain. The ancestor chain is resolved deterministically
+     * via the shared include resolver (single source of truth), so fragment files
+     * resolve to the workspace document that owns the generated JSON.
      */
     private findRootWorkspace(currentUri: string): LangiumDocument | undefined {
-        const allDocs = this.services.shared.workspace.LangiumDocuments.all.toArray();
-
         // Check if the file itself is a workspace (bare Workspace or C4Document wrapping one)
-        const self = allDocs.find(d => d.uri.toString() === currentUri);
+        const self = this.services.shared.workspace.LangiumDocuments.getDocument(URI.parse(currentUri));
         if (self && this.getWorkspaceNode(self)) {
             return self;
         }
 
-        // Search for a parent document that includes this file
-        for (const doc of allDocs) {
-            const root = doc.parseResult.value as any;
-            if (!root) continue;
-
-            // Check !include directives anywhere in the AST (model, views, styles, etc.)
-            const includes: Include[] = AstUtils.streamAllContents(root).filter(isInclude).toArray();
-            for (const inc of includes) {
-                const resolvedUri = Utils.resolvePath(Utils.dirname(doc.uri), this.stripQuotes(inc.file)).toString();
-                if (resolvedUri === currentUri) {
-                    // Found the parent! Recursively search for grandparent (in case of chains)
-                    return this.findRootWorkspace(doc.uri.toString()) || doc;
-                }
-            }
-
-            // Check extendsUri chain on the workspace node
-            const workspace = this.getWorkspaceNode(doc);
-            if (workspace?.extendsUri) {
-                const resolvedExtends = Utils.resolvePath(Utils.dirname(doc.uri), this.stripQuotes(workspace.extendsUri)).toString();
-                if (resolvedExtends === currentUri) {
-                    return this.findRootWorkspace(doc.uri.toString()) || doc;
-                }
-            }
-        }
-
-        return undefined;
+        // Walk the !include / extendsUri ancestor chain via the shared resolver.
+        const chain = includeResolver.getAncestorChain(this.services.shared, currentUri);
+        if (chain.length === 0) return self;
+        const rootUri = chain[chain.length - 1];
+        return this.services.shared.workspace.LangiumDocuments.getDocument(URI.parse(rootUri)) ?? self;
     }
 
     /**
@@ -175,11 +155,6 @@ export class C4GeneratorHandler {
             return root.workspaces[0];
         }
         return undefined;
-    }
-
-    /** Strips surrounding quotes from a path/URI value (Path may be a quoted STRING). */
-    private stripQuotes(value: string | undefined): string {
-        return value ? value.replace(/^["']|["']$/g, '') : '';
     }
 
     /**
@@ -214,5 +189,16 @@ export class C4GeneratorHandler {
         }
         
         return json;
+    }
+
+    /**
+     * Returns the cached generated JSON for the root workspace of the given URI,
+     * or undefined when no JSON has been generated yet. Unlike getContentForUri,
+     * this performs no logging - it is intended for read-only inspections such as
+     * the code-lens provider, where a missing cache entry is an expected state.
+     */
+    public getCachedContentForUri(uri: string): any {
+        const rootUri = this.getRootUri(uri);
+        return this.jsonCache.get(rootUri);
     }
 }

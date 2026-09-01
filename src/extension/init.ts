@@ -37,11 +37,6 @@ let languageClient: C4LanguageClient | undefined;
 // auto-refresh notification handler registered in setLanguageClient().
 let diagramPreview: DiagramPreview | undefined;
 
-// Latest generated JSON per root document URI (fed by custom/contentUpdated).
-// Lets the onSave mode render the freshest data on the save event even if the
-// server does not emit another notification for that save.
-const latestJsonByUri = new Map<string, any>();
-
 // Guards against registering the notification handler more than once.
 let refreshNotificationRegistered = false;
 
@@ -76,9 +71,6 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
         if (!uri || !json) {
             return;
         }
-        // Remember the latest JSON so onSave mode can render it on the save event.
-        latestJsonByUri.set(uri, json);
-
         const preview = diagramPreview;
         if (!preview || !preview.isOpen()) {
             return;
@@ -86,24 +78,26 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
 
         if (preview.getCurrentDocUri() === uri) {
             // Fast path: the notification belongs to the bound document.
-            const mode = getAutoRefreshMode();
-            const dirty = isDocumentDirty(uri);
-            const pending = preview.isPendingJson();
-            // A pending preview (opened before its JSON was ready) must receive
-            // the JSON regardless of mode. Otherwise: onChange renders on every
-            // update, onSave only when the document is clean (saved).
-            if (pending || mode === 'onChange' || !dirty) {
-                // Coalesce to the latest JSON: a burst of contentUpdated (e.g. fast
-                // typing) only triggers ONE postMessage + webview re-render.
-                scheduleRefresh(uri, json);
-            }
+            renderPreviewIfApplicable(uri, json, preview);
             return;
         }
 
-        // The notification is for a different document (common with many dsl files
-        // or fragment edits). Re-sync the open preview from the server cache so it
-        // updates as soon as fresh JSON for its bound document is available.
-        scheduleSyncPreviewFromServer();
+        // The notification is for a different document (many dsl files, fragment
+        // edits). It is only relevant to this preview if the notified URI is the
+        // ROOT of the document the preview is bound to - then the payload is the
+        // fresh JSON for this preview. Check that with ONE cheap getRootUri call
+        // instead of fetching JSON on every unrelated generation event.
+        if (!languageClient) {
+            return;
+        }
+        try {
+            const res: any = await languageClient.sendRequest('custom/getRootUri', { uri: preview.getCurrentDocUri() });
+            if (res?.rootUri === uri) {
+                renderPreviewIfApplicable(uri, json, preview);
+            }
+        } catch {
+            // unrelated / transient failure - ignore the notification
+        }
     });
 }
 
@@ -117,6 +111,21 @@ function getAutoRefreshMode(): 'onChange' | 'onSave' {
 function isDocumentDirty(uri: string): boolean {
     const doc = workspace.textDocuments.find(d => d.uri.toString() === uri);
     return doc ? doc.isDirty : false;
+}
+
+/**
+ * Renders freshly generated JSON into the preview, honoring the auto-refresh
+ * mode: a pending preview always renders; otherwise onChange renders on every
+ * update while onSave only renders when the document is clean (saved). Renders
+ * are coalesced via scheduleRefresh so bursts produce one webview update.
+ */
+function renderPreviewIfApplicable(uri: string, json: any, preview: DiagramPreview): void {
+    const mode = getAutoRefreshMode();
+    const dirty = isDocumentDirty(uri);
+    const pending = preview.isPendingJson();
+    if (pending || mode === 'onChange' || !dirty) {
+        scheduleRefresh(uri, json);
+    }
 }
 
 // Coalesces auto-refresh renders to the latest JSON without adding latency: the
@@ -189,90 +198,6 @@ async function refreshDiagram(uri: string, json: any): Promise<void> {
     await preview.updateWebView(json, viewKey, uri);
 }
 
-// Debounces the re-sync so bursts of contentUpdated (many dsl files) do not
-// trigger a fetch+render per notification.
-let syncPreviewTimer: ReturnType<typeof setTimeout> | undefined;
-
-function scheduleSyncPreviewFromServer(): void {
-    if (syncPreviewTimer) {
-        return;
-    }
-    syncPreviewTimer = setTimeout(() => {
-        syncPreviewTimer = undefined;
-        void syncPreviewFromServer();
-    }, 300);
-}
-
-/**
- * Re-syncs the open preview with the latest JSON the language server has for the
- * document the preview is bound to. Used when a contentUpdated notification
- * arrives for a different document (many dsl files, fragment edits) - the bound
- * document's own notification may not be emitted reliably. Renders only when the
- * cached JSON content actually changed.
- */
-async function syncPreviewFromServer(): Promise<void> {
-    const preview = diagramPreview;
-    if (!preview || !preview.isOpen()) {
-        return;
-    }
-    const uri = preview.getCurrentDocUri();
-    const currentKey = preview.getCurrentViewKey();
-    if (!uri || !currentKey || !languageClient) {
-        return;
-    }
-    try {
-        const res: any = await languageClient.sendRequest('custom/getContentForUri', { uri });
-        if (!res?.json) {
-            return;
-        }
-        // LSP serialization always yields a fresh object reference, so compare by
-        // content to avoid re-rendering when nothing changed.
-        const current = preview.getCurrentJson();
-        if (current !== undefined && JSON.stringify(current) === JSON.stringify(res.json)) {
-            return;
-        }
-        const viewKey = resolveFreshViewKey(res.json, currentKey) ?? currentKey;
-        latestJsonByUri.set(uri, res.json);
-        await preview.updateWebView(res.json, viewKey, uri);
-    } catch (err) {
-        console.warn('[C4 Preview] sync-from-server failed:', err);
-    }
-}
-
-/**
- * Polls the language server for the JSON of a preview that was opened before the
- * JSON was ready and delivers it to the panel once available. The push
- * notification (custom/contentUpdated) also delivers it; this is a fallback for
- * notifications that fired before the panel opened or were otherwise missed.
- */
-async function deliverPreviewJsonWhenReady(uri: string | undefined, viewKey: string): Promise<void> {
-    if (!uri || !languageClient) {
-        return;
-    }
-    const preview = diagramPreview;
-    for (let attempt = 0; attempt < 20; attempt++) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        if (!preview || !preview.isOpen() || !preview.isPendingJson()) {
-            return; // already delivered or the panel was closed
-        }
-        try {
-            const res: any = await languageClient.sendRequest('custom/getContentForUri', { uri });
-            if (res?.json) {
-                latestJsonByUri.set(uri, res.json);
-                const themes = await getThemesForPreview(res.json?.views?.configuration?.themes);
-                if (themes !== undefined) {
-                    preview.setThemes(themes);
-                }
-                const freshKey = resolveFreshViewKey(res.json, viewKey) ?? viewKey;
-                await preview.updateWebView(res.json, freshKey, uri);
-                return;
-            }
-        } catch {
-            // transient failure - keep polling until the timeout below
-        }
-    }
-    console.warn(`[C4 Preview] timed out waiting for JSON of view ${viewKey}`);
-}
 
 /**
  * Returns the raw JSON content of the workspace's theme files. The language
@@ -341,7 +266,6 @@ export function init(context: ExtensionContext): void {
             try {
                 const response: any = await languageClient?.sendRequest('custom/getContentForUri', { uri });
                 if (response?.json) {
-                    latestJsonByUri.set(uri, response.json);
                     await refreshDiagram(uri, response.json);
                     return;
                 }
@@ -349,11 +273,8 @@ export function init(context: ExtensionContext): void {
                 console.error(`[C4 AutoRefresh] Error fetching content on save:`, err);
             }
 
-            // JSON not generated yet - render it as soon as it becomes available.
-            const viewKey = preview.getCurrentViewKey();
-            if (viewKey) {
-                void deliverPreviewJsonWhenReady(uri, viewKey);
-            }
+            // JSON not generated yet - keep the panel open; the push notification
+            // (custom/contentUpdated) delivers it once generation completes.
         })
     );
 
@@ -378,8 +299,8 @@ export function init(context: ExtensionContext): void {
             preview.openPreview(viewKey, docUri);
 
             // Fetch the latest generated JSON from the language server cache; if it
-            // is not ready yet, the panel stays open and the JSON is delivered as
-            // soon as it is generated (see deliverPreviewJsonWhenReady).
+            // is not ready yet, the panel stays open and the push notification
+            // (custom/contentUpdated) delivers the JSON once generation completes.
             let payload: any;
             if (languageClient) {
                 try {
@@ -391,9 +312,6 @@ export function init(context: ExtensionContext): void {
             }
 
             if (payload) {
-                if (docUri) {
-                    latestJsonByUri.set(docUri, payload);
-                }
                 try {
                     const themes = await getThemesForPreview(payload?.views?.configuration?.themes);
                     if (themes !== undefined) {
@@ -417,8 +335,8 @@ export function init(context: ExtensionContext): void {
             }
 
             // JSON is not ready yet - keep the panel open with the "Rendering"
-            // indicator and deliver it once generation completes.
-            void deliverPreviewJsonWhenReady(docUri, viewKey);
+            // indicator; the push notification (custom/contentUpdated) delivers
+            // the JSON once generation completes.
         })
     );
 

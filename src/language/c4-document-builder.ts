@@ -19,9 +19,11 @@ import {
     LangiumDocument,
     AstUtils,
     AstNode,
+    type LangiumSharedCoreServices,
 } from 'langium';
-import { URI, Utils } from 'vscode-uri';
+import { URI } from 'vscode-uri';
 import { isInclude, Include } from '../generated/ast';
+import * as includeResolver from './c4-include-resolver';
 
 /**
  * C4DocumentBuilder - extends DefaultDocumentBuilder to auto-load !include files.
@@ -33,7 +35,14 @@ import { isInclude, Include } from '../generated/ast';
  * 4. Trigger a rebuild if new includes were loaded
  */
 export class C4DocumentBuilder extends DefaultDocumentBuilder {
-    
+
+    private readonly shared: LangiumSharedCoreServices;
+
+    constructor(services: LangiumSharedCoreServices) {
+        super(services);
+        this.shared = services;
+    }
+
     // Tracks include/extends targets that were loaded successfully (keyed by the
     // resolved URI). Failures are NOT recorded, so a transient error is retried
     // on the next build cycle instead of being silently dropped for the session.
@@ -75,7 +84,7 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
             const includes = this.collectIncludes(doc.parseResult.value);
             let hasNewIncludes = false;
             for (const inc of includes) {
-                const uri = await this.loadIncludeFile(inc, sourceUri);
+                const uri = await this.loadIncludeFile(inc);
                 if (uri) {
                     newUris.push(uri);
                     hasNewIncludes = true;
@@ -83,7 +92,7 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
             }
 
             // Find and load extendsUri
-            const extUri = await this.loadExtendsUri(doc, sourceUri, newUris);
+            const extUri = await this.loadExtendsUri(doc, newUris);
             if (extUri) {
                 hasNewIncludes = true;
             }
@@ -102,11 +111,12 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
      * For http/https URLs, uses URI.parse() directly.
      * For local paths, resolves relative to the source document's directory.
      */
-    private resolveTargetUri(filePath: string, sourceUri: URI): URI {
-        if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-            return URI.parse(filePath);
-        }
-        return Utils.resolvePath(Utils.dirname(sourceUri), filePath);
+    private resolveTargetUri(filePath: string, contextNode: AstNode | URI): URI | undefined {
+        // Single shared resolution pipeline (quotes, ${CONST}, http(s), relative
+        // paths) - matches the scope provider, validator and JSON generator.
+        return includeResolver.resolveTargetUri(filePath, contextNode, {
+            constants: (path, node) => includeResolver.substituteConstants(this.shared, path, node),
+        });
     }
 
     /**
@@ -115,16 +125,12 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
      * URL fetching is handled by the FileSystemProvider monkey-patch (see main.ts).
      * Works in both Node.js and browser environments.
      */
-    private async loadIncludeFile(inc: Include, sourceUri: URI): Promise<URI | undefined> {
+    private async loadIncludeFile(inc: Include): Promise<URI | undefined> {
         const filePath = inc.file?.replace(/^["']|["']$/g, '');
         if (!filePath) return undefined;
 
-        let targetUri: URI;
-        try {
-            targetUri = this.resolveTargetUri(filePath, sourceUri);
-        } catch {
-            return undefined; // unresolvable path - retry on the next cycle
-        }
+        const targetUri = this.resolveTargetUri(filePath, inc);
+        if (!targetUri) return undefined; // unresolvable path - retry on the next cycle
         // Key by the resolved absolute URI, so the same relative path used from
         // different parent directories never collides.
         const loadedKey = targetUri.toString();
@@ -213,20 +219,23 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
      * URL fetching with caching is handled by the FileSystemProvider monkey-patch (see main.ts).
      * Returns the loaded document URI if successful, undefined otherwise.
      */
-    private async loadExtendsUri(doc: LangiumDocument, sourceUri: URI, newUris: URI[]): Promise<URI | undefined> {
+    private async loadExtendsUri(doc: LangiumDocument, newUris: URI[]): Promise<URI | undefined> {
         const root = doc.parseResult.value as any;
         let extendsUri: string | undefined;
+        let workspaceNode: any;
 
         if (root.$type === 'C4Document') {
-            extendsUri = root.workspaces?.[0]?.extendsUri;
+            workspaceNode = root.workspaces?.[0];
+            extendsUri = workspaceNode?.extendsUri;
         } else if (root.$type === 'Workspace') {
+            workspaceNode = root;
             extendsUri = root.extendsUri;
         }
 
-        if (!extendsUri) return undefined;
+        if (!extendsUri || !workspaceNode) return undefined;
 
-        const cleanUri = extendsUri.replace(/^["']|["']$/g, '');
-        const targetUri = this.resolveTargetUri(cleanUri, sourceUri);
+        const targetUri = this.resolveTargetUri(extendsUri, workspaceNode);
+        if (!targetUri) return undefined;
 
         // Skip if already loaded or visited
         if (this.langiumDocuments?.hasDocument(targetUri)) return undefined;
@@ -246,11 +255,11 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
                 // on the next build cycle.
                 this.loadedIncludes.add(visitedKey);
                 newUris.push(targetUri);
-                console.log(`[C4 Builder] Loaded extends: ${cleanUri}`);
+                console.log(`[C4 Builder] Loaded extends: ${extendsUri}`);
                 return targetUri;
             }
         } catch (e) {
-            console.warn(`[C4 Builder] Error loading extends: ${cleanUri}`, e);
+            console.warn(`[C4 Builder] Error loading extends: ${extendsUri}`, e);
         }
         return undefined;
     }

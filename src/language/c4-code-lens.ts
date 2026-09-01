@@ -48,6 +48,11 @@ export class C4CodeLensProvider implements CodeLensProvider {
         // notifications (custom/contentUpdated) against it.
         const rootUri = this.services.generation.C4GeneratorHandler.getRootUri(document.uri.toString());
 
+        // The generated JSON (when already cached) is the source of truth for whether
+        // a view actually has content - a view with no elements renders an empty
+        // diagram, so no lens is offered for it.
+        const cachedJson = this.services.generation.C4GeneratorHandler.getCachedContentForUri(document.uri.toString());
+
         for (const node of AstUtils.streamAst(root)) {
             if (isRenderedView(node)) {
                 const cstNode = node.$cstNode;
@@ -82,6 +87,12 @@ export class C4CodeLensProvider implements CodeLensProvider {
                     // Extract the view key for the preview command
                     const viewKey = this.services.workspace.ViewKeyProvider.getKey(node);
 
+                    // Skip the lens when the generated diagram is known to have no elements.
+                    const generatedView = findViewByKey(cachedJson, viewKey);
+                    if (generatedView && Array.isArray(generatedView.elements) && generatedView.elements.length === 0) {
+                        continue;
+                    }
+
                     lens.command = Command.create(
                         '$(link-external) Show As Structurizr Diagram',
                         DIAGRAM_PREVIEW,
@@ -96,4 +107,30 @@ export class C4CodeLensProvider implements CodeLensProvider {
         
         return lenses;
     }
+}
+
+/** View categories in the generated Structurizr JSON, in lookup order. */
+const VIEW_GROUPS = [
+    'systemLandscapeViews',
+    'systemContextViews',
+    'containerViews',
+    'componentViews',
+    'dynamicViews',
+    'deploymentViews',
+    'filteredViews',
+    'customViews',
+];
+
+/** Finds a rendered view by its key in the generated JSON, or undefined when absent. */
+function findViewByKey(json: any, viewKey: string): any | undefined {
+    const views = json?.views;
+    if (!views) return undefined;
+    for (const group of VIEW_GROUPS) {
+        const list = views[group];
+        if (Array.isArray(list)) {
+            const found = list.find((v: any) => v?.key === viewKey);
+            if (found) return found;
+        }
+    }
+    return undefined;
 }

@@ -18,6 +18,7 @@ import { AstNode, AstUtils, type ValidationAcceptor, type ValidationChecks } fro
 import { ElementStyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, RelationshipStyle, ViewsBlock, type C4AstType, type Workspace, PropertyItem, ModelBlock, isDeploymentEnvironment, Include, SoftwareSystem } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
+import * as includeResolver from './c4-include-resolver';
 import { Utils } from 'vscode-uri';
 
 /** Normalizes lowercase shape names to Structurizr PascalCase format (Box, RoundedBox, Cylinder, etc.) */
@@ -459,21 +460,16 @@ export class C4Validator {
         return undefined;
     }
 
-    /** Resolves the root AST node of an included file; skips documents with parse errors (fragments) */
+    /** Resolves the root AST node of an included file; skips documents with parse errors (fragments). */
     private resolveIncludedRoot(inc: Include): AstNode | undefined {
-        try {
-            const sourceDoc = AstUtils.getDocument(inc);
-            if (!sourceDoc) return undefined;
-            const targetUri = Utils.resolvePath(Utils.dirname(sourceDoc.uri), inc.file);
-            const doc = this.sharedServices.workspace.LangiumDocuments.getDocument(targetUri);
-            // Skip documents with parse errors — they are fragments that can't be parsed
-            // as standalone docs (e.g. files included via !include inside model { }
-            // that contain only model-level elements like person, softwareSystem, etc.)
-            if (doc && doc.parseResult.parserErrors.length > 0) return undefined;
-            return doc?.parseResult.value;
-        } catch (e) {
-            return undefined;
-        }
+        // Single shared resolution pipeline (quotes, ${CONST}, http(s), relative paths,
+        // .dsl fallback) - matches the document builder so remote and ${CONST} includes
+        // are validated instead of being silently skipped.
+        return includeResolver.resolveIncludedRoot(this.sharedServices, inc.file, inc, {
+            withDslFallback: true,
+            skipParseErrors: true,
+            constants: (path, node) => includeResolver.substituteConstants(this.sharedServices, path, node),
+        });
     }
 
     /** Validates that property items have the correct format: <name> <value> pair */

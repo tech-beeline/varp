@@ -18,8 +18,9 @@ import {
     DefaultScopeProvider, Scope, ReferenceInfo, AstUtils, 
     AstNode, LangiumCoreServices, AstNodeDescription, MapScope, WorkspaceCache, 
     LangiumDocument} from 'langium';
-import { isModelBlock, isWorkspace, isNamedElement, Workspace, NamedElement, isArchetypeDefinition, isDeploymentEnvironment, isInclude, Include, isC4Document, isConstant, isGroup, isIdentifiersProperty } from '../generated/ast';
-import { URI, Utils } from 'vscode-uri';
+import { isModelBlock, isWorkspace, isNamedElement, Workspace, NamedElement, isArchetypeDefinition, isDeploymentEnvironment, isInclude, Include, isC4Document, isGroup, isIdentifiersProperty } from '../generated/ast';
+import { URI } from 'vscode-uri';
+import * as includeResolver from './c4-include-resolver';
 
 /**
  * Custom scope provider for C4 DSL that implements:
@@ -97,9 +98,6 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     // style via binary search instead of climbing the container chain per
     // element (O(elements x depth) -> O(log directives)).
     private readonly styleRegionsCache: WorkspaceCache<string, StyleRegions>;
-    // Cache of !constant/!const/!var declarations per document, so ${NAME}
-    // substitution does not re-scan every document on each lookup.
-    private readonly constantsCache: WorkspaceCache<string, Map<string, string>>;
     // Cache for extends-resolved elements to avoid repeated traversal
     private readonly extendedElementsCache: WorkspaceCache<string, AstNodeDescription[]>;
     // Cache for include-resolved elements
@@ -116,7 +114,6 @@ export class C4ScopeProvider extends DefaultScopeProvider {
 
         // Initialize caches. Automatically cleared on ANY project change via WorkspaceCache.
         this.styleRegionsCache = new WorkspaceCache<string, StyleRegions>(services.shared);
-        this.constantsCache = new WorkspaceCache<string, Map<string, string>>(services.shared);
         this.extendedElementsCache = new WorkspaceCache<string, AstNodeDescription[]>(services.shared);
         this.includeCache = new WorkspaceCache<string, AstNodeDescription[]>(services.shared);
         this.localScopeCache = new WorkspaceCache<string, LocalScopePackage>(services.shared);
@@ -632,74 +629,11 @@ export class C4ScopeProvider extends DefaultScopeProvider {
      * C4DocumentBuilder.resolveTargetUri).
      */
     private resolveTargetUri(rawPath: string, contextNode: AstNode): URI | undefined {
-        const path = this.substituteConstants(rawPath.replace(/['"]/g, ''), contextNode);
-        if (path.startsWith('http://') || path.startsWith('https://')) {
-            return URI.parse(path);
-        }
-        const currentDocUri = AstUtils.getDocument(contextNode).uri;
-        const baseDir = Utils.dirname(currentDocUri);
-        try {
-            return Utils.resolvePath(baseDir, path);
-        } catch {
-            return undefined;
-        }
-    }
-
-    /**
-     * Substitutes ${NAME} placeholders with constant values (!const/!constant).
-     * Priority: current document first, then other workspace documents
-     * (constants may be declared in a parent file that !includes the current file).
-     * Unknown placeholders are left as-is.
-     */
-    private substituteConstants(input: string, contextNode: AstNode): string {
-        if (!input.includes('${')) return input;
-        const doc = AstUtils.getDocument(contextNode);
-        const localConstants = this.getConstantsForDoc(doc.uri.toString());
-
-        return input.replace(/\$\{([^}]+)\}/g, (match, key) => {
-            const name = key.trim();
-            if (localConstants.has(name)) return localConstants.get(name)!;
-            const fromWorkspace = this.lookupConstantInWorkspace(name, doc.uri.toString());
-            return fromWorkspace ?? match;
+        // Single shared resolution pipeline (quotes, ${CONST}, http(s), relative
+        // paths) - matches the document builder, validator and JSON generator.
+        return includeResolver.resolveTargetUri(rawPath, contextNode, {
+            constants: (path, node) => includeResolver.substituteConstants(this.services.shared, path, node),
         });
-    }
-
-    /** Collects all !constant/!const declarations from the given root AST node into a map */
-    private collectConstants(root: AstNode, target: Map<string, string>): void {
-        AstUtils.streamAllContents(root).filter(isConstant).forEach((c) => {
-            const name = (c.name ?? '').toString().replace(/['"]/g, '');
-            const rawValue = (c.value ?? '').toString();
-            const value = typeof rawValue === 'string' ? rawValue.replace(/^['"]|['"]$/g, '') : rawValue;
-            if (name && !target.has(name)) target.set(name, value);
-        });
-    }
-
-    /**
-     * Returns the constants (!constant/!const/!var) declared in the document with the
-     * given URI. Cached per document, so ${NAME} lookups do not re-scan the AST on
-     * every call.
-     */
-    private getConstantsForDoc(docUri: string): Map<string, string> {
-        return this.constantsCache.get(docUri, () => {
-            const constants = new Map<string, string>();
-            for (const doc of this.services.shared.workspace.LangiumDocuments.all.toArray()) {
-                if (doc.uri.toString() !== docUri) continue;
-                const root = doc.parseResult?.value;
-                if (root) this.collectConstants(root, constants);
-                break;
-            }
-            return constants;
-        });
-    }
-
-    /** Looks up a constant by name in all workspace documents except the one specified */
-    private lookupConstantInWorkspace(name: string, skipDocUri: string): string | undefined {
-        for (const otherDoc of this.services.shared.workspace.LangiumDocuments.all.toArray()) {
-            if (otherDoc.uri.toString() === skipDocUri) continue;
-            const constants = this.getConstantsForDoc(otherDoc.uri.toString());
-            if (constants.has(name)) return constants.get(name);
-        }
-        return undefined;
     }
 
 

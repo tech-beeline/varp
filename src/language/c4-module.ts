@@ -24,6 +24,7 @@ import { C4CodeLensProvider } from './c4-code-lens';
 import { C4ScopeProvider } from './c4-scope-provider';
 import { C4NameProvider } from './c4-name-provider';
 import { C4DocumentBuilder } from './c4-document-builder';
+import { C4LangiumDocumentFactory } from './c4-document-factory';
 import { C4ValueConverter } from './c4-value-converter';
 import { C4JsonGenerator } from './c4-json-generator';
 import { C4GeneratorHandler } from './c4-json-generator-handler';
@@ -52,6 +53,9 @@ export type C4Services = LangiumServices & C4AddedServices;
  */
 export const C4SharedAddedModule: Module<LangiumSharedServices, DeepPartial<LangiumSharedServices>> = {
     workspace: {
+        // Strips a leading UTF-8 BOM from all document text (disk loads, !include,
+        // editor open/change) so BOM-prefixed files parse correctly on project open.
+        LangiumDocumentFactory: (services) => new C4LangiumDocumentFactory(services),
         DocumentBuilder: (services) => new C4DocumentBuilder(services)
     }
 };

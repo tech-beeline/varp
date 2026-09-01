@@ -141,6 +141,15 @@ connection.onRequest('custom/listProjects', () => {
     return { projects };
 });
 
+// Cheap lookup of the root workspace document URI for a given URI. Used by the
+// extension to decide whether a contentUpdated notification (which always
+// carries the ROOT workspace URI) belongs to the document the preview is bound
+// to - without fetching the full JSON on every unrelated generation event.
+connection.onRequest('custom/getRootUri', (params: { uri: string }) => {
+    const rootUri = C4.generation.C4GeneratorHandler.getRootUri(params?.uri ?? '');
+    return { rootUri };
+});
+
 // ─── Start Language Server ────────────────────────────────────────────────
 // Start listening for LSP messages from the client (VS Code extension).
 // This sets up all built-in LSP handlers (completion, hover, validation, etc.)

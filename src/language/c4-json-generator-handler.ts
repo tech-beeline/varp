@@ -19,6 +19,7 @@ import { isWorkspace, C4Document, isC4Document } from '../generated/ast';
 import { LangiumServices } from 'langium/lsp';
 import { URI } from 'vscode-uri';
 import * as includeResolver from './c4-include-resolver';
+import { C4JsonEnricher } from './c4-json-enricher';
 
 /**
  * Handles JSON generation lifecycle: listens to document build phases (post-validation),
@@ -29,6 +30,8 @@ export class C4GeneratorHandler {
     private jsonCache: WorkspaceCache<string, any>;
     private services: LangiumServices;
     private cachedUris: Set<string> = new Set();
+    /** Enriches the render JSON with the Structurizr-only fields the render pipeline does not produce. */
+    private enricher: C4JsonEnricher;
 
     /**
      * Optional callback invoked after a workspace's JSON has been successfully
@@ -41,6 +44,7 @@ export class C4GeneratorHandler {
     constructor(services: LangiumServices) {
         this.services = services;
         this.jsonCache = new WorkspaceCache<string, any>(services.shared);
+        this.enricher = new C4JsonEnricher(services.shared);
 
         // Hook into build phase 5 (Validated) to regenerate JSON after documents are processed
         services.shared.workspace.DocumentBuilder.onBuildPhase(
@@ -200,5 +204,27 @@ export class C4GeneratorHandler {
     public getCachedContentForUri(uri: string): any {
         const rootUri = this.getRootUri(uri);
         return this.jsonCache.get(rootUri);
+    }
+
+    /**
+     * Returns the FULL Structurizr-compatible JSON for the given URI: the cached
+     * render JSON enriched with the fields the render pipeline does not produce
+     * (currently `documentation.decisions` from `!adrs`/`!decisions`).
+     *
+     * The render JSON is used as-is for the diagram preview; this method layers
+     * the additional Structurizr-only content on top without re-generating the
+     * model/views, so the enrichment is cheap. Returns undefined when no render
+     * JSON is cached yet.
+     */
+    public async getFullContentForUri(uri: string): Promise<any> {
+        const rootUri = this.getRootUri(uri);
+        const renderJson = this.jsonCache.get(rootUri);
+        if (!renderJson) return undefined;
+
+        // Deep-clone the render JSON so the cached copy stays untouched and the
+        // enricher can freely inject nested `documentation` into model elements.
+        const fullJson = JSON.parse(JSON.stringify(renderJson));
+        await this.enricher.enrich(rootUri, fullJson);
+        return fullJson;
     }
 }

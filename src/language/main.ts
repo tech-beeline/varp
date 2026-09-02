@@ -112,6 +112,15 @@ connection.onRequest('custom/getContentForUri', (params: { uri: string }) => {
     return content ? { json: content } : null;
 });
 
+// Returns the FULL Structurizr-compatible JSON for the given URI: the cached
+// render JSON enriched with documentation not produced by the render pipeline
+// (e.g. `documentation.decisions` from !adrs/!decisions). Used for export/tooling;
+// the diagram preview keeps using the lighter render JSON from getContentForUri.
+connection.onRequest('custom/getFullContentForUri', async (params: { uri: string }) => {
+    const content = await C4.generation.C4GeneratorHandler.getFullContentForUri(params.uri);
+    return content ? { json: content } : null;
+});
+
 // ─── Custom LSP Request Handler: Themes ─────────────────────────────────────
 // Returns the raw JSON content of the requested theme files so the diagram
 // preview webview can render without re-downloading them. Reading through the

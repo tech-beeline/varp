@@ -14,7 +14,20 @@
 	limitations under the License.
 */
 
-export class StringUtils {
+import { AstUtils } from 'langium';
+import {
+    isComponent,
+    isContainer,
+    isContainerInstance,
+    isDeploymentNode,
+    isImplicitRelationship,
+    isInfrastructureNode,
+    isRelationship,
+    isSoftwareSystem,
+    isSoftwareSystemInstance,
+} from '../generated/ast';
+
+export class C4Utils {
 
     /**
      * Simple and fast string hashing to a 32-bit hex string.
@@ -65,4 +78,91 @@ export class StringUtils {
     static stripQuotes(value: string | undefined): string {
         return value?.trim().replace(/^("""|'|")([\s\S]*?)\1$/, '$2').trim() ?? '';
     }
+}
+
+export interface FlatIdResolvers {
+    /** Resolves the source element of a relationship (used for relationship ids). */
+    source?: (rel: any) => any | undefined;
+    /** Resolves the target element of a relationship (used for relationship ids). */
+    target?: (rel: any) => any | undefined;
+}
+
+/**
+ * Computes the stable flat id used by the JSON generator for any model node
+ * (Person, SoftwareSystem, Container, Component, DeploymentNode, CustomElement,
+ * Relationship, ...). The id is a prefix + hash of the element type, a document
+ * disambiguator and (for relationships) the resolved source/target ids and CST
+ * offset.
+ *
+ * This is the SINGLE implementation of the id scheme - both the JSON generator
+ * (via its own source/target resolvers) and the JSON enricher (to match AST
+ * nodes to already-emitted JSON) use it, so the ids always agree.
+ *
+ * @param element     the AST node ($type + $cstNode required)
+ * @param rootDocUri  the URI string of the root workspace document (may be '' to
+ *                    skip doc disambiguation, keeping ids identical to single-file)
+ * @param resolvers   optional source/target resolvers used for relationship ids;
+ *                    when omitted, a fallback context-element walk is used
+ */
+export function flatId(element: any, rootDocUri: string, resolvers?: FlatIdResolvers): string {
+    // Disambiguate elements defined outside the root workspace document so
+    // structurally identical files in !include / !extends chains never collide.
+    let docPart = '';
+    if (rootDocUri && element) {
+        try {
+            const doc = AstUtils.getDocument(element);
+            if (doc && doc.uri) {
+                const docUri = doc.uri.toString();
+                if (docUri !== rootDocUri) {
+                    docPart = docUri.split('/').pop() + '|';
+                }
+            }
+        } catch {
+            // ignore - keep short hash
+        }
+    }
+
+    const offset = element?.$cstNode?.offset ?? '0';
+    let hashInput: string;
+
+    if (isImplicitRelationship(element)) {
+        const source = (resolvers?.source ?? contextElement)(element);
+        const target = (resolvers?.target ?? contextElement)(element);
+        const sourceId = source ? flatId(source, rootDocUri, resolvers) : 'unknown_src';
+        const targetId = target ? flatId(target, rootDocUri, resolvers) : 'unknown_dst';
+        hashInput = `implicit|${sourceId}|${targetId}|${docPart}${offset}`;
+    } else if (isRelationship(element)) {
+        const source = (resolvers?.source ?? contextElement)(element);
+        const target = (resolvers?.target ?? contextElement)(element);
+        const sourceId = source ? flatId(source, rootDocUri, resolvers) : 'unknown_src';
+        const targetId = target ? flatId(target, rootDocUri, resolvers) : 'unknown_dst';
+        hashInput = `relationship|${sourceId}|${targetId}|${docPart}${offset}`;
+    } else {
+        const type = element?.$type || 'element';
+        hashInput = `${type}|${docPart}${offset}`;
+    }
+
+    const hash = C4Utils.generateHash(hashInput);
+
+    let prefix = 'element';
+    if (isRelationship(element) || isImplicitRelationship(element)) {
+        prefix = 'relationship';
+    } else if (element?.$type) {
+        prefix = element.$type.toLowerCase();
+    }
+    return `${prefix}_${hash}`;
+}
+
+/** Fallback source/target resolver: climbs the AST $container chain for C4 elements. */
+function contextElement(rel: any): any | undefined {
+    let parent = rel?.$container;
+    while (parent) {
+        if (isSoftwareSystem(parent) || isContainer(parent) || isComponent(parent) ||
+            isDeploymentNode(parent) || isInfrastructureNode(parent) ||
+            isSoftwareSystemInstance(parent) || isContainerInstance(parent)) {
+            return parent;
+        }
+        parent = parent.$container;
+    }
+    return undefined;
 }

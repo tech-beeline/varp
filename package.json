@@ -216,7 +216,7 @@
     "dev": "npm run build && node -e \"require('http').createServer((req, res) => { res.writeHead(200, {'Content-Type': 'text/html'}); res.end('<h1>c4varp VS Code Extension</h1><p>This is a VS Code extension project.</p>'); }).listen(3000, '0.0.0.0');\""
   },
   "dependencies": {
-    "@hpcc-js/wasm": "^2.35.0",
+    "@hpcc-js/wasm-graphviz": "^1.28.0",
     "@modelcontextprotocol/sdk": "^1.9.0",
     "langium": "~4.2.0",
     "vscode-languageclient": "~9.0.1",

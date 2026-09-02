@@ -16,7 +16,7 @@
 
 import { DefaultNameProvider, AstNode, AstUtils } from 'langium';
 import { isIdentifiersProperty, isWorkspace } from '../generated/ast';
-import { StringUtils } from './c4-utils';
+import { C4Utils } from './c4-utils';
 
 /**
  * Custom name provider for C4 DSL.
@@ -36,7 +36,7 @@ export class C4NameProvider extends DefaultNameProvider {
             // random UUID - and independent of the browser secure-context crypto API.
             const docUri = AstUtils.getDocument(node)?.uri.toString() ?? 'workspace';
             const offset = node.$cstNode?.offset ?? 0;
-            return `ws-${StringUtils.stringHash(`${docUri}#${offset}`)}`;
+            return `ws-${C4Utils.stringHash(`${docUri}#${offset}`)}`;
         }
         return super.getName(node);
     }

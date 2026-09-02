@@ -1,0 +1,157 @@
+{
+    "label": "Template Catalog",
+    "langId": "",
+    "snippetName": "",
+    "hover": [],
+    "childrens": [
+        {
+            "label": "C4",
+            "langId": "c4",
+            "snippetName": "",
+            "hover": [],
+            "childrens": [
+                {
+                    "label": "Default Workspace",
+                    "langId": "c4",
+                    "snippetName": "Default",
+                    "hover": ["Example of a simple service architecture"],
+                    "childrens": []
+                },
+                {
+                    "label": "Capability",
+                    "langId": "c4",
+                    "snippetName": "Capability",
+                    "hover": [
+                        "#### Publication of a product technical capability\n",
+                        "Template for describing a product's technical capability"
+                    ],
+                    "childrens": []
+                },
+                {
+                    "label": "API",
+                    "langId": "c4",
+                    "snippetName": "Integration",
+                    "hover": [
+                        "#### Publication of a product API specification\n",
+                        "Template for describing a product API specification"
+                    ],
+                    "childrens": []
+                },
+                {
+                    "label": "Deployment Nodes",
+                    "langId": "c4",
+                    "snippetName": "",
+                    "hover": [],
+                    "childrens": [
+                        {
+                            "label": "Kafka",
+                            "langId": "c4",
+                            "snippetName": "Kafka",
+                            "hover": ["Apache Kafka is a distributed message broker. It enables communication and data exchange between applications or individual modules in real time using the publish-subscribe pattern."]
+                        },
+                        {
+                            "label": "MongoDB",
+                            "langId": "c4",
+                            "snippetName": "Mongo",
+                            "hover": ["MongoDB is a document-oriented NoSQL database management system."]
+                        },
+                        {
+                            "label": "PostgreSQL",
+                            "langId": "c4",
+                            "snippetName": "PostgreSQL",
+                            "hover": [],
+                            "childrens": []
+                        },
+                        {
+                            "label": "Redis",
+                            "langId": "c4",
+                            "snippetName": "Redis",
+                            "hover": ["Redis is an open-source in-memory NoSQL database (DBMS) for key-value data."],
+                            "childrens": []
+                        },
+                        {
+                            "label": "VM",
+                            "langId": "c4",
+                            "snippetName": "VM",
+                            "hover": ["Virtual machine"],
+                            "childrens": []
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "label": "ADR",
+            "langId": "markdown",
+            "snippetName": "",
+            "hover": [],
+            "childrens": [
+                {
+                    "label": "Capability",
+                    "langId": "markdown",
+                    "snippetName": "Capability",
+                    "hover": ["Template for a typical architectural decision for choosing how to implement a capability"],
+                    "childrens": []
+                },
+                {
+                    "label": "DataModel",
+                    "langId": "markdown",
+                    "snippetName": "DataModel",
+                    "hover": ["Template for a typical architectural decision for choosing a data model"],
+                    "childrens": []
+                },
+                {
+                    "label": "Integration",
+                    "langId": "markdown",
+                    "snippetName": "Integration",
+                    "hover": ["Template for a typical architectural decision for choosing an integration approach"],
+                    "childrens": []
+                },
+                {
+                    "label": "Quality",
+                    "langId": "markdown",
+                    "snippetName": "Quality",
+                    "hover": ["Template for a typical architectural decision for choosing how to implement non-functional requirements"],
+                    "childrens": []
+                },
+                {
+                    "label": "Technology",
+                    "langId": "markdown",
+                    "snippetName": "Technology",
+                    "hover": ["Template for a typical architectural decision for choosing technologies"],
+                    "childrens": []
+                }
+            ]
+        },
+        {
+            "label": "Yaml",
+            "langId": "yaml",
+            "snippetName": "",
+            "hover": [],
+            "childrens": [
+                {
+                    "label": "SLA",
+                    "langId": "yaml",
+                    "snippetName": "SLA",
+                    "hover": ["Template describing non-functional requirements for interfaces"],
+                    "childrens": []
+                }
+            ]
+        },
+        {
+            "label": "Styles",
+            "langId": "json",
+            "snippetName": "",
+            "hover": [],
+            "childrens": [
+                {
+                    "label": "Beeline style",
+                    "langId": "json",
+                    "snippetName": "BeelineStyle",
+                    "hover": ["Custom Beeline style"],
+                    "childrens": []
+                }
+            ]
+        }
+    ]
+}

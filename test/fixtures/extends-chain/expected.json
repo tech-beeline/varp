@@ -38,6 +38,7 @@
           }
         ],
         "relationships": [],
+        "enterpriseBoundaryVisible": true,
         "dimensions": {
           "width": 1250,
           "height": 1100

@@ -94,7 +94,7 @@
                         "y": 0
                     }
                 ],
-                "externalSoftwareSystemBoundariesVisible": true,
+                "enterpriseBoundaryVisible": true,
                 "dimensions": {
                     "width": 1250,
                     "height": 1700
@@ -128,7 +128,6 @@
                         "y": 0
                     }
                 ],
-                "externalSoftwareSystemBoundariesVisible": true,
                 "dimensions": {
                     "width": 1350,
                     "height": 1879

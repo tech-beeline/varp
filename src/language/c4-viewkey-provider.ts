@@ -18,7 +18,7 @@ import {
     View, isSystemContextView, isContainerView, isComponentView, 
     isDeploymentView,
     isCustomView} from '../generated/ast';
-import { StringUtils } from './c4-utils';
+import { C4Utils } from './c4-utils';
 
 /**
  * Generates stable, deterministic keys for views in the C4 workspace.
@@ -33,7 +33,7 @@ export class ViewKeyProvider {
      * Auto-generated keys use the pattern: `<TargetName>-<ViewType>-<hash>`.
      */
     getKey(view: View): string {
-        return StringUtils.stripQuotes(view.key) || this.generateStableKey(view);
+        return C4Utils.stripQuotes(view.key) || this.generateStableKey(view);
     }
 
     /**
@@ -59,11 +59,11 @@ export class ViewKeyProvider {
 
         // Determine the target element name based on view type
         if (isSystemContextView(view) || isContainerView(view)) {
-            targetName = StringUtils.stripQuotes(view.softwareSystem?.ref?.name) || 'System';
+            targetName = C4Utils.stripQuotes(view.softwareSystem?.ref?.name) || 'System';
         } else if (isComponentView(view)) {
-            targetName = StringUtils.stripQuotes(view.container?.ref?.name) || 'Container';
+            targetName = C4Utils.stripQuotes(view.container?.ref?.name) || 'Container';
         } else if (isDeploymentView(view)) {
-            targetName = `${StringUtils.stripQuotes(view.softwareSystem?.ref?.name) || 'System'}-${StringUtils.stripQuotes(view.environment?.ref?.name) || 'Env'}`;
+            targetName = `${C4Utils.stripQuotes(view.softwareSystem?.ref?.name) || 'System'}-${C4Utils.stripQuotes(view.environment?.ref?.name) || 'Env'}`;
         } else if(isCustomView(view)) {
             targetName =  'Custom';
         }
@@ -73,7 +73,7 @@ export class ViewKeyProvider {
 
         // Append CST offset hash for uniqueness when keys might collide
         const offset = view.$cstNode?.offset || 0;
-        return `${baseKey}-${StringUtils.stringHash(offset.toString())}`;
+        return `${baseKey}-${C4Utils.stringHash(offset.toString())}`;
     }
 
 }

@@ -16,10 +16,8 @@
 
 import { AstNode, AstUtils, Reference } from 'langium';
 import { URI, Utils } from 'vscode-uri';
-import { StringUtils } from './c4-utils';
-// Graphviz compiled to WASM - the same layout engine the original Structurizr
-// uses (the autoLayout "implementation: Graphviz").
-import { Graphviz } from '@hpcc-js/wasm';
+import { flatId, C4Utils, type FlatIdResolvers } from './c4-utils';
+import { Graphviz } from '@hpcc-js/wasm-graphviz';
 
 import {
     Workspace, Container,
@@ -181,7 +179,7 @@ class JsonGenerator {
 
         // Read group separator from model properties, default is "/"
         this.groupSeparator = this.propertiesModel["structurizr.groupSeparator"]
-            ? StringUtils.stripQuotes(this.propertiesModel["structurizr.groupSeparator"])
+            ? C4Utils.stripQuotes(this.propertiesModel["structurizr.groupSeparator"])
             : '/';
 
         this.collectElementsRelationships(workspace);
@@ -608,7 +606,7 @@ class JsonGenerator {
      */
     private addIfDefined(target: any, key: string, prop: any[] | string | undefined) {
         if(typeof prop === 'string') {
-            target[key] = StringUtils.stripQuotes(prop);
+            target[key] = C4Utils.stripQuotes(prop);
         } else {
             const val = prop?.at(0);
             if (val !== undefined && val !== null) {
@@ -699,13 +697,13 @@ class JsonGenerator {
         // Helper to extract themes from a ViewsBlock
         const extractFromViews = (views: ViewsBlock) => {
             // Single theme (!theme)
-            const t = StringUtils.stripQuotes(views.themeProps?.at(0)?.value);
+            const t = C4Utils.stripQuotes(views.themeProps?.at(0)?.value);
             if (t) {
                 this.themes.add(t === DEFAULT_THEME_NAME ? DEFAULT_THEME_URL : t);
             }
             // Theme array (!themes)
             const themes = views.themesProps?.at(0);
-            themes?.values.map(t => StringUtils.stripQuotes(t)).
+            themes?.values.map(t => C4Utils.stripQuotes(t)).
             filter(t => t !== undefined).
             map(t => t === DEFAULT_THEME_NAME ? DEFAULT_THEME_URL : t).
             forEach(t => this.themes.add(t))
@@ -792,8 +790,8 @@ class JsonGenerator {
         if (firstPropertyBlock && Array.isArray(firstPropertyBlock.items)) {
             for (const prop of firstPropertyBlock.items) {
                 if (prop.name && prop.value) {
-                    const name = StringUtils.stripQuotes(prop.name);
-                    const value = StringUtils.stripQuotes(prop.value);
+                    const name = C4Utils.stripQuotes(prop.name);
+                    const value = C4Utils.stripQuotes(prop.value);
                     if (name && value) {
                         this.propertiesModel[name] = value;
                     }
@@ -813,8 +811,8 @@ class JsonGenerator {
         if (firstPropertyBlock && Array.isArray(firstPropertyBlock.items)) {
             for (const prop of firstPropertyBlock.items) {
                 if (prop.name && prop.value) {
-                    const name = StringUtils.stripQuotes(prop.name);
-                    const value = StringUtils.stripQuotes(prop.value);
+                    const name = C4Utils.stripQuotes(prop.name);
+                    const value = C4Utils.stripQuotes(prop.value);
                     if (name && value) {
                         this.propertiesViews[name] = value;
                     }
@@ -891,7 +889,7 @@ class JsonGenerator {
             for (const item of items) {
                 if (isGroup(item)) {
                     // Groups add another recursion level with an extended group stack
-                    this.collectLocal(item, [...groupStack, StringUtils.stripQuotes(item.name) || ""], visitedDocs);
+                    this.collectLocal(item, [...groupStack, C4Utils.stripQuotes(item.name) || ""], visitedDocs);
                 }
                 else if (isRelationship(item)) {
                     this.relationships.push(item);
@@ -1106,77 +1104,20 @@ class JsonGenerator {
      * into the hash to ensure uniqueness when the same file defines multiple
      * relationships with the same offset pattern (e.g. in !include'd files).
      */
-    private generateFlatId(element: any): string {
-        let hashInput: string;
-        // The CST offset is only unique within the element's own document - two
-        // structurally identical files (e.g. in a multi-level !extends chain) can
-        // place different elements at the same byte offset, so the defining document
-        // must be part of the hash to keep IDs unique across the whole workspace.
-        // Elements in the root workspace document keep the original short hash.
-        const docPart = this.docKeyPart(element);
-
-        if (isImplicitRelationship(element)) {
-            // Implicit relationship: hash includes source + target element IDs, document key and CST offset
-            const source = this.resolveSource(element);
-            const target = this.resolveTarget(element);
-            const sourceId = source ? this.generateFlatId(source) : 'unknown_src';
-            const targetId = target ? this.generateFlatId(target) : 'unknown_dst';
-            const offset = element.$cstNode?.offset ?? '0';
-            hashInput = `implicit|${sourceId}|${targetId}|${docPart}${offset}`;
-        }
-        else if (isRelationship(element)) {
-            // Explicit relationship: hash includes source + target element IDs, document key and CST offset
-            const source = this.resolveSource(element);
-            const target = this.resolveTarget(element);
-            const sourceId = source ? this.generateFlatId(source) : 'unknown_src';
-            const targetId = target ? this.generateFlatId(target) : 'unknown_dst';
-            const offset = element.$cstNode?.offset ?? '0';
-            hashInput = `relationship|${sourceId}|${targetId}|${docPart}${offset}`;
-        }
-        else {
-            // Static/physical element (Person, SoftwareSystem, Container, DeploymentNode, etc.):
-            // hash is based on $type + document key + CST offset
-            const type = element?.$type || 'element';
-            const offset = element?.$cstNode?.offset ?? '0';
-            hashInput = `${type}|${docPart}${offset}`;
-        }
-
-        // Generate a stable hash from the input string
-        const hash = StringUtils.generateHash(hashInput);
-        
-        // Determine prefix based on element type
-        let prefix = 'element';
-        if (isRelationship(element) || isImplicitRelationship(element)) {
-            prefix = 'relationship';
-        } else if (element?.$type) {
-            prefix = element.$type.toLowerCase();
-        }
-
-        return `${prefix}_${hash}`;
-    }
-
-    /** Returns a stable generated ID for any element or relationship. Delegates to generateFlatId(). */
+    /**
+     * Returns a stable generated ID for any element or relationship.
+     *
+     * Delegates to the shared `flatId()` implementation so the JSON enricher
+     * (which matches AST nodes to already-emitted JSON by id) computes the SAME
+     * ids. The source/target resolvers for relationship ids are the generator's
+     * own (they understand implicit relationships and include contexts).
+     */
     private getId(element: any): string {
         if (!element) return 'unknown';
-        return this.generateFlatId(element);
-    }
-
-    /**
-     * Returns a document disambiguator for an element's id hash: empty for elements
-     * defined in the root workspace document (keeps single-file ids unchanged), otherwise
-     * the file name of the defining document. This prevents id collisions between
-     * structurally identical files in multi-level !extends / !include chains while
-     * remaining path-independent (only the file name is hashed).
-     */
-    private docKeyPart(element: any): string {
-        try {
-            const doc = AstUtils.getDocument(element);
-            if (!doc || !this.rootDocUri) return '';
-            if (doc.uri.toString() === this.rootDocUri) return '';
-            return Utils.basename(doc.uri) + '|';
-        } catch {
-            return '';
-        }
+        return flatId(element, this.rootDocUri ?? '', {
+            source: (rel) => this.resolveSource(rel),
+            target: (rel) => this.resolveTarget(rel),
+        });
     }
 
     /**
@@ -1204,7 +1145,7 @@ class JsonGenerator {
      * Also strips surrounding quotes.
      */
     private substitute(value: string | undefined): string | undefined {
-        return (value) ? StringUtils.stripQuotes(value.replace(/\$\{([^}]+)\}/g, (match, varName) => this.constants.get(varName) ?? match)) : undefined;
+        return (value) ? C4Utils.stripQuotes(value.replace(/\$\{([^}]+)\}/g, (match, varName) => this.constants.get(varName) ?? match)) : undefined;
     }
 
     /** Returns the description text for a node, with constant substitution applied. */
@@ -1859,7 +1800,7 @@ class JsonGenerator {
         const deploymentGroupNames = new Set<string>();
         for (const el of this.elements) {
             if ((el as any).$type === 'DeploymentGroup') {
-                const groupName = StringUtils.stripQuotes((el as any).name);
+                const groupName = C4Utils.stripQuotes((el as any).name);
                 if (groupName) {
                     deploymentGroupNames.add(groupName);
                 }
@@ -1874,7 +1815,7 @@ class JsonGenerator {
             const node = el as any;
             if (!node.value) continue;
 
-            const val = StringUtils.stripQuotes(node.value);
+            const val = C4Utils.stripQuotes(node.value);
             if (!val) {
                 node.value = undefined;
                 continue;
@@ -1915,7 +1856,7 @@ class JsonGenerator {
         if (Array.isArray(node.deploymentGroups)) {
             for (const ref of node.deploymentGroups) {
                 if (ref.ref && ref.ref.name) {
-                    const name = StringUtils.stripQuotes(ref.ref.name);
+                    const name = C4Utils.stripQuotes(ref.ref.name);
                     if (name) groups.add(name);
                 }
             }
@@ -1932,7 +1873,7 @@ class JsonGenerator {
                             if (Array.isArray(prop.deploymentGroups)) {
                                 for (const ref of prop.deploymentGroups) {
                                     if (ref.ref && ref.ref.name) {
-                                        const name = StringUtils.stripQuotes(ref.ref.name);
+                                        const name = C4Utils.stripQuotes(ref.ref.name);
                                         if (name) groups.add(name);
                                     }
                                 }
@@ -1986,19 +1927,19 @@ class JsonGenerator {
         const collectedTags = new Set<string>();
         // 1. Add first extra tag (if provided)
         if (extraTag1) {
-            const stripped = StringUtils.stripQuotes(extraTag1);
+            const stripped = C4Utils.stripQuotes(extraTag1);
             if (stripped) collectedTags.add(stripped.trim());
         }
         // 2. Add second extra tag (if provided)
         if (extraTag2) {
-            const stripped = StringUtils.stripQuotes(extraTag2);
+            const stripped = C4Utils.stripQuotes(extraTag2);
             if (stripped) collectedTags.add(stripped.trim());
         }
         // 3. Process node.tags array (split by comma)
         if (Array.isArray(node.tags)) {
             for (const rawTag of node.tags) {
                 if (typeof rawTag !== 'string') continue;
-                const stripped = StringUtils.stripQuotes(rawTag);
+                const stripped = C4Utils.stripQuotes(rawTag);
                 if (!stripped) continue;
                 for (const subTag of stripped.split(',')) {
                     const trimmed = subTag.trim();
@@ -2011,7 +1952,7 @@ class JsonGenerator {
         // 3.5. Fallback: handle DeploymentGroupOrTag.value if not yet resolved
         // (resolveAllInstanceValues() normally clears this, but this handles edge cases)
         if (node.value) {
-            const val = StringUtils.stripQuotes(node.value);
+            const val = C4Utils.stripQuotes(node.value);
             if (val) {
                 const trimmed = val.trim();
                 if (trimmed) collectedTags.add(trimmed);
@@ -2021,7 +1962,7 @@ class JsonGenerator {
         if (Array.isArray(node.tagsProps)) {
             for (const tagOrValue of node.tagsProps) {
                 if (typeof tagOrValue === 'string') {
-                    const stripped = StringUtils.stripQuotes(tagOrValue);
+                    const stripped = C4Utils.stripQuotes(tagOrValue);
                     if (!stripped) continue;
                     for (const subTag of stripped.split(',')) {
                         const trimmed = subTag.trim();
@@ -2033,7 +1974,7 @@ class JsonGenerator {
                         valuesArray.forEach((tagObj: any) => {
                             const rawValue = typeof tagObj === 'object' ? tagObj.value : tagObj;
                             if (typeof rawValue === 'string') {
-                                const stripped = StringUtils.stripQuotes(rawValue);
+                                const stripped = C4Utils.stripQuotes(rawValue);
                                 if (stripped) {
                                     const trimmed = stripped.trim();
                                     if (trimmed) collectedTags.add(trimmed);
@@ -2062,7 +2003,7 @@ class JsonGenerator {
         // Convert set to comma-separated string
         const join = (tags: string[]) =>
             tags.
-            map(t => StringUtils.stripQuotes(t)).
+            map(t => C4Utils.stripQuotes(t)).
             filter(t => t !== undefined).
             join(',');
 
@@ -2137,7 +2078,7 @@ class JsonGenerator {
                 // Extract inline GroupProperty from grammar
                 const groupProperty = (comp as any).groupProps?.at(0);
                 if (groupProperty?.value) {
-                    const inlineGroupName = StringUtils.stripQuotes(groupProperty.value);
+                    const inlineGroupName = C4Utils.stripQuotes(groupProperty.value);
                     if (inlineGroupName) {
                         // Merge external group path with inline group property
                         compGroup = compGroup ? `${compGroup}/${inlineGroupName}` : inlineGroupName;
@@ -2478,6 +2419,7 @@ class JsonGenerator {
                     description: this.description(view),
                     elements: Array.from(elements).map(el => this.elementJson(el)),
                     relationships: Array.from(relationships).map(rel => this.elementJson(rel)),
+                    enterpriseBoundaryVisible: true,
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships)
@@ -3294,6 +3236,15 @@ class JsonGenerator {
                 if (!rel) continue;
                 rel.vertices = rawVerticesById[id].map(v => ({ x: Math.round(v.x + shiftX), y: Math.round(v.y + shiftY) }));
             }
+        } else {
+            // Dynamic views keep straight lines, so forward + response steps
+            // between the same pair of elements would overlap. Replicate the
+            // reference renderer's adjustVertices() fan-out: place one
+            // perpendicular vertex at the line midpoint for every overlapping
+            // sibling, alternating sides. The coordinates are already in paper
+            // space (view.elements[] has the final x/y), so no extra shift is
+            // needed here.
+            this.applyDynamicSiblingFanOut(view);
         }
 
         view.dimensions = {
@@ -3308,6 +3259,121 @@ class JsonGenerator {
         // The DOT string was only an intermediate layout input - drop it from the
         // generated JSON so no transitive graphviz artifact leaks into the output.
         delete view.graphviz;
+    }
+
+    /**
+     * Replicates the reference renderer's `adjustVertices()` fan-out for dynamic
+     * views. Forward and response steps between the same pair of elements would
+     * otherwise be drawn as overlapping straight lines; this places a single
+     * perpendicular vertex at the line midpoint for each overlapping sibling,
+     * alternating left/right, so the arrows separate exactly as the original
+     * Structurizr web UI does.
+     *
+     * The element positions come from `view.elements[]`, which already hold the
+     * final paper-space x/y/width/height written by applyGraphvizLayoutToView,
+     * so no coordinate transform is needed here.
+     */
+    private applyDynamicSiblingFanOut(view: any): void {
+        if (!Array.isArray(view.elements) || !Array.isArray(view.relationships)) return;
+
+        // Element center lookup by id (paper-space coordinates).
+        const centerById: Record<string, { x: number; y: number }> = {};
+        for (const el of view.elements) {
+            if (el && el.id !== undefined && typeof el.x === 'number' && typeof el.y === 'number') {
+                centerById[el.id] = {
+                    x: el.x + (typeof el.width === 'number' ? el.width / 2 : 0),
+                    y: el.y + (typeof el.height === 'number' ? el.height / 2 : 0)
+                };
+            }
+        }
+
+        // Group steps by undirected pair, preserving the order they appear in.
+        const steps = view.relationships.filter((r: any) => r && r.id !== undefined) as any[];
+        const groups = new Map<string, any[]>();
+        const orderOf: string[] = [];
+        for (const rel of steps) {
+            // Find the source/destination ids via the model relationship to get
+            // the true endpoints. view.relationships only carries id + order +
+            // description; the model relationship is resolved via this.getId.
+            let key: string | undefined;
+            const modelRel = this.relationships.find(r => this.getId(r) === rel.id);
+            if (modelRel) {
+                const sourceId = rel.response === true
+                    ? this.getId(this.resolveTarget(modelRel))
+                    : this.getId(this.resolveSource(modelRel));
+                const targetId = rel.response === true
+                    ? this.getId(this.resolveSource(modelRel))
+                    : this.getId(this.resolveTarget(modelRel));
+                key = [sourceId, targetId].sort().join('|');
+                rel.sourceId = sourceId;
+                rel.destinationId = targetId;
+            }
+            if (key === undefined) continue;
+            if (!groups.has(key)) {
+                groups.set(key, []);
+                orderOf.push(key);
+            }
+            groups.get(key)!.push(rel);
+        }
+
+        const GAP = 150;
+        const toRad = (deg: number) => (deg * Math.PI) / 180;
+
+        for (const key of orderOf) {
+            const siblings = groups.get(key)!;
+            // Only fan out when at least two siblings have no vertices (i.e.
+            // they would overlap once rendered).
+            const withoutVertices = siblings.filter(s =>
+                s.vertices === undefined || (Array.isArray(s.vertices) && s.vertices.length === 0)
+            );
+            if (withoutVertices.length < 2) continue;
+
+            const first = withoutVertices[0];
+            const a = centerById[first.sourceId];
+            const b = centerById[first.destinationId];
+            if (!a || !b) continue;
+
+            const midX = (a.x + b.x) / 2;
+            const midY = (a.y + b.y) / 2;
+
+            // JointJS Point.theta: angle from x axis to p, with the y axis
+            // inverted, normalized to [0, 360) degrees.
+            const y = -(b.y - a.y);
+            const dx = b.x - a.x;
+            let thetaDeg = (Math.atan2(y, dx) * 180) / Math.PI;
+            if (thetaDeg < 0) thetaDeg += 360;
+
+            withoutVertices.forEach((sibling, index) => {
+                let offsetIndex = index;
+                if (siblings.length % 2 === 0) {
+                    offsetIndex++;
+                }
+                const offset = GAP * Math.ceil(offsetIndex / 2);
+
+                // Alternate left/right of the base line (odd -> +1, even -> -1).
+                const sign = index % 2 ? 1 : -1;
+                const angleRad = toRad(thetaDeg + sign * 90);
+
+                // Point.fromPolar: abs of the components, then quadrant fix.
+                const cosA = Math.cos(angleRad);
+                const sinA = Math.sin(angleRad);
+                let vx = Math.abs(offset * cosA);
+                let vy = Math.abs(offset * sinA);
+                let deg = angleRad * 180 / Math.PI;
+                while (deg < 0) deg += 360;
+                deg %= 360;
+                if (deg < 90) {
+                    vy = -vy;
+                } else if (deg < 180) {
+                    vx = -vx;
+                    vy = -vy;
+                } else if (deg < 270) {
+                    vx = -vx;
+                }
+
+                sibling.vertices = [{ x: Math.round(midX + vx), y: Math.round(midY + vy) }];
+            });
+        }
     }
 
     /**
@@ -3639,7 +3705,7 @@ class JsonGenerator {
         // element.tag==<tag>[,tag]: all elements that have all of the specified tags
         // element.tag!=<tag>[,tag]: all elements that do not have all of the specified tags
         else if (isElementTagExpression(e)) {
-            const searchTags = e.values.map(t => StringUtils.stripQuotes(t));
+            const searchTags = e.values.map(t => C4Utils.stripQuotes(t));
             this.elements.forEach(el => {
                 const elTags = this.extractTags(el)?.split(',') || [];
                 const hasAllTags = searchTags.every(st => elTags.includes(st));
@@ -3650,7 +3716,7 @@ class JsonGenerator {
         // element.technology==<technology>: all elements with the specified technology
         // element.technology!=<technology>: all elements without the specified technology
         else if (isElementTechnologyExpression(e)) {
-            const searchTech = StringUtils.stripQuotes(e.value);
+            const searchTech = C4Utils.stripQuotes(e.value);
             this.elements.forEach(el => {
                 const elTech = this.technology(el) || '';
                 const matches = e.operator === '==' ? elTech === searchTech : elTech !== searchTech;
@@ -3659,14 +3725,14 @@ class JsonGenerator {
         }
         // element.properties[name]==value: all elements that have the specified property with the specified value
         else if (isElementPropertiesExpression(e)) {
-            const propName = StringUtils.stripQuotes(e.name);
-            const propValue = StringUtils.stripQuotes(e.value);
+            const propName = C4Utils.stripQuotes(e.name);
+            const propValue = C4Utils.stripQuotes(e.value);
             this.elements.forEach(el => {
                 const props = (el as any).properties?.at(0);
                 if (props && Array.isArray(props.items)) {
                     const match = props.items.find((item: any) =>
-                        StringUtils.stripQuotes(item.name) === propName &&
-                        StringUtils.stripQuotes(item.value) === propValue
+                        C4Utils.stripQuotes(item.name) === propName &&
+                        C4Utils.stripQuotes(item.value) === propValue
                     );
                     if (match && isAllowed(el)) res.add(el);
                 }
@@ -3674,7 +3740,7 @@ class JsonGenerator {
         }
         // element.group==name
         else if (isElementGroupExpression(e)) {
-            const searchGroup = StringUtils.stripQuotes(e.value);
+            const searchGroup = C4Utils.stripQuotes(e.value);
             this.elements.forEach(el => {
                 const elGroup = this.extractGroup(el) || '';
                 if (elGroup === searchGroup && isAllowed(el)) res.add(el);
@@ -3683,7 +3749,7 @@ class JsonGenerator {
         // relationship.tag==<tag>[,tag]: all relationships that have all of the specified tags
         // relationship.tag!=<tag>[,tag]: all relationships that do not have all of the specified tags
         else if (isRelationshipTagExpression(e)) {
-            const searchTags = e.values.map(t => StringUtils.stripQuotes(t));
+            const searchTags = e.values.map(t => C4Utils.stripQuotes(t));
             relationshipsAtScope.forEach(r => {
                 const relTags = this.extractTags(r, 'Relationship')?.split(',') || [];
                 const hasAllTags = searchTags.every(st => relTags.includes(st));
@@ -3707,14 +3773,14 @@ class JsonGenerator {
         }
         // relationship.properties[name]==value: all relationships that have the specified property with the specified value
         else if (isRelationshipPropertiesExpression(e)) {
-            const propName = StringUtils.stripQuotes(e.name);
-            const propValue = StringUtils.stripQuotes(e.value);
+            const propName = C4Utils.stripQuotes(e.name);
+            const propValue = C4Utils.stripQuotes(e.value);
             relationshipsAtScope.forEach(r => {
                 const props = (r as any).properties?.at(0);
                 if (props && Array.isArray(props.items)) {
                     const match = props.items.find((item: any) =>
-                        StringUtils.stripQuotes(item.name) === propName &&
-                        StringUtils.stripQuotes(item.value) === propValue
+                        C4Utils.stripQuotes(item.name) === propName &&
+                        C4Utils.stripQuotes(item.value) === propValue
                     );
                     if (match) {
                         if(elementsAtView.has(r.source) && elementsAtView.has(r.target)) res.add(r.relationship);
@@ -3864,7 +3930,7 @@ class JsonGenerator {
                     const values = (tagProp as any).values || (tagProp as any).value;
                     if (Array.isArray(values)) {
                         for (const v of values) {
-                            const stripped = StringUtils.stripQuotes(typeof v === 'string' ? v : v.value);
+                            const stripped = C4Utils.stripQuotes(typeof v === 'string' ? v : v.value);
                             if (stripped) {
                                 for (const t of stripped.split(',')) {
                                     const trimmed = t.trim();
@@ -3873,7 +3939,7 @@ class JsonGenerator {
                             }
                         }
                     } else if (typeof values === 'string') {
-                        const stripped = StringUtils.stripQuotes(values);
+                        const stripped = C4Utils.stripQuotes(values);
                         if (stripped) {
                             for (const t of stripped.split(',')) {
                                 const trimmed = t.trim();
@@ -3890,7 +3956,7 @@ class JsonGenerator {
             // Apply url
             if (extension.urlProps && extension.urlProps.length > 0) {
                 const urlProp = extension.urlProps[0];
-                overlay.url = StringUtils.stripQuotes(urlProp.value) || overlay.url;
+                overlay.url = C4Utils.stripQuotes(urlProp.value) || overlay.url;
             }
 
             // Apply properties (merge)
@@ -3898,8 +3964,8 @@ class JsonGenerator {
                 for (const propBlock of extension.properties) {
                     if (propBlock.items) {
                         for (const item of propBlock.items) {
-                            const name = StringUtils.stripQuotes(item.name);
-                            const value = StringUtils.stripQuotes(item.value);
+                            const name = C4Utils.stripQuotes(item.name);
+                            const value = C4Utils.stripQuotes(item.value);
                             if (name && value) {
                                 if (!overlay.properties) overlay.properties = {};
                                 overlay.properties[name] = value;
@@ -3937,7 +4003,7 @@ class JsonGenerator {
                     const values = (tagProp as any).values || (tagProp as any).value;
                     if (Array.isArray(values)) {
                         for (const v of values) {
-                            const stripped = StringUtils.stripQuotes(typeof v === 'string' ? v : v.value);
+                            const stripped = C4Utils.stripQuotes(typeof v === 'string' ? v : v.value);
                             if (stripped) {
                                 for (const t of stripped.split(',')) {
                                     const trimmed = t.trim();
@@ -3946,7 +4012,7 @@ class JsonGenerator {
                             }
                         }
                     } else if (typeof values === 'string') {
-                        const stripped = StringUtils.stripQuotes(values);
+                        const stripped = C4Utils.stripQuotes(values);
                         if (stripped) {
                             for (const t of stripped.split(',')) {
                                 const trimmed = t.trim();
@@ -3963,7 +4029,7 @@ class JsonGenerator {
             // Apply url
             if (directive.urlProps && directive.urlProps.length > 0) {
                 const urlProp = directive.urlProps[0];
-                overlay.url = StringUtils.stripQuotes(urlProp.value) || overlay.url;
+                overlay.url = C4Utils.stripQuotes(urlProp.value) || overlay.url;
             }
 
             // Apply properties (merge)
@@ -3971,8 +4037,8 @@ class JsonGenerator {
                 for (const propBlock of directive.properties) {
                     if (propBlock.items) {
                         for (const item of propBlock.items) {
-                            const name = StringUtils.stripQuotes(item.name);
-                            const value = StringUtils.stripQuotes(item.value);
+                            const name = C4Utils.stripQuotes(item.name);
+                            const value = C4Utils.stripQuotes(item.value);
                             if (name && value) {
                                 if (!overlay.properties) overlay.properties = {};
                                 overlay.properties[name] = value;
@@ -4956,7 +5022,7 @@ class JsonGenerator {
                 title: this.substitute(view.titleProps?.at(0)?.value),
                 elements: Array.from(elements).map(el => this.elementJson(el)),
                 relationships: Array.from(relationships).map(el => this.elementJson(el)),
-                externalSoftwareSystemBoundariesVisible: true,
+                enterpriseBoundaryVisible: true,
                 automaticLayout: this.transformAutoLayout(view),
                 // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                 graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeSystem, false, elements, relationships)
@@ -4984,7 +5050,6 @@ class JsonGenerator {
                     description: this.description(view),
                     elements: Array.from(elements).map(el => this.elementJson(el)),// elements,,
                     relationships: Array.from(relationships).map(el => this.elementJson(el)),
-                    externalSoftwareSystemBoundariesVisible: true,
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeSystem, true, elements, relationships)
@@ -5012,7 +5077,6 @@ class JsonGenerator {
                     description: this.description(view),
                     elements: Array.from(elements).map(el => this.elementJson(el)),// elements,,
                     relationships: Array.from(relationships).map(el => this.elementJson(el)),
-                    externalSoftwareSystemBoundariesVisible: true,
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeContainer, true, elements, relationships)
@@ -5030,7 +5094,7 @@ class JsonGenerator {
         const parent = deploymentNode.$container;
         if(parent) {
             if(isDeploymentEnvironment(parent)) {
-                return StringUtils.stripQuotes(parent.name);
+                return C4Utils.stripQuotes(parent.name);
             }
             if(isDeploymentNode(parent) || isSoftwareSystemInstance(parent) || isContainerInstance(parent) || isInfrastructureNode(parent) || isGroup(parent)) {
                 return this.getEnvironment(parent);
@@ -5046,7 +5110,7 @@ class JsonGenerator {
                     let current: AstNode | undefined = includeDirective.$container;
                     while (current) {
                         if (isDeploymentEnvironment(current)) {
-                            return StringUtils.stripQuotes((current as any).name);
+                            return C4Utils.stripQuotes((current as any).name);
                         }
                         if (isDeploymentNode(current) || isSoftwareSystemInstance(current) || isContainerInstance(current) || isInfrastructureNode(current) || isGroup(current)) {
                             return this.getEnvironment(current);
@@ -5069,7 +5133,7 @@ class JsonGenerator {
         const views = workspace.viewsBlocks?.at(0)?.views.filter(isDeploymentView)
             .map(view => {
                 const scopeSystem = view.softwareSystem?.ref;
-                const environment = (view.all === '*' || !view.environment.ref) ? undefined : StringUtils.stripQuotes(view.environment.ref.name);
+                const environment = (view.all === '*' || !view.environment.ref) ? undefined : C4Utils.stripQuotes(view.environment.ref.name);
                 const elements = new Set<RelationshipMember>();
                 const relationships = new Set<Relationship>();
                 this.resolveDeployment(view, elements, relationships, environment, scopeSystem);
@@ -5208,11 +5272,15 @@ class JsonGenerator {
                     // If relationship found (direct or reverse), emit the step
                     if (modelRel) {
                         const stepDescription = this.description(member) || (isResponse ? undefined : this.description(modelRel));
+                        // `response` is only emitted when the step is a reverse
+                        // (response) relationship - mirrors the original Java
+                        // RelationshipView, where the field is null by default
+                        // and omitted from JSON (NON_NULL).
                         steps.push({
                             id: this.getId(modelRel),
                             order: finalOrder,
                             description: stepDescription,
-                            response: isResponse
+                            ...(isResponse ? { response: true } : {})
                         });
                         // Layout edge: direction source -> target of the step, so the
                         // layout places the participants in step order. The
@@ -5256,7 +5324,7 @@ class JsonGenerator {
 
     /** Parses a comma-separated tag string into a cleaned array of tags. */
     private readonly parseTags = (p: string | undefined): string[] =>
-        (this.substitute(p) ?? '').split(',').map(StringUtils.stripQuotes).filter(Boolean);
+        (this.substitute(p) ?? '').split(',').map(C4Utils.stripQuotes).filter(Boolean);
 
 };
 

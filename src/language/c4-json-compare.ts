@@ -78,11 +78,11 @@ const IGNORED_KEYS = new Set([
     'properties',
     // Structurizr adds empty configuration at root level
     'configuration',
-    // Structurizr adds these to views, we don't
+    // Structurizr emits this on landscape/context views (we do too) but not on
+    // container/component views — skip to avoid mismatch noise
     'enterpriseBoundaryVisible',
     // Our actual adds fields that Structurizr doesn't
     'type',
-    'externalSoftwareSystemBoundariesVisible',
     'automaticLayout',
     // View rendering details — our generator doesn't produce these
     'dimensions',

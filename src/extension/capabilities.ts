@@ -17,6 +17,7 @@
 import { COPY_CAPABILITY_CODE } from './config';
 import { generateHmac } from './hmac';
 import { EventEmitter, ExtensionContext, MarkdownString, ThemeIcon, TreeDataProvider, TreeItem, TreeItemCollapsibleState, window, workspace, Event, commands, env } from 'vscode';
+import { URI } from 'vscode-uri';
 
 class CapabilityItem extends TreeItem {
 	name: string = '';
@@ -41,16 +42,45 @@ export class CapabilityProvider implements TreeDataProvider<CapabilityItem> {
 	private readonly createCapabilityChild: (items: CapabilityItem) => Promise<CapabilityItem[]>;
 	private readonly createCapabilityRoot: () => Promise<CapabilityItem[]>;
 
+	/**
+	 * Reads the current `archops.api.url` configuration on every call so a config
+	 * change takes effect on the next request without needing to reload the
+	 * extension. Trailing slashes are stripped to build clean request URLs.
+	 */
+	private getApiUrl(): string | undefined {
+		return workspace.getConfiguration().get<string>('archops.api.url')?.replace(/\/+$/, '');
+	}
+
+	/**
+	 * Builds the full request URL for an API path and validates it with
+	 * vscode-uri. URI.parse is lenient (it never throws and silently treats
+	 * bare strings as file paths), so validity is checked manually: the scheme
+	 * must be http(s) and the authority (host) must be non-empty. Returns the
+	 * URL string when valid, or undefined otherwise.
+	 */
+	private buildRequestUrl(path: string): string | undefined {
+		const apiUrl = this.getApiUrl();
+		if (!apiUrl) return undefined;
+
+		const url = `${apiUrl}${path}`;
+		const uri = URI.parse(url);
+		if ((uri.scheme !== 'http' && uri.scheme !== 'https') || uri.authority.length === 0) {
+			return undefined;
+		}
+		return url;
+	}
+
 	constructor(context: ExtensionContext) {
 		const view = window.createTreeView('capabilities-catalogue', { treeDataProvider: this, showCollapseAll: true, canSelectMany: true });
 		context.subscriptions.push(view);
-  		const archopsApiUrl = workspace.getConfiguration().get<string>('archops.api.url')?.replace(/\/+$/, '');
 		this.createCapabilityChild = async (chapter: CapabilityItem): Promise<CapabilityItem[]> => {
 			const children: string = `/${chapter.bcid}/children`;
 			const path = this.PATH + this.ROOT_ID + children;
 			const headers = generateHmac('GET', path);
 			try {
-				const response = await fetch(archopsApiUrl + path, { headers });
+				const requestUrl = this.buildRequestUrl(path);
+				if (!requestUrl) return [];
+				const response = await fetch(requestUrl, { headers });
 				if (!response.ok) {
 					return [];
 				}
@@ -86,7 +116,9 @@ export class CapabilityProvider implements TreeDataProvider<CapabilityItem> {
 		this.createCapabilityRoot = async (): Promise<CapabilityItem[]> => {
 			const headers = generateHmac('GET', this.PATH + this.ROOT_ID);
 			try {
-				const response = await fetch(archopsApiUrl + this.PATH + this.ROOT_ID + this.PARAMS, { headers });
+				const requestUrl = this.buildRequestUrl(this.PATH + this.ROOT_ID + this.PARAMS);
+				if (!requestUrl) return [];
+				const response = await fetch(requestUrl, { headers });
 				if (!response.ok) {
 					return [];
 				}

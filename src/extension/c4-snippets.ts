@@ -21,7 +21,7 @@ class SnippetItem extends TreeItem {
 	langId: string  = '';
 	snippetName: string = '';
 	hover: string[] = [];
-	childrens: SnippetItem[] = [];
+	childrens?: SnippetItem[];
 }
 
 export class C4Snippets implements TreeDataProvider<SnippetItem> {
@@ -38,7 +38,8 @@ export class C4Snippets implements TreeDataProvider<SnippetItem> {
 
 	createSnippetItem(patterns: SnippetItem[]): SnippetItem[] {
 		patterns.forEach(pattern => {
-			if (pattern.childrens.length === 0) {
+			const children = pattern.childrens ?? [];
+			if (children.length === 0) {
 				pattern.command = {
 					command: "c4.insert.snippet",
 					title: "Insert Snippet",
@@ -50,17 +51,17 @@ export class C4Snippets implements TreeDataProvider<SnippetItem> {
 			} else {
 				pattern.collapsibleState = TreeItemCollapsibleState.Collapsed;
 			}
-			this.createSnippetItem(pattern.childrens);
+			this.createSnippetItem(children);
 		});
 		return patterns;
 	}
 
 	async getChildren(element?: SnippetItem): Promise<SnippetItem[]> {
 		if (element) {
-			return element.childrens;
+			return element.childrens ?? [];
 		}
 		const data = await workspace.fs.readFile(this.uri);
 		let pattern = JSON.parse(data.toString()) as SnippetItem
-		return this.createSnippetItem(pattern.childrens);
+		return this.createSnippetItem(pattern.childrens ?? []);
 	}
 }

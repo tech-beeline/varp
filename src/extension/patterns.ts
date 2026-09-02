@@ -17,7 +17,7 @@
 import { ExtensionContext, TreeDataProvider, TreeItem, WebviewPanel, workspace, window, TreeItemCollapsibleState, commands, EventEmitter, Event, ViewColumn, Uri } from 'vscode';
 import { generateHmac } from './hmac';
 import { GET_PATTERN_DSL, REFRESH_PATTERNS, SHOW_PATTERN_DESCRIPTION } from './config';
-import { Utils } from 'vscode-uri';
+import { Utils, URI } from 'vscode-uri';
 
 class PatternItem extends TreeItem {
     title: string = '';
@@ -37,11 +37,37 @@ export class PatternProvider implements TreeDataProvider<PatternItem> {
 
   private readonly initItem: (items: PatternItem[]) => Promise<PatternItem[]>;
 
+  /**
+   * Reads the current `archops.api.url` configuration on every call so a config
+   * change takes effect on the next request without needing to reload the
+   * extension. Trailing slashes are stripped to build clean request URLs.
+   */
+  private getApiUrl(): string | undefined {
+    return workspace.getConfiguration().get<string>('archops.api.url')?.replace(/\/+$/, '');
+  }
+
+  /**
+   * Builds the full request URL for an API path and validates it with
+   * vscode-uri. URI.parse is lenient (it never throws and silently treats
+   * bare strings as file paths), so validity is checked manually: the scheme
+   * must be http(s) and the authority (host) must be non-empty. Returns the
+   * URL string when valid, or undefined otherwise.
+   */
+  private buildRequestUrl(path: string): string | undefined {
+    const apiUrl = this.getApiUrl();
+    if (!apiUrl) return undefined;
+
+    const url = `${apiUrl}${path}`;
+    const uri = URI.parse(url);
+    if ((uri.scheme !== 'http' && uri.scheme !== 'https') || uri.authority.length === 0) {
+      return undefined;
+    }
+    return url;
+  }
+
   constructor(context: ExtensionContext) {
     const view = window.createTreeView('patterns-catalogue', { treeDataProvider: this, showCollapseAll: true, canSelectMany: true });
     context.subscriptions.push(view);
-    const archopsApiUrl = workspace.getConfiguration().get<string>('archops.api.url')?.replace(/\/+$/, '');
-
     this.initItem = async (items: PatternItem[]) : Promise<PatternItem[]> => {
       items.forEach(async item => {
         item.label = item.title;
@@ -73,8 +99,10 @@ export class PatternProvider implements TreeDataProvider<PatternItem> {
 
     commands.registerCommand(GET_PATTERN_DSL, async (element: PatternItem) => {
       const id = this.CONTENT_ID + element.dsl;
+      const requestUrl = this.buildRequestUrl(this.PATH + id);
+      if (!requestUrl) return;
       const headers = generateHmac('GET', this.PATH + id);
-      const response = await fetch(archopsApiUrl + this.PATH + id, { headers });
+      const response = await fetch(requestUrl, { headers });
       if(response.body) {
           const content = await response.text();
           const document = await workspace.openTextDocument({ content, language: 'c4' });
@@ -92,8 +120,10 @@ export class PatternProvider implements TreeDataProvider<PatternItem> {
       if (this.lastDocs !== args[1]) {
         this.lastDocs = args[1];
         const id = this.CONTENT_ID + args[1];
+        const requestUrl = this.buildRequestUrl(this.PATH + id);
+        if (!requestUrl) return;
         const headers = generateHmac('GET', this.PATH + id);
-        const response = await fetch(archopsApiUrl + this.PATH + id, { headers });
+        const response = await fetch(requestUrl, { headers });
         const body = await response.text();
 
         this.currentPanel.title = args[0];
@@ -119,9 +149,10 @@ export class PatternProvider implements TreeDataProvider<PatternItem> {
     if(element) {
       return element.childrens;
     }
-    const archopsApiUrl = workspace.getConfiguration().get<string>('archops.api.url')?.replace(/\/+$/, '');
+    const requestUrl = this.buildRequestUrl(this.PATH + this.INDEX_ID);
+    if (!requestUrl) return this.initItem([]);
     const headers = generateHmac('GET', this.PATH + this.INDEX_ID);
-    const response = await fetch(archopsApiUrl + this.PATH + this.INDEX_ID, { headers });
+    const response = await fetch(requestUrl, { headers });
     const root = await response.json() as PatternItem;
     return this.initItem(root.childrens);
   }

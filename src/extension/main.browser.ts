@@ -31,7 +31,7 @@ export function activate(context: vscode.ExtensionContext): void {
         documentSelector: [{ scheme: 'file', language: 'c4' }, { scheme: 'untitled', language: 'c4' }]
     };
 
-    client = new LanguageClient('c4', 'C4', clientOptions, worker);
+    client = new LanguageClient('c4', 'C4', worker, clientOptions);
     client.start().then(() => {
         setLanguageClient(client);
     });

@@ -219,8 +219,8 @@
     "@hpcc-js/wasm-graphviz": "^1.28.0",
     "@modelcontextprotocol/sdk": "^1.9.0",
     "langium": "~4.3.1",
-    "vscode-languageclient": "~9.0.1",
-    "vscode-languageserver": "~9.0.1"
+    "vscode-languageclient": "~10.0.0",
+    "vscode-languageserver": "~10.0.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

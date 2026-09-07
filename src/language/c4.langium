@@ -1208,7 +1208,7 @@ PropertyKey returns string:
     UNQUOTED_STRING | ASSIGNMENT | DOT_SUFFIX | STRING | AnyKeyword;
 
 PropertyValue returns string:
-    (UNQUOTED_STRING | ASSIGNMENT | DOT_SUFFIX | INT | STRING | AnyKeyword | '=' | ';' | '.' | '/' | '-' )+;
+    (UNQUOTED_STRING | PATH_TOKEN | ASSIGNMENT | DOT_SUFFIX | INT | STRING | AnyKeyword | '=' | ';' | '.' | '/' | '-' )+;
 
 NameProperty:
     NAME_KW value=STRING;
@@ -1220,7 +1220,7 @@ TechnologyProperty:
     TECHNOLOGY_KW value=STRING;
 
 UrlProperty:
-    URL_KW value=(STRING | UNQUOTED_STRING);
+    URL_KW value=(PATH_TOKEN | STRING | UNQUOTED_STRING);
 
 // ═════════════════════════════════════════════════════════════════════════════
 // TYPE ALIASES
@@ -1287,8 +1287,9 @@ ScriptDirective:
 IgnoredScriptBody returns string:
     (
         '(' | ')' | '=' | '[' | ']' | ';' | '.' | ':' | '/' | '-' | ',' | '$' | ARROW | NO_ARROW | '>' | '*' | '@' | '!' | '+'
-        | STRING 
-        | UNQUOTED_STRING 
+        | STRING
+        | UNQUOTED_STRING
+        | PATH_TOKEN
         | RELATIONSHIP_SOURCE
         | INT 
         | NL 
@@ -1769,6 +1770,15 @@ terminal NO_ARROW: '-/>';
 // Hyphen suffix: -<text> (but not ->, -/>, or --)
 terminal HYPHEN_SUFFIX: /-(?![->\/])([\w\u00A0-\uFFFF.\/\\:()]|-(?![>\/]))*/;
 
+// Path token: a single unquoted file path or URL that contains at least one
+// of the path-only characters (& + % ~ # ?). Requiring one of these makes the
+// token lexically DISJOINT from every keyword/identifier/expression token
+// (none of which contain & + % ~ # ?), so it can never shadow `workspace`,
+// `person`, `element.tag==`, etc. on a lexer length tie-break. Paths without
+// any such character still parse via ComplexIdentifier/STRING. Character
+// validity beyond these separators is enforced in the TypeScript validator.
+terminal PATH_TOKEN: /[a-zA-Z0-9_\u00A0-\uFFFF][\w\u00A0-\uFFFF.\/\\:@%&+~$?=()\[\]#-]*[&+%~#?][\w\u00A0-\uFFFF.\/\\:@%&+~$?=()\[\]#-]*/;
+
 // ─── Identifier rules ──────────────────────────────────────────────────────
 
 // Identifier: quoted or unquoted reference
@@ -1915,7 +1925,7 @@ AnyKeyword returns string:
 
 // Path: a complex identifier or quoted string (used for file paths, URLs, etc.)
 Path returns string:
-    ComplexIdentifier | STRING;
+    PATH_TOKEN | ComplexIdentifier | STRING;
 
 // QualifiedName: an identifier optionally with dot-separated hierarchy
 QualifiedName returns string:

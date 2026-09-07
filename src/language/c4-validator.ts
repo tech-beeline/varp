@@ -15,7 +15,7 @@
 */
 
 import { AstNode, AstUtils, type ValidationAcceptor, type ValidationChecks } from 'langium';
-import { ElementStyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, RelationshipStyle, ViewsBlock, type C4AstType, type Workspace, PropertyItem, ModelBlock, isDeploymentEnvironment, Include, SoftwareSystem } from '../generated/ast';
+import { ElementStyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, RelationshipStyle, ViewsBlock, type C4AstType, type Workspace, PropertyItem, ModelBlock, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
 import * as includeResolver from './c4-include-resolver';
@@ -260,10 +260,26 @@ export function registerValidationChecks(services: C4Services) {
         Group: [
             (node, accept) => validator.checkGroupIncludeElements(node, accept)
         ],
+        Include: [
+            (node, accept) => validator.checkPathCharacters(node, accept, 'file')
+        ],
+        DocsDirective: [
+            (node, accept) => validator.checkPathCharacters(node, accept, 'path')
+        ],
+        AdrsDirective: [
+            (node, accept) => validator.checkPathCharacters(node, accept, 'path')
+        ],
+        ThemeProperty: [
+            (node, accept) => validator.checkPathCharacters(node, accept, 'value')
+        ],
+        IconProperty: [
+            (node, accept) => validator.checkPathCharacters(node, accept, 'value')
+        ],
         Workspace: [
             (node, accept) => validator.checkWorkspaceMetadata(node, accept),
             (node, accept) => validator.checkUniqueViewKeys(node, accept),
-            (node, accept) => validator.checkOnlyOneDefaultView(node, accept)
+            (node, accept) => validator.checkOnlyOneDefaultView(node, accept),
+            (node, accept) => validator.checkPathCharacters(node, accept, 'extendsUri')
         ]
     };
     registry.register(checks, validator);
@@ -649,6 +665,29 @@ export class C4Validator {
             for (let index = 1; index < workspace.viewsBlocks.length; index++) {
                 accept('error', "Multiple view sets are not permitted in a DSL definition.", { node: workspace, property: 'viewsBlocks', index });
             }
+        }
+    }
+
+    /**
+     * Validates path-bearing values ('file' for !include, 'extendsUri' on
+     * Workspace, 'path' for !docs/!adrs, 'value' for theme/icon). The grammar
+     * accepts a broad set of path characters, so the character policy lives
+     * here: reject control characters, NUL and stray quote characters in the
+     * unquoted portion of the path. Quoted paths (STRING) and the marker
+     * characters used for file paths/URLs (& + % ~ # ? = etc.) are allowed.
+     */
+    checkPathCharacters(node: any, accept: ValidationAcceptor, property: string): void {
+        const raw = node?.[property];
+        if (typeof raw !== 'string' || raw.length === 0) return;
+        // Quoted paths are legal — skip validation when the value starts with a quote.
+        if (raw.startsWith('"') || raw.startsWith("'")) return;
+
+        const invalid = /[\x00-\x1F\x7F"']/;
+        if (invalid.test(raw)) {
+            const bad = raw.match(invalid)?.[0];
+            accept('error',
+                `Invalid character '${bad}' in ${property === 'file' ? 'include path' : property === 'extendsUri' ? 'extends path' : 'path'}. Only legal filesystem/URL characters are allowed.`,
+                { node, property });
         }
     }
 

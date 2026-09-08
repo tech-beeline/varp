@@ -429,16 +429,33 @@ structurizr.drawio._updateGroupBoundary = function(gb, view, workspace, darkMode
  * Возвращает Map: fullName -> { name, fullName, children, minX, minY, maxX, maxY, fontSize, ... }
  */
 structurizr.drawio._collectRawGroupBoundaries = function(view, workspace, elementsOnDiagram, darkMode) {
-    var groupSep = (workspace.model && workspace.model.properties) ? workspace.model.properties['structurizr.groupSeparator'] : '';
+    // Group separator: prefer the explicit structurizr.groupSeparator property,
+    // falling back to the generator's default "/" (the C4 generator joins group
+    // paths with "/" when the property is absent). Do NOT fall back to "." — that
+    // would split/attach group names containing a dot wrongly.
+    var groupSep = (workspace.model && workspace.model.properties && workspace.model.properties['structurizr.groupSeparator'])
+        ? workspace.model.properties['structurizr.groupSeparator']
+        : '/';
     var groups = {};
+
+    // Split group path into trimmed segments so "A / B / C" and "A/B/C" are
+    // treated identically (users may put spaces around the separator).
+    var splitGroup = function(group) {
+        var parts = groupSep ? String(group).split(groupSep) : [group];
+        for (var j = 0; j < parts.length; j++) {
+            parts[j] = parts[j].trim();
+        }
+        return parts;
+    };
 
     for (var id in elementsOnDiagram) {
         if (!elementsOnDiagram.hasOwnProperty(id)) continue;
         var info = elementsOnDiagram[id], el = info.element;
         if (!el.group) continue;
-        var names = groupSep ? el.group.split(groupSep) : [el.group];
+        var names = splitGroup(el.group);
         var path = '';
         for (var gi = 0; gi < names.length; gi++) {
+            if (!names[gi]) continue; // skip empty segments
             path += (path ? groupSep : '') + names[gi];
             if (!groups[path]) {
                 groups[path] = {
@@ -461,8 +478,8 @@ structurizr.drawio._collectRawGroupBoundaries = function(view, workspace, elemen
     for (var i = 0; i < groupKeys.length; i++) {
         var key = groupKeys[i];
         var g = groups[key];
-        // Ищем родителя
-        var lastSep = key.lastIndexOf(groupSep || '.');
+        // Ищем родителя по групповому разделителю (groupSep уже / или кастомный).
+        var lastSep = key.lastIndexOf(groupSep);
         if (lastSep > 0) {
             var parentKey = key.substring(0, lastSep);
             var parent = groups[parentKey];
@@ -481,9 +498,10 @@ structurizr.drawio._collectRawGroupBoundaries = function(view, workspace, elemen
         var w = es.width || 450;
         var h = (es.shape === 'Hexagon') ? Math.round(0.89 * w) : (es.height || 300);
         var x = ev.x || 0, y = ev.y || 0;
-        var names = groupSep ? el.group.split(groupSep) : [el.group];
+        var names = splitGroup(el.group);
         var path = '';
         for (var gi = 0; gi < names.length; gi++) {
+            if (!names[gi]) continue; // skip empty segments
             path += (path ? groupSep : '') + names[gi];
             var g = groups[path];
             if (g) {
@@ -581,27 +599,73 @@ structurizr.drawio._createBoundaryForElements = function(elementIds, elementsOnD
 };
 
 structurizr.drawio._collectDeploymentNodeBoundaries = function(view, workspace, elementsOnDiagram, boundaries, darkMode) {
+    // Deployment nodes appear in view.elements as a flat list, but the model
+    // nodes themselves carry nested `children`. Emitting a boundary per flat
+    // entry duplicates ids for nested nodes. Instead we walk only the root
+    // deployment nodes (those not referenced as a `child` on the diagram) and
+    // descend recursively, so every id is emitted exactly once (post-order),
+    // matching the Java MxExporter's stack-based boundary tree. View elements
+    // have no parentId (only {id,x,y}), so we derive nesting from `children`.
+    var dnMap = {};
+    var nested = {};
     for (var id in elementsOnDiagram) {
         if (!elementsOnDiagram.hasOwnProperty(id)) continue;
         var info = elementsOnDiagram[id];
-        if (info.element.type === 'DeploymentNode') {
-            structurizr.drawio._processDeploymentNode(info.element, view, workspace, elementsOnDiagram, boundaries, darkMode);
+        if (info.element && info.element.type === 'DeploymentNode') {
+            dnMap[id] = info.element;
+            var kids = info.element.children;
+            if (kids) {
+                for (var ki = 0; ki < kids.length; ki++) {
+                    if (kids[ki] && kids[ki].id !== undefined) nested[String(kids[ki].id)] = true;
+                }
+            }
         }
+    }
+    var seenBoundaryIds = {};
+    var emitRoot = function(dn) {
+        // Descend children first (post-order) and collect their bounding boxes,
+        // so a parent that contains only nested deployment nodes (no direct
+        // instances) still gets a frame that encompasses its children — mirrors
+        // the Java MxExporter's updateDeploymentNodeBoundary aggregation.
+        if (!dn || seenBoundaryIds[String(dn.id)]) return null;
+        var childBoxes = [];
+        if (dn.children) {
+            for (var ci = 0; ci < dn.children.length; ci++) {
+                var box = emitRoot(dn.children[ci]);
+                if (box) childBoxes.push(box);
+            }
+        }
+        return structurizr.drawio._processDeploymentNode(dn, view, workspace, elementsOnDiagram, boundaries, darkMode, seenBoundaryIds, childBoxes);
+    };
+    // Root nodes: deployment nodes not nested as a child of another on the diagram.
+    for (var rid in dnMap) {
+        if (!dnMap.hasOwnProperty(rid)) continue;
+        if (nested[String(dnMap[rid].id)]) continue; // nested child -> handled by its root
+        emitRoot(dnMap[rid]);
     }
 };
 
-structurizr.drawio._processDeploymentNode = function(dn, view, workspace, elementsOnDiagram, boundaries, darkMode) {
+structurizr.drawio._processDeploymentNode = function(dn, view, workspace, elementsOnDiagram, boundaries, darkMode, seenBoundaryIds, childBoxes) {
+    var dnId = String(dn && dn.id);
+    if (dnId && seenBoundaryIds[dnId]) return null;
+    if (dnId) seenBoundaryIds[dnId] = true;
+
+    // Descending into dn.children is handled by the caller (emitRoot), which walks
+    // the tree post-order and passes each child's computed box via childBoxes, so
+    // a parent with only nested deployment nodes still encloses them.
     var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, cm = 25;
-    if (dn.children) {
-        for (var ci = 0; ci < dn.children.length; ci++) {
-            structurizr.drawio._processDeploymentNode(dn.children[ci], view, workspace, elementsOnDiagram, boundaries, darkMode);
+    function findView(eid) { if (!view.elements) return null; for (var i = 0; i < view.elements.length; i++) { if (view.elements[i].id === eid) return view.elements[i]; } return null; }
+    if (childBoxes) {
+        for (var cb = 0; cb < childBoxes.length; cb++) {
+            var ch = childBoxes[cb];
+            minX = Math.min(minX, ch.minX); minY = Math.min(minY, ch.minY);
+            maxX = Math.max(maxX, ch.maxX); maxY = Math.max(maxY, ch.maxY);
         }
     }
-    function findView(eid) { if (!view.elements) return null; for (var i = 0; i < view.elements.length; i++) { if (view.elements[i].id === eid) return view.elements[i]; } return null; }
     if (dn.softwareSystemInstances) { for (var si = 0; si < dn.softwareSystemInstances.length; si++) { var ssi = dn.softwareSystemInstances[si], ev = findView(ssi.id); if (ev && ev.x !== undefined) { var es = structurizr.ui.findElementStyle(ssi, darkMode); var w = es.width || 450, h = (es.shape === 'Hexagon') ? Math.round(0.89 * w) : (es.height || 300); minX = Math.min(minX, ev.x); minY = Math.min(minY, ev.y); maxX = Math.max(maxX, ev.x + w); maxY = Math.max(maxY, ev.y + h); } } }
     if (dn.containerInstances) { for (var ci2 = 0; ci2 < dn.containerInstances.length; ci2++) { var ci = dn.containerInstances[ci2], ev = findView(ci.id); if (ev && ev.x !== undefined) { var es = structurizr.ui.findElementStyle(ci, darkMode); var w = es.width || 450, h = (es.shape === 'Hexagon') ? Math.round(0.89 * w) : (es.height || 300); minX = Math.min(minX, ev.x); minY = Math.min(minY, ev.y); maxX = Math.max(maxX, ev.x + w); maxY = Math.max(maxY, ev.y + h); } } }
     if (dn.infrastructureNodes) { for (var ii = 0; ii < dn.infrastructureNodes.length; ii++) { var inode = dn.infrastructureNodes[ii], ev = findView(inode.id); if (ev && ev.x !== undefined) { var es = structurizr.ui.findElementStyle(inode, darkMode); var w = es.width || 450, h = (es.shape === 'Hexagon') ? Math.round(0.89 * w) : (es.height || 300); minX = Math.min(minX, ev.x); minY = Math.min(minY, ev.y); maxX = Math.max(maxX, ev.x + w); maxY = Math.max(maxY, ev.y + h); } } }
-    if (minX === Infinity) return;
+    if (minX === Infinity) return null;
     var es = structurizr.ui.findElementStyle(dn, darkMode);
     var tc = (es.color && structurizr.drawio._hasColor(es.color)) ? es.color : '#444444';
     var sc = (es.stroke && structurizr.drawio._hasColor(es.stroke)) ? es.stroke : '#666666';
@@ -611,10 +675,11 @@ structurizr.drawio._processDeploymentNode = function(dn, view, workspace, elemen
     maxY += structurizr.drawio._fontHeight('Helvetica', mfs);
     var tech = dn.technology || '';
     var label = '<font style="font-size:' + fs + 'px"><b><div style="text-align: left">' + structurizr.drawio._escapeXml(dn.name || '') + '</div></b></font><div style="text-align: left">[' + (tech ? 'DeploymentNode: ' + structurizr.drawio._escapeXml(tech) : 'DeploymentNode') + ']</div>';
-    boundaries.push({ id: dn.id, name: dn.name || '', minX: minX, minY: minY, maxX: maxX, maxY: maxY,
+    boundaries.push({ id: dnId, name: dn.name || '', minX: minX, minY: minY, maxX: maxX, maxY: maxY,
         textColor: tc, strokeColor: sc, strokeWidth: sw, fontSize: fs,
         dashPattern: '8 8', isGroup: false, label: label, technology: tech,
         c4Type: 'DeploymentNodeScopeBoundary' });
+    return { id: dnId, minX: minX, minY: minY, maxX: maxX, maxY: maxY };
 };
 
 structurizr.drawio._writeBoundary = function(lines, boundary, parentId) {

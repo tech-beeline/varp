@@ -68,6 +68,28 @@ export async function readViewJsonHandler(
     return text({ project: projectUri, key: args.key, view });
 }
 
+/**
+ * Returns the complete resolved Structurizr workspace JSON: model, views,
+ * configuration, styles/themes, documentation and any other top-level section.
+ * Unlike read-model-json this is not limited to the model, so clients can access
+ * e.g. view styles, themes and workspace configuration.
+ */
+export async function readRawWorkspaceJsonHandler(
+    source: C4ModelSource,
+    args: { uri?: string },
+    logger?: McpLogger,
+): Promise<CallToolResult> {
+    logger?.('info', { tool: 'read-raw-workspace-json', event: 'start', uri: args.uri });
+    const projectUri = await resolveProject(source, args.uri);
+    const json = await source.getContent(projectUri);
+    if (!json) {
+        logger?.('warning', { tool: 'read-raw-workspace-json', event: 'no-model', projectUri });
+        return text({ error: `No model found for ${projectUri}` });
+    }
+    logger?.('info', { tool: 'read-raw-workspace-json', event: 'complete', projectUri });
+    return text({ project: projectUri, workspace: json });
+}
+
 /** Registers the raw-JSON access tools (Phase 2c) on the MCP server. */
 export function registerJsonTools(server: McpServer, source: C4ModelSource): void {
     const logger: McpLogger = (level, data) => void server.sendLoggingMessage({ level, data });
@@ -93,5 +115,15 @@ export function registerJsonTools(server: McpServer, source: C4ModelSource): voi
             }),
         },
         async (args: { key: string; uri?: string }) => readViewJsonHandler(source, args, logger),
+    );
+
+    server.registerTool(
+        'read-raw-workspace-json',
+        {
+            title: 'Read raw C4 workspace JSON',
+            description: 'Complete resolved Structurizr workspace JSON: model, views, configuration, styles/themes, documentation and more.',
+            inputSchema: z.object({ uri: uriArgSchema() }),
+        },
+        async (args: { uri?: string }) => readRawWorkspaceJsonHandler(source, args, logger),
     );
 }

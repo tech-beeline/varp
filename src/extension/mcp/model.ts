@@ -190,3 +190,24 @@ export function flattenModel(uri: string, json: any): FlattenedModel {
         views,
     };
 }
+
+export interface ElementDetail {
+    element: McpElement;
+    /** Views that include the element (key + view type). */
+    includedInViews: { key: string; type: string }[];
+}
+
+/**
+ * Resolves a single element of a flattened model plus the views that include it.
+ * Shared by the single-element and batch MCP tools.
+ */
+export function elementDetail(model: FlattenedModel, id: string): ElementDetail | undefined {
+    const element = model.elements.find(e => e.id === id);
+    if (!element) {
+        return undefined;
+    }
+    const includedInViews = model.views
+        .filter(v => v.elementIds.includes(id))
+        .map(v => ({ key: v.key, type: v.type }));
+    return { element, includedInViews };
+}

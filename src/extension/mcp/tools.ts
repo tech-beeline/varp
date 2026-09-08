@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { C4ModelSource } from './model';
-import { flattenModel } from './model';
+import { elementDetail, flattenModel } from './model';
 
 /** Logger abstraction fed into tool handlers; wired to MCP `logging` notifications. */
 export type McpLogger = (level: LoggingLevel, data: unknown) => void;
@@ -119,16 +119,13 @@ export async function readElementHandler(
         return text({ error: `No model found for ${projectUri}` });
     }
     const model = flattenModel(projectUri, json);
-    const element = model.elements.find(e => e.id === args.id);
-    if (!element) {
+    const detail = elementDetail(model, args.id);
+    if (!detail) {
         logger?.('warning', { tool: 'read-element', event: 'not-found', id: args.id });
         return text({ error: `Element ${args.id} not found in ${projectUri}` });
     }
-    const includedInViews = model.views
-        .filter(v => v.elementIds.includes(args.id))
-        .map(v => ({ key: v.key, type: v.type }));
-    logger?.('info', { tool: 'read-element', event: 'complete', id: args.id, includedInViewCount: includedInViews.length });
-    return text({ element, includedInViews });
+    logger?.('info', { tool: 'read-element', event: 'complete', id: args.id, includedInViewCount: detail.includedInViews.length });
+    return text({ element: detail.element, includedInViews: detail.includedInViews });
 }
 
 /** Registers the read-only C4 model tools on the MCP server. */

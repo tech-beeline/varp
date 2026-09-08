@@ -5,8 +5,10 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { C4ModelSource } from './model';
 import { registerTools } from './tools';
 import { registerReadTools } from './tools-read';
+import { registerViewTools } from './tools-view';
 import { registerGraphTools } from './tools-graph';
 import { registerJsonTools } from './tools-json';
+import { registerBatchTools } from './tools-batch';
 import { registerResources } from './resources';
 import { registerPrompts } from './prompts';
 
@@ -25,6 +27,11 @@ Conventions:
   overview (element counts by type, total relationships, views), then
   "search-element" / "read-element" to inspect specific elements and their
   outgoing relationships and the views that include them.
+- "batch-read-elements" reads several elements in a single call (reduces round-trips).
+- "element-diff" compares two elements side-by-side (attributes, metadata, tags, relationships).
+- "subgraph-summary" gives a compact summary of all descendants of an element.
+- "list-views" lists all views of a project as a compact catalog (with an optional type filter).
+- "read-raw-workspace-json" returns the full resolved workspace JSON (model, views, configuration, styles/themes, documentation).
 - Project resources are available at c4://projects and c4://project/{uri}.
 - Prompts: summarize-project, explore-element.`;
 
@@ -56,8 +63,10 @@ export async function startC4McpServer(
     server.server.onerror = (err) => console.error('[C4 MCP] protocol error:', err);
     registerTools(server, source);
     registerReadTools(server, source);
+    registerViewTools(server, source);
     registerGraphTools(server, source);
     registerJsonTools(server, source);
+    registerBatchTools(server, source);
     registerResources(server, source);
     registerPrompts(server, source);
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { C4ModelSource } from './model';
 import { parseToolResult } from './tools';
-import { readModelJsonHandler, readViewJsonHandler } from './tools-json';
+import { readModelJsonHandler, readRawWorkspaceJsonHandler, readViewJsonHandler } from './tools-json';
 
 const PROJECT_URI = 'file:///main.dsl';
 
@@ -64,6 +64,35 @@ describe('read-view-json', () => {
 
     it('returns an error for an unknown view key', async () => {
         const result = parseToolResult(await readViewJsonHandler(source, { key: 'no-such-view' }));
+        expect(result.error).toBeTruthy();
+    });
+});
+
+describe('read-raw-workspace-json', () => {
+    it('returns the full resolved workspace JSON', async () => {
+        const result = parseToolResult(await readRawWorkspaceJsonHandler(source, {}));
+
+        expect(result.error).toBeUndefined();
+        expect(result.project).toBe(PROJECT_URI);
+        expect(result.workspace).toBeDefined();
+        expect(result.workspace.name).toBe('Json');
+        expect(result.workspace.model.people).toHaveLength(1);
+        expect(result.workspace.views.systemLandscapeViews[0].key).toBe('Landscape-SystemLandscape-abc');
+    });
+
+    it('returns the raw workspace unchanged (includes styles/configuration sections)', async () => {
+        const raw = workspaceJson() as any;
+        raw.styles = { elements: [{ tag: 'Element', color: '#123456' }] };
+        raw.configuration = { users: [] };
+        const result = parseToolResult(await readRawWorkspaceJsonHandler(mockSource(raw as any), {}));
+
+        expect(result.workspace.styles.elements[0].color).toBe('#123456');
+        expect(result.workspace.configuration).toEqual({ users: [] });
+    });
+
+    it('returns an error when no model is available', async () => {
+        const empty = mockSource(null);
+        const result = parseToolResult(await readRawWorkspaceJsonHandler(empty, {}));
         expect(result.error).toBeTruthy();
     });
 });

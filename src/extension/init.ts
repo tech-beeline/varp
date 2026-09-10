@@ -207,7 +207,7 @@ async function refreshDiagram(uri: string, json: any): Promise<void> {
 async function getThemesForPreview(themeUrls: string[] | undefined): Promise<{ url: string; content: string }[] | undefined> {
     const urls = (Array.isArray(themeUrls) ? themeUrls : []).filter(u => /^https?:\/\//i.test(u));
     if (urls.length === 0 || !languageClient) {
-        return []; // no http(s) themes - nothing to inject
+        return undefined; // no http(s) themes - nothing to inject
     }
     try {
         const res: any = await languageClient.sendRequest('custom/getThemes', { themes: urls });
@@ -313,11 +313,16 @@ export function init(context: ExtensionContext): void {
 
             if (payload) {
                 try {
-                    const themes = await getThemesForPreview(payload?.views?.configuration?.themes);
-                    if (themes !== undefined) {
-                        preview.setThemes(themes);
-                    }
+                    // Kick off the theme download asynchronously NOW (while the
+                    // webview renders the diagram with default styles), then
+                    // render immediately. When the theme arrives it is applied
+                    // on top via refresh() without blocking the initial paint.
+                    const themePromise = getThemesForPreview(payload?.views?.configuration?.themes);
                     await preview.updateWebView(payload, viewKey, docUri);
+                    const themes = await themePromise;
+                    if (themes !== undefined) {
+                        preview.updateWebView(payload, viewKey, docUri, themes);
+                    }
 
                     // Open a side-panel with the raw JSON for debugging
                     // const content = JSON.stringify(payload, null, 2);

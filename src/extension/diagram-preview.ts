@@ -40,10 +40,6 @@ export class DiagramPreview {
   // Set by openPreview(), cleared when updateWebView() delivers the JSON.
   private pendingJson = false;
 
-  // Pre-fetched theme contents (from the language server cache) sent to the
-  // webview so it does not re-download the theme files on every render.
-  private themes: { url: string; content: string }[] | undefined;
-
   private readonly title: string = 'Diagram Preview';
   private readonly id: string = 'structurizrPreview';
 
@@ -83,7 +79,7 @@ export class DiagramPreview {
     this.localResourceRoots = [Uri.joinPath(context.extensionUri, 'css'), Uri.joinPath(context.extensionUri, 'js')];
   }
 
-  public async updateWebView(json : any, viewKey : string, docUri? : string) {
+  public async updateWebView(json : any, viewKey : string, docUri? : string, themes : { url: string; content: string }[] | undefined = undefined) {
         console.log(`[C4 Gen] View Key: ${viewKey}`);
         this.currentViewKey = viewKey;
         this.currentJson = json;
@@ -92,19 +88,16 @@ export class DiagramPreview {
         }
         this.panel ??= this.createPanel();
         this.pendingJson = false;
-        const message = { 'json': json, 'viewKey': viewKey, 'themes': this.themes };
+        // Themes travel with the message they were passed to - no instance-level
+        // storage needed (the webview applies them before building the Diagram).
+        const message = { 'json': json, 'viewKey': viewKey, 'themes': themes };
         if (this.panelReady) {
           this.panel.webview.postMessage(message);
         } else {
           // The webview is still loading - hold on to the latest payload and
           // deliver it as soon as the webview signals it is ready.
-          this.pendingMessage = { json, viewKey, themes: this.themes };
+          this.pendingMessage = { json, viewKey, themes };
         }
-  }
-
-  /** Stores pre-fetched theme contents for the current workspace document. */
-  public setThemes(themes: { url: string; content: string }[]): void {
-        this.themes = themes;
   }
 
   /**
@@ -115,7 +108,6 @@ export class DiagramPreview {
   public openPreview(viewKey: string, docUri?: string): void {
         this.currentViewKey = viewKey;
         this.currentJson = undefined;
-        this.themes = undefined;
         if (docUri) {
           this.currentDocUri = docUri;
         }
@@ -246,18 +238,23 @@ export class DiagramPreview {
         window.addEventListener('message', event => {
             const message = event.data;
             if(message.json !== undefined) {
+              structurizr.workspace = undefined;
+              structurizr.diagram = undefined;
+              structurizr.ui.themes = [];
+              structurizr.ui.ignoredImages = [];
+
+              // Completely wipe the DOM container of any previous paper/canvas
+              // (structurizr.ui.Diagram appends '#diagram-viewport'/'#diagram-canvas'
+              // with fixed ids, so a stale one must not remain).
+              $('#diagram').empty();
+
               structurizr.workspace = new structurizr.Workspace(message.json);
               if (message.themes !== undefined) {
-                // Themes are provided by the extension (already cached by the
-                // language server) - inject them without any network I/O.
                 applyThemes(message.themes, function() {
                   buildDiagram(message.viewKey);
                 });
               } else {
-                // Fallback: let the webview download the theme files itself.
-                structurizr.ui.loadThemes(function() {
-                  buildDiagram(message.viewKey);
-                });
+                buildDiagram(message.viewKey);
               }
             } else if (message.command === 'export-drawio') {
               // Export current (displayed) view to DrawIO format
@@ -345,14 +342,18 @@ export class DiagramPreview {
             displayedViewKey = viewKey;
 
             structurizr.diagram.exportCurrentDiagramToSVG(options, function(svgMarkup) {
-              $('#diagram').empty();
+              // IMPORTANT: do NOT empty('#diagram') here. #diagram is the live
+              // Joint-viewport of the current Diagram - wiping it (asynchronously,
+              // after SVG export) can delete the freshly appended canvas of the
+              // NEXT Diagram built by the json message handler, leaving it with a
+              // detached/zero-size canvas and collapsing all bboxes to (0,0).
               $('#svg').html(svgMarkup);
               $('#rendering').hide();
               // Keep the user's zoom/pan when re-rendering the same view; only
               // reset the viewport when switching to a different view.
               if (!sameView) {
                 panzoom.reset({ animate: false });
-              }
+              }              
             });
         }
 

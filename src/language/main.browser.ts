@@ -33,8 +33,8 @@
 import { EmptyFileSystem } from 'langium';
 import { startLanguageServer } from 'langium/lsp';
 import { BrowserMessageReader, BrowserMessageWriter, createConnection } from 'vscode-languageserver/browser';
-import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
+import { HttpCache, defaultFetcher, validateTheme } from './http-cache';
 
 // Create LSP connection using browser-based message transport
 // (postMessage API instead of Node.js stdin/stdout)
@@ -49,9 +49,11 @@ const connection = createConnection(messageReader, messageWriter);
 
 const baseProvider = EmptyFileSystem.fileSystemProvider();
 
-// In-memory cache for fetched URL content to avoid redundant network requests
-const fetchCache = new Map<string, { content: string; timestamp: number }>();
-const INCLUDE_CACHE_TTL = 60000; // 60 seconds — same as Node.js version
+// Shared cache for fetched URL content (http/https). A single TTL applies to
+// every downloaded document (includes, extendsUri targets and remote themes).
+// Themes additionally run a validator on first download: invalid themes are
+// cached as "invalid for the TTL" and are never delivered to the preview.
+const httpCache = new HttpCache(defaultFetcher);
 
 // Store reference to the original (no-op) readFile
 const originalReadFile = (baseProvider as any).readFile.bind(baseProvider);
@@ -60,24 +62,10 @@ const originalReadFile = (baseProvider as any).readFile.bind(baseProvider);
 (baseProvider as any).readFile = async function(uri: any) {
     const uriString = uri.toString();
     
-    // Handle http/https URLs via fetch with caching
+    // Handle http/https URLs via fetch with caching (no theme validation here -
+    // include/extendsUri documents are not themes).
     if (uriString.startsWith('http://') || uriString.startsWith('https://')) {
-        // Check cache first
-        const cached = fetchCache.get(uriString);
-        if (cached && Date.now() - cached.timestamp < INCLUDE_CACHE_TTL) {
-            return cached.content;
-        }
-
-        // Fetch from remote URL using the browser's built-in fetch API
-        const response = await fetch(uriString);
-        if (!response.ok) {
-            throw new Error(`Failed to fetch ${uriString}: ${response.status}`);
-        }
-        const text = await response.text();
-
-        // Store in cache
-        fetchCache.set(uriString, { content: text, timestamp: Date.now() });
-        return text;
+        return await httpCache.readRemoteWithCache(uriString);
     }
     
     // For unsupported schemes in the browser, fall back to the original (empty) provider
@@ -119,9 +107,11 @@ connection.onRequest('custom/getFullContentForUri', async (params: { uri: string
 
 // ─── Custom LSP Request Handler: Themes ─────────────────────────────────────
 // Returns the raw JSON content of the requested theme files so the diagram
-// preview webview can render without re-downloading them. Reading through the
-// (patched) FileSystemProvider reuses the fetchCache in this file, so already
-// downloaded themes are served from memory instead of the network.
+// preview webview can render without re-downloading them. Themes are validated
+// before being cached: an invalid theme (malformed JSON, missing required
+// fields, or unavailable images) is cached as invalid for the HTTP_CACHE_TTL
+// and is NOT included in the response, so the webview never receives a theme
+// that would break rendering.
 connection.onRequest('custom/getThemes', async (params: { themes: string[] }) => {
     const urls = Array.isArray(params?.themes) ? params.themes : [];
     const themes: { url: string; content: string }[] = [];
@@ -130,10 +120,10 @@ connection.onRequest('custom/getThemes', async (params: { themes: string[] }) =>
             continue; // only http(s) themes are fetched; built-ins are not supported here
         }
         try {
-            const content = await (baseProvider as any).readFile(URI.parse(url));
+            const content = await httpCache.readRemoteWithCache(url, validateTheme);
             themes.push({ url, content });
         } catch (err) {
-            console.warn(`[C4 Themes] Could not read theme ${url}:`, err);
+            console.warn(`[C4 Themes] Skipping invalid or unreadable theme ${url}:`, err);
         }
     }
     return { themes };

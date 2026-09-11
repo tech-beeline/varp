@@ -85,8 +85,8 @@ const { shared, C4 } = createC4Services({
 // client (extension host) so it can refresh the open diagram preview. This
 // avoids the race where the client pulls JSON on save before the language
 // server has finished rebuilding/generating.
-C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json) => {
-    connection.sendNotification('custom/contentUpdated', { uri, json });
+C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json, generation) => {
+    connection.sendNotification('custom/contentUpdated', { uri, json, generation });
 };
 
 // ─── Custom LSP Request Handler ────────────────────────────────────────────
@@ -94,8 +94,10 @@ C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json) => {
 // the latest generated JSON (e.g., on file save, for diagram preview refresh).
 // Returns the cached JSON content for rendering.
 connection.onRequest('custom/getContentForUri', (params: { uri: string }) => {
+    // Returns { json, generation } so the client can tell "same cached build,
+    // just changeView" from a fresh/different build (which needs a full rebuild).
     const content = C4.generation.C4GeneratorHandler.getContentForUri(params.uri);
-    return content ? { json: content } : null;
+    return content ? { json: content.json, generation: content.generation } : null;
 });
 
 // Returns the FULL Structurizr-compatible JSON for the given URI: the cached

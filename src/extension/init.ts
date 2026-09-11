@@ -65,9 +65,10 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
     }
     refreshNotificationRegistered = true;
 
-    client.onNotification('custom/contentUpdated', async (params: { uri: string; json: any }) => {
+    client.onNotification('custom/contentUpdated', async (params: { uri: string; json: any; generation?: number }) => {
         const uri = params?.uri;
         const json = params?.json;
+        const generation = params?.generation;
         if (!uri || !json) {
             return;
         }
@@ -78,7 +79,7 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
 
         if (preview.getCurrentDocUri() === uri) {
             // Fast path: the notification belongs to the bound document.
-            renderPreviewIfApplicable(uri, json, preview);
+            renderPreviewIfApplicable(uri, json, generation, preview);
             return;
         }
 
@@ -93,7 +94,7 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
         try {
             const res: any = await languageClient.sendRequest('custom/getRootUri', { uri: preview.getCurrentDocUri() });
             if (res?.rootUri === uri) {
-                renderPreviewIfApplicable(uri, json, preview);
+                renderPreviewIfApplicable(uri, json, generation, preview);
             }
         } catch {
             // unrelated / transient failure - ignore the notification
@@ -119,12 +120,12 @@ function isDocumentDirty(uri: string): boolean {
  * update while onSave only renders when the document is clean (saved). Renders
  * are coalesced via scheduleRefresh so bursts produce one webview update.
  */
-function renderPreviewIfApplicable(uri: string, json: any, preview: DiagramPreview): void {
+function renderPreviewIfApplicable(uri: string, json: any, generation: number | undefined, preview: DiagramPreview): void {
     const mode = getAutoRefreshMode();
     const dirty = isDocumentDirty(uri);
     const pending = preview.isPendingJson();
     if (pending || mode === 'onChange' || !dirty) {
-        scheduleRefresh(uri, json);
+        scheduleRefresh(uri, json, generation);
     }
 }
 
@@ -132,11 +133,11 @@ function renderPreviewIfApplicable(uri: string, json: any, preview: DiagramPrevi
 // flush is scheduled on the next microtask, so notifications delivered within the
 // same tick (a burst of contentUpdated) only produce ONE postMessage + webview
 // re-render with the freshest payload - intermediate versions are skipped.
-let pendingRefresh: { uri: string; json: any } | undefined;
+let pendingRefresh: { uri: string; json: any; generation?: number } | undefined;
 let refreshQueued = false;
 
-function scheduleRefresh(uri: string, json: any): void {
-    pendingRefresh = { uri, json };
+function scheduleRefresh(uri: string, json: any, generation?: number): void {
+    pendingRefresh = { uri, json, generation };
     if (refreshQueued) {
         return;
     }
@@ -146,7 +147,7 @@ function scheduleRefresh(uri: string, json: any): void {
         const pending = pendingRefresh;
         pendingRefresh = undefined;
         if (pending) {
-            void refreshDiagram(pending.uri, pending.json);
+            void refreshDiagram(pending.uri, pending.json, pending.generation);
         }
     });
 }
@@ -180,7 +181,7 @@ function resolveFreshViewKey(json: any, currentKey: string | undefined): string 
 }
 
 /** Renders fresh JSON into the open preview bound to the given root document URI. */
-async function refreshDiagram(uri: string, json: any): Promise<void> {
+async function refreshDiagram(uri: string, json: any, generation?: number): Promise<void> {
     const preview = diagramPreview;
     if (!preview || !preview.isOpen()) {
         return;
@@ -195,7 +196,7 @@ async function refreshDiagram(uri: string, json: any): Promise<void> {
     // Themes are fetched once when the preview is opened and are already stored
     // on the preview (included in every postMessage), so re-rendering the same
     // diagram must not block on re-fetching theme files.
-    await preview.updateWebView(json, viewKey, uri);
+    await preview.updateWebView(json, viewKey, uri, undefined, generation);
 }
 
 
@@ -302,10 +303,12 @@ export function init(context: ExtensionContext): void {
             // is not ready yet, the panel stays open and the push notification
             // (custom/contentUpdated) delivers the JSON once generation completes.
             let payload: any;
+            let generation: number | undefined;
             if (languageClient) {
                 try {
                     const res = await languageClient.sendRequest('custom/getContentForUri', { uri: docUri ?? '' });
                     payload = res?.json;
+                    generation = res?.generation;
                 } catch (err) {
                     console.warn('[C4 Preview] fresh JSON fetch failed:', err);
                 }
@@ -318,10 +321,10 @@ export function init(context: ExtensionContext): void {
                     // render immediately. When the theme arrives it is applied
                     // on top via refresh() without blocking the initial paint.
                     const themePromise = getThemesForPreview(payload?.views?.configuration?.themes);
-                    await preview.updateWebView(payload, viewKey, docUri);
+                    await preview.updateWebView(payload, viewKey, docUri, undefined, generation);
                     const themes = await themePromise;
                     if (themes !== undefined) {
-                        preview.updateWebView(payload, viewKey, docUri, themes);
+                        preview.updateWebView(payload, viewKey, docUri, themes, generation);
                     }
 
                     // Open a side-panel with the raw JSON for debugging

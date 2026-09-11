@@ -22,12 +22,35 @@ import * as includeResolver from './c4-include-resolver';
 import { C4JsonEnricher } from './c4-json-enricher';
 
 /**
+ * A generated workspace JSON together with the generation at which it was last
+ * delivered to the client. `generation` is a monotonically increasing counter,
+ * incremented on EVERY json delivery (getContentForUri), so the client can tell
+ * whether a payload is a NEW build (full Workspace rebuild needed) or the SAME
+ * build it already rendered (only a changeView is needed). The pair is stored in
+ * the cache, but the counter itself lives module-level, so the cached JSON object
+ * is never mutated.
+ */
+export interface GeneratedJson {
+    /** The Structurizr-compatible workspace JSON (immutable for consumers). */
+    json: any;
+    /** Generation at which this payload was last delivered. */
+    generation: number;
+}
+
+/**
+ * Global, monotonically increasing generation counter. Bumped on every json
+ * delivery (getContentForUri) so the client can tell "same cached build, new
+ * delivery" (just changeView) from "genuinely new build" (full rebuild).
+ */
+let jsonGeneration = 0;
+
+/**
  * Handles JSON generation lifecycle: listens to document build phases (post-validation),
  * generates Structurizr-compatible JSON for each workspace document, and caches the results.
  * Provides URI-based lookup for the extension to retrieve cached JSON for diagram rendering.
  */
 export class C4GeneratorHandler {
-    private jsonCache: WorkspaceCache<string, any>;
+    private jsonCache: WorkspaceCache<string, GeneratedJson>;
     private services: LangiumServices;
     private cachedUris: Set<string> = new Set();
     /** Enriches the render JSON with the Structurizr-only fields the render pipeline does not produce. */
@@ -37,9 +60,10 @@ export class C4GeneratorHandler {
      * Optional callback invoked after a workspace's JSON has been successfully
      * generated and cached. Used by the language server entry points to notify
      * the client (e.g., custom/contentUpdated) so the diagram preview refreshes
-     * only once fresh JSON is actually available.
+     * only once fresh JSON is actually available. The generation is the counter
+     * for this (uri, json) pair (not mutated into the json).
      */
-    public onJsonGenerated?: (uri: string, json: any) => void;
+    public onJsonGenerated?: (uri: string, json: any, generation: number) => void;
 
     constructor(services: LangiumServices) {
         this.services = services;
@@ -116,10 +140,13 @@ export class C4GeneratorHandler {
         try {
             const generator = (this.services as any).generation.C4JsonGenerator;
             const json = await generator.generate(workspace);
-            this.jsonCache.set(uri, json);
+            // Cache the json WITHOUT mutating it. The generation is not stamped
+            // into the object - getContentForUri bumps the counter per delivery.
+            // Start at the current counter so the first delivery is distinguishable.
+            this.jsonCache.set(uri, { json, generation: jsonGeneration });
             this.cachedUris.add(uri);
             // Notify the client only after the JSON was generated successfully.
-            this.onJsonGenerated?.(uri, json);
+            this.onJsonGenerated?.(uri, json, jsonGeneration);
         } catch (err) {
             console.error(`[C4 Build] Generation failed for ${uri}:`, err);
         }
@@ -180,19 +207,29 @@ export class C4GeneratorHandler {
     }
 
     /**
-     * Public API: retrieves cached JSON for a given document URI.
-     * Finds the root workspace for the URI and returns its cached JSON content.
-     * Returns null if no cached content is found.
+     * Public API: retrieves the cached (json, generation) PAIR for a document URI.
+     * Finds the root workspace for the URI and returns its cached JSON content
+     * together with the current generation. Each call increments the generation
+     * (per delivery) and stores the new pair back, so the client can tell
+     * "same build, just a view switch" (same cached json) from a fresh/different
+     * payload (which requires a full Workspace rebuild). Returns null if no
+     * cached content is found.
      */
-    public getContentForUri(uri: string) : any {
+    public getContentForUri(uri: string): GeneratedJson | null {
         const rootUri = this.getRootUri(uri);
-        const json = this.jsonCache.get(rootUri);
+        const entry = this.jsonCache.get(rootUri);
 
-        if (!json) {
+        if (!entry) {
             console.warn(`[C4 Build] No cached content found for root: ${rootUri}`);
+            return null;
         }
-        
-        return json;
+
+        // Bump the generation on every delivery and cache the new pair so
+        // repeated deliveries of the SAME cached build keep increasing.
+        jsonGeneration += 1;
+        const current: GeneratedJson = { json: entry.json, generation: jsonGeneration };
+        this.jsonCache.set(rootUri, current);
+        return current;
     }
 
     /**
@@ -203,7 +240,7 @@ export class C4GeneratorHandler {
      */
     public getCachedContentForUri(uri: string): any {
         const rootUri = this.getRootUri(uri);
-        return this.jsonCache.get(rootUri);
+        return this.jsonCache.get(rootUri)?.json;
     }
 
     /**
@@ -218,7 +255,8 @@ export class C4GeneratorHandler {
      */
     public async getFullContentForUri(uri: string): Promise<any> {
         const rootUri = this.getRootUri(uri);
-        const renderJson = this.jsonCache.get(rootUri);
+        const entry = this.jsonCache.get(rootUri);
+        const renderJson = entry ? entry.json : undefined;
         if (!renderJson) return undefined;
 
         // Deep-clone the render JSON so the cached copy stays untouched and the

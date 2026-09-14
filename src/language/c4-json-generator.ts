@@ -68,7 +68,9 @@ import {
     isElementsDirective,
     ElementsDirective,
     isRelationshipsDirective,
-    RelationshipsDirective} from '../generated/ast';
+    RelationshipsDirective,
+    ElementExtension,
+    isElementExtension} from '../generated/ast';
 import { C4Services } from './c4-module';
 import * as includeResolver from './c4-include-resolver';
 import { SHAPE_NORMALIZE, BORDER_NORMALIZE, ROUTING_NORMALIZE } from './c4-validator';
@@ -145,6 +147,13 @@ class JsonGenerator {
         properties?: Record<string, string>;
         perspectives?: any[];
     }> = new Map();
+    /**
+     * Children/overlays contributed by `!element` directives (ElementExtension),
+     * keyed by the TARGET AST node (NOT mutated) so extraction functions can look
+     * up what to add to a generated element. Added in generate() before model
+     * extraction, so transform* methods can fold them in.
+     */
+    private readonly elementExtensionsByTarget: Map<NamedElement, ElementExtension[]> = new Map();
 
     /** Terminology overrides for diagram rendering (person, softwareSystem, container, etc.), populated from workspace terminology blocks */
     private terminology: Record<string, string> = {};
@@ -198,6 +207,9 @@ class JsonGenerator {
         // Process !elements and !relationships directives after all elements/relationships are collected
         this.processElementsDirectives(workspace);
         this.processRelationshipsDirectives(workspace);
+
+        // Collect !element (ElementExtension) contributions keyed by target AST node.
+        this.collectElementExtensions(workspace);
 
         const themesArray = Array.from(this.themes);
 
@@ -760,7 +772,11 @@ class JsonGenerator {
                     for (const style of theme.relationships) this.themeRelationshipStyles.push(style);
                 }
             } catch (err) {
-                console.warn(`[C4 Graphviz] Could not load theme ${themeUrl}:`, err);
+                // One-line, stack-less: the failure is either a remote-cache hit
+                // ("Cached document is invalid") or a network/TLS error. A full
+                // stack trace here is pure noise, repeated on every rebuild.
+                const reason = (err instanceof Error) ? err.message : String(err);
+                console.warn(`[C4 Graphviz] Could not load theme ${themeUrl}: ${reason}`);
             }
         }
     }
@@ -2099,6 +2115,7 @@ class JsonGenerator {
             relationships: this.extractRelationshipsForContainer(container).map(el => this.relationshipToJson(el))
         };
         this.applyElementOverlay(result, container);
+        this.applyElementExtensions(result, container);
         return result;
     }
 
@@ -2141,6 +2158,7 @@ class JsonGenerator {
                     relationships: this.extractRelationshipsForSoftwareSystem(s).map(el => this.relationshipToJson(el))
                 };
                 this.applyElementOverlay(result, s);
+                this.applyElementExtensions(result, s);
                 return result;
             });
         return systems.length > 0 ? systems : undefined;
@@ -2256,6 +2274,7 @@ class JsonGenerator {
             relationships: this.extractRelationshipsForDeploymentNode(node).map(el => this.relationshipToJson(el))
         };
         this.applyElementOverlay(jsonNode, node);
+        this.applyElementExtensions(jsonNode, node);
         return jsonNode;
     }
 
@@ -4128,6 +4147,226 @@ class JsonGenerator {
             if (parentWs) {
                 this.processElementsDirectives(parentWs, visited);
             }
+        }
+    }
+
+    /**
+     * Traverses the workspace AST (including !includes / extends) and collects
+     * every `!element` (ElementExtension) keyed by its TARGET AST node. The AST
+     * is NOT mutated - extraction functions later look up this map and fold the
+     * contributed children/overlays into the generated JSON element.
+     */
+    private collectElementExtensions(node: AstNode | undefined, visited: Set<string> = new Set()): void {
+        if (!node) return;
+
+        // Handle C4Document root — step into workspace
+        if (isC4Document(node)) {
+            if (node.workspaces.at(0)) {
+                this.collectElementExtensions(node.workspaces.at(0), visited);
+                return;
+            }
+            if (node.modelBlocks.at(0)) {
+                this.collectElementExtensions(node.modelBlocks.at(0), visited);
+                return;
+            }
+        }
+
+        // Handle Workspace — step into model blocks
+        if (isWorkspace(node)) {
+            if (node.modelBlocks.at(0)) {
+                this.collectElementExtensions(node.modelBlocks.at(0), visited);
+            }
+            return;
+        }
+
+        const anyNode = node as any;
+
+        // Register every ElementExtension on this node by its target AST node.
+        if (Array.isArray(anyNode.elementExtensions)) {
+            for (const ext of anyNode.elementExtensions) {
+                if (!isElementExtension(ext)) continue;
+                const target = (ext.target as any)?.ref as NamedElement | undefined;
+                const key = target ?? ((ext.id as any)?.ref ?? ext.id as any);
+                if (!key) continue;
+                const list = this.elementExtensionsByTarget.get(key);
+                if (list) {
+                    list.push(ext);
+                } else {
+                    this.elementExtensionsByTarget.set(key, [ext]);
+                }
+            }
+        }
+
+        // Recurse into child elements (same-document traversal, no visited)
+        if (Array.isArray(anyNode.elements)) {
+            for (const el of anyNode.elements) {
+                this.collectElementExtensions(el, visited);
+            }
+        }
+
+        // Recurse into elementExtensions' own children (groups/containers/etc.)
+        if (Array.isArray(anyNode.elementExtensions)) {
+            for (const ext of anyNode.elementExtensions) {
+                if (!isElementExtension(ext)) continue;
+                const extAny = ext as any;
+                for (const key of ['containers', 'components', 'nodes', 'infrastructureNodes',
+                    'softwareSystemInstances', 'containerInstances', 'genericInstances', 'groups']) {
+                    if (Array.isArray(extAny[key])) {
+                        for (const child of extAny[key]) {
+                            this.collectElementExtensions(child, visited);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Recurse into !include directives (with visited for cycle prevention)
+        if (Array.isArray(anyNode.includes)) {
+            for (const inc of anyNode.includes) {
+                if (inc.file) {
+                    const includedRoot = this.resolveIncludedRoot(node, inc.file);
+                    if (includedRoot) {
+                        const docUri = AstUtils.getDocument(includedRoot)?.uri.toString();
+                        if (docUri) {
+                            if (visited.has(docUri)) continue;
+                            visited.add(docUri);
+                        }
+                        this.collectElementExtensions(includedRoot, visited);
+                    }
+                }
+            }
+        }
+
+        // Handle extends
+        if (isWorkspace(node) && node.extendsUri) {
+            const parentWs = this.resolveParentWorkspace(node, node.extendsUri);
+            if (parentWs) {
+                this.collectElementExtensions(parentWs, visited);
+            }
+        }
+    }
+
+    /**
+     * Folds children/overlays contributed by `!element` directives into a
+     * generated JSON element. `jsonElement` is a Structurizr-compatible element
+     * object (e.g. from transformContainer/extractSystems), `astElement` is the
+     * AST node it was built from. Looks up elementExtensionsByTarget and merges:
+     *  - child elements (containers/components/nodes/infrastructureNodes/
+     *    instances/groups) into the matching arrays,
+     *  - relationships,
+     *  - overlay fields (tags/url/properties/technology/description/...).
+     */
+    private applyElementExtensions(jsonElement: any, astElement: NamedElement | undefined): void {
+        if (!astElement) return;
+        const exts = this.elementExtensionsByTarget.get(astElement);
+        if (!exts || exts.length === 0) return;
+
+        for (const ext of exts) {
+            // Child containers (target is a SoftwareSystem) -> json.containers
+            if (Array.isArray(ext.containers)) {
+                const list = ext.containers.map(c => this.transformContainer(c));
+                jsonElement.containers = (jsonElement.containers ?? []).concat(list);
+            }
+            // Child components (target is a Container) -> json.components
+            if (Array.isArray(ext.components)) {
+                const list = ext.components.map(c => {
+                    const json: any = {
+                        id: this.getId(c),
+                        name: this.substitute(c.name),
+                        description: this.description(c),
+                        technology: this.technology(c),
+                        group: this.extractGroup(c),
+                        tags: this.extractTags(c, 'Element', 'Component'),
+                        relationships: this.extractRelationshipsForComponent(c).map(el => this.relationshipToJson(el))
+                    };
+                    this.applyElementOverlay(json, c);
+                    return json;
+                });
+                jsonElement.components = (jsonElement.components ?? []).concat(list);
+            }
+            // Child deployment nodes (target is a DeploymentNode) -> json.children
+            if (Array.isArray(ext.nodes)) {
+                const list = ext.nodes.map(n => {
+                    const json = this.transformDeploymentNode(n);
+                    this.applyElementOverlay(json, n);
+                    return json;
+                });
+                // Deployment nodes nest under `children` (matching transformDeploymentNode).
+                jsonElement.children = (jsonElement.children ?? []).concat(list);
+            }
+            // Infrastructure nodes -> json.infrastructureNodes
+            if (Array.isArray(ext.infrastructureNodes)) {
+                const list = ext.infrastructureNodes.map(infra => {
+                    const infraJson: any = {
+                        id: this.getId(infra),
+                        name: this.substitute(infra.name),
+                        description: this.description(infra),
+                        technology: this.technology(infra),
+                        group: this.extractGroup(infra),
+                        tags: this.extractTags(infra, 'Element', 'Infrastructure Node'),
+                        relationships: this.extractRelationshipsForInfrastructureNode(infra).map(el => this.relationshipToJson(el))
+                    };
+                    this.applyElementOverlay(infraJson, infra);
+                    return infraJson;
+                });
+                jsonElement.infrastructureNodes = (jsonElement.infrastructureNodes ?? []).concat(list);
+            }
+            // Relationships added inside the extension body
+            if (Array.isArray(ext.relationships)) {
+                const rels = ext.relationships
+                    .map(r => this.relationshipToJson(r as any))
+                    .filter(Boolean);
+                jsonElement.relationships = (jsonElement.relationships ?? []).concat(rels);
+            }
+            // Overlay fields (tags/url/properties) — reusing the same merge as !elements.
+            const overlayMods = this.collectExtensionOverlay(ext);
+            if (overlayMods) {
+                this.applyOverlayMods(jsonElement, overlayMods);
+            }
+        }
+    }
+
+    /** Extracts overlay-style modifications from an ElementExtension body. */
+    private collectExtensionOverlay(ext: ElementExtension): {
+        tags?: string[]; url?: string; properties?: Record<string, string>; perspectives?: any[];
+    } | undefined {
+        let mods: { tags?: string[]; url?: string; properties?: Record<string, string>; perspectives?: any[] } | undefined;
+
+        if (Array.isArray(ext.tagsProps) && ext.tagsProps.length > 0) {
+            const tags: string[] = [];
+            for (const tp of ext.tagsProps) {
+                for (const tag of tp.values ?? []) {
+                    const t = C4Utils.stripQuotes(String(tag));
+                    if (t) tags.push(t);
+                }
+            }
+            if (tags.length > 0) { mods ??= {}; mods.tags = tags; }
+        }
+        if (Array.isArray(ext.urlProps) && ext.urlProps.length > 0 && (ext.urlProps[0] as any)?.value) {
+            mods ??= {};
+            mods.url = C4Utils.stripQuotes(String((ext.urlProps[0] as any).value));
+        }
+        if (Array.isArray(ext.properties) && ext.properties.length > 0 && (ext.properties[0] as any)?.items) {
+            const props: Record<string, string> = {};
+            for (const item of (ext.properties[0] as any).items ?? []) {
+                const name = C4Utils.stripQuotes(String(item?.name ?? ''));
+                const value = C4Utils.stripQuotes(String(item?.value ?? ''));
+                if (name) props[name] = value;
+            }
+            if (Object.keys(props).length > 0) { mods ??= {}; mods.properties = props; }
+        }
+        return mods;
+    }
+
+    /** Applies collected overlay mods to a JSON element (shared with !elements). */
+    private applyOverlayMods(jsonElement: any, mods: { tags?: string[]; url?: string; properties?: Record<string, string>; perspectives?: any[] }): void {
+        if (mods.tags) {
+            const existing = Array.isArray(jsonElement.tags) ? jsonElement.tags.slice() : [];
+            jsonElement.tags = Array.from(new Set(existing.concat(mods.tags)));
+        }
+        if (mods.url !== undefined) jsonElement.url = mods.url;
+        if (mods.properties) {
+            jsonElement.properties = { ...(jsonElement.properties ?? {}), ...mods.properties };
         }
     }
 

@@ -76,6 +76,18 @@ describe('C4LangiumDocumentFactory (UTF-8 BOM handling)', () => {
         expect(doc?.parseResult.parserErrors).toHaveLength(0);
     });
 
+    it('parses unquoted technology value (technology java) without STRING error', async () => {
+        const { services } = await createProject({
+            'container-tech.dsl': 'workspace "W" {\n model {\n softwareSystem = softwareSystem "S" {\n NRT = container "NRT" {\n technology java\n }\n }\n }\n}\n',
+        });
+        const doc = services.shared.workspace.LangiumDocuments.getDocument(
+            Utils.resolvePath(PROJECT, 'container-tech.dsl'),
+        );
+        expect(doc).toBeDefined();
+        expect(doc?.parseResult.lexerErrors).toHaveLength(0);
+        expect(doc?.parseResult.parserErrors).toHaveLength(0);
+    });
+
     it('resolves references in a BOM-prefixed workspace + included fragment', async () => {
         const { services } = await createProject({
             'workspace-with-bom.dsl': '\uFEFFworkspace "Getting Started" {\n    !include "workspace-with-bom-model.dsl"\n    views {\n        systemContext softwareSystem "SystemContext" "desc" {\n            include *\n        }\n    }\n}\n',

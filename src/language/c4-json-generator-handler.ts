@@ -55,6 +55,11 @@ export class C4GeneratorHandler {
     private cachedUris: Set<string> = new Set();
     /** Enriches the render JSON with the Structurizr-only fields the render pipeline does not produce. */
     private enricher: C4JsonEnricher;
+    /** In-flight generate() promises keyed by root workspace URI. Coalesces the
+     *  duplicate generate() calls that a single build cycle produces (one per
+     *  fragment document), so a root workspace is generated exactly once and its
+     *  external themes are fetched once - not once per fragment. */
+    private readonly pendingGenerate = new Map<string, Promise<void>>();
 
     /**
      * Optional callback invoked after a workspace's JSON has been successfully
@@ -78,65 +83,79 @@ export class C4GeneratorHandler {
     }
 
     /**
-     * Called after each build cycle. Iterates over validated documents and generates/caches
-     * JSON for each workspace root found. Falls back to rebuilding related workspaces
-     * for documents that are include fragments (no workspace root of their own).
+     * Returns the workspace AST node of a document (bare root or wrapped inside a
+     * C4Document), or undefined when the document has no workspace.
      */
-    private updateMemoryCache(documents: LangiumDocument[]) {
-        for (const doc of documents) {
-            // Find the workspace root node
-            const root = doc.parseResult.value;
-            let workspaceNode = undefined;
-
-            if (isWorkspace(root)) {
-                workspaceNode = root;
-            } else if (isC4Document(root)) {
-                // If the file has no explicit Workspace but has elements,
-                // we need to find the document that includes this file.
-                if(root.workspaces?.length === 1) {
-                    workspaceNode = root.workspaces.at(0);
-                }
-            }
-
-            if (workspaceNode) {
-                void this.generateAndCache(doc.uri.toString(), workspaceNode);
-            } else {
-                // Include problem: this file is part of a larger workspace.
-                // Find and rebuild the main workspace document that includes this file.
-                this.rebuildRelatedWorkspaces(doc);
-            }
+    private workspaceNodeOf(doc: LangiumDocument): any | undefined {
+        const root = doc.parseResult.value;
+        if (isWorkspace(root)) {
+            return root;
         }
+        if (isC4Document(root) && root.workspaces?.length === 1) {
+            return root.workspaces.at(0);
+        }
+        return undefined;
     }
 
     /**
-     * Searches the document index for all workspace-type documents and regenerates
-     * their JSON caches. Used when an include file changes — the including workspace
-     * needs to be re-generated even though it wasn't directly modified.
+     * Called after each build cycle. Collects the UNIQUE root workspace documents
+     * reachable from the validated `documents` and generates/caches JSON for each
+     * root exactly once.
+     *
+     * A build cycle passes every changed document (the workspace file AND each
+     * !include fragment). Without dedup, a root workspace would be regenerated
+     * once per fragment (1 + N fragments), and each generation would re-fetch the
+     * same external themes - producing the theme-download spam. Here each root is
+     * generated once: documents that ARE workspaces map to themselves, fragments
+     * resolve to their owning root via findRootWorkspace(), and duplicate roots
+     * are collapsed by the Map key (and by the in-flight guard in generateAndCache).
      */
-    private rebuildRelatedWorkspaces(changedDoc: LangiumDocument) {
-        const allDocs = this.services.shared.workspace.LangiumDocuments.all.toArray();
-        for (const doc of allDocs) {
-            const root = doc.parseResult.value;
-            let workspaceNode = undefined;
-
-            if (isWorkspace(root)) {
-                workspaceNode = root;
-            } else if (isC4Document(root)) {
-                if(root.workspaces?.length === 1) {
-                    workspaceNode = root.workspaces.at(0); 
+    private updateMemoryCache(documents: LangiumDocument[]) {
+        const roots = new Map<string, any>();
+        for (const doc of documents) {
+            const direct = this.workspaceNodeOf(doc);
+            if (direct) {
+                roots.set(doc.uri.toString(), direct);
+            } else {
+                // Fragment (include/extends target, or a bare C4Document): resolve
+                // the owning root workspace and mark it for (re)generation.
+                const rootDoc = this.findRootWorkspace(doc.uri.toString());
+                const rootNode = rootDoc ? this.workspaceNodeOf(rootDoc) : undefined;
+                if (rootDoc && rootNode) {
+                    roots.set(rootDoc.uri.toString(), rootNode);
                 }
             }
-            if (workspaceNode) {
-                void this.generateAndCache(doc.uri.toString(), workspaceNode);
-            }
+        }
+
+        for (const [uri, workspaceNode] of roots) {
+            this.generateAndCache(uri, workspaceNode);
         }
     }
 
     /**
      * Generates Structurizr-compatible JSON for a workspace node and stores it in the cache.
      * Logs errors if generation fails but does not throw (non-critical for the build pipeline).
+     *
+     * Coalesces concurrent calls for the same URI: when a build cycle registers the same
+     * root workspace once per fragment document, all those calls share ONE generation
+     * promise. This both avoids wasted full JSON rebuilds and guarantees the external
+     * theme files are fetched once per rebuild instead of once per fragment.
      */
-    private async generateAndCache(uri: string, workspace: any) {
+    private generateAndCache(uri: string, workspace: any): Promise<void> {
+        const pending = this.pendingGenerate.get(uri);
+        if (pending) {
+            return pending;
+        }
+        const promise = this.doGenerateAndCache(uri, workspace);
+        this.pendingGenerate.set(uri, promise);
+        return promise.finally(() => {
+            if (this.pendingGenerate.get(uri) === promise) {
+                this.pendingGenerate.delete(uri);
+            }
+        });
+    }
+
+    private async doGenerateAndCache(uri: string, workspace: any): Promise<void> {
         try {
             const generator = (this.services as any).generation.C4JsonGenerator;
             const json = await generator.generate(workspace);

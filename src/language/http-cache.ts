@@ -72,6 +72,10 @@ export type ContentValidator = (url: string, text: string, fetcher: Fetcher) => 
  */
 export class HttpCache {
 	private readonly cache = new Map<string, CacheEntry>();
+	/** URL → in-flight fetch promise. Coalesces concurrent requests to the same
+	 *  URL so a burst of calls (e.g. several generate() runs racing on the same
+	 *  theme) issue a single network request instead of N duplicates. */
+	private readonly inFlight = new Map<string, Promise<string>>();
 	private readonly ttl: number;
 	private readonly fetcher: Fetcher;
 
@@ -109,6 +113,32 @@ export class HttpCache {
 			return cached.content as string;
 		}
 
+		// Coalesce concurrent requests: if a fetch for this URL is already in
+		// flight, await the same promise instead of issuing a duplicate network
+		// request. Without this, N simultaneous callers (e.g. several generate()
+		// runs racing on the same theme URL) fire N identical fetches.
+		const pending = this.inFlight.get(url);
+		if (pending) {
+			// Share the in-flight request (success AND failure). Do NOT retry per
+			// waiter on rejection - every waiter falling through to its own fetch
+			// would reproduce the download burst the coalescing is meant to stop.
+			return pending;
+		}
+
+		const request = this.fetchAndCache(url, validator);
+		this.inFlight.set(url, request);
+		try {
+			return await request;
+		} finally {
+			// Only clear the marker if we are still the owner; a stale finally from
+			// an old run must not delete a newer in-flight request.
+			if (this.inFlight.get(url) === request) {
+				this.inFlight.delete(url);
+			}
+		}
+	}
+
+	private async fetchAndCache(url: string, validator?: ContentValidator): Promise<string> {
 		let fetched: FetchResult;
 		try {
 			fetched = await this.fetcher(url);

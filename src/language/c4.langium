@@ -255,6 +255,7 @@ fragment EntryFragment:
         | docs+=DocsDirective
         | adrs+=AdrsDirective
         | elementsDirectives+=ElementsDirective
+        | elementExtensions+=ElementExtension
         | relationshipsDirectives+=RelationshipsDirective
         | properties+=PropertiesBlock
         | scripts+=ScriptDirective
@@ -1217,7 +1218,7 @@ DescriptionProperty:
     DESCRIPTION_KW value=STRING;
 
 TechnologyProperty:
-    TECHNOLOGY_KW value=STRING;
+    TECHNOLOGY_KW value=(STRING | UNQUOTED_STRING | AnyKeyword);
 
 UrlProperty:
     URL_KW value=(PATH_TOKEN | STRING | UNQUOTED_STRING);

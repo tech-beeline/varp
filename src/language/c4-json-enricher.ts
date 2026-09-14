@@ -17,6 +17,7 @@
 import { AstUtils, LangiumSharedCoreServices, type AstNode, type FileSystemNode } from 'langium';
 import { Utils, URI } from 'vscode-uri';
 import { flatId } from './c4-utils';
+import { base64EncodeUtf8, reconstructFullDsl } from './c4-dsl-reconstructor';
 import {
     AdrsDirective,
     AdrsFilter,
@@ -85,6 +86,15 @@ export class C4JsonEnricher {
         if (!doc) return;
         const root = doc.parseResult.value;
         if (!root) return;
+
+        // Workspace-level `dsl` (Structurizr-compatible): base64(UTF-8) of the
+        // FULL DSL text with `!include` expanded, mirroring the original
+        // `StructurizrDslParser` (which inlines include files before parsing)
+        // and `Workspace.toJson()`.
+        if (json && typeof json.dsl !== 'string') {
+            const fullDsl = reconstructFullDsl(this.services, rootUri);
+            json.dsl = base64EncodeUtf8(fullDsl);
+        }
 
         // workspace-level decisions -> json.documentation.decisions
         const workspaceDecisions: Decision[] = [];

@@ -259,7 +259,11 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
                 return targetUri;
             }
         } catch (e) {
-            console.warn(`[C4 Builder] Error loading extends: ${extendsUri}`, e);
+            // One-line, stack-less: remote extends failures (network/TLS or a
+            // cached "invalid" URL) repeated on every rebuild shouldn't dump a
+            // full stack trace into the log.
+            const reason = (e instanceof Error) ? e.message : String(e);
+            console.warn(`[C4 Builder] Error loading extends: ${extendsUri}: ${reason}`);
         }
         return undefined;
     }

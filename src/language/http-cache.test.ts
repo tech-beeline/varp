@@ -35,6 +35,42 @@ const VALID_THEME = JSON.stringify({
 	relationships: [{ tag: 'Relationship', color: '#707070' }]
 });
 
+describe('HttpCache coalescing (concurrent requests share one fetch)', () => {
+	it('issues a single network request for simultaneous readers of the same URL', async () => {
+		const fetchSpy = vi.fn(async () => {
+			// Simulate a slow network round trip so all callers overlap.
+			await new Promise(r => setTimeout(r, 20));
+			return { text: 'hello', response: { ok: true, status: 200 } };
+		});
+		const cache = new HttpCache(fetchSpy as any);
+
+		const results = await Promise.all([
+			cache.readRemoteWithCache('https://x.example/doc'),
+			cache.readRemoteWithCache('https://x.example/doc'),
+			cache.readRemoteWithCache('https://x.example/doc')
+		]);
+		expect(results).toEqual(['hello', 'hello', 'hello']);
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it('shares a single failure across concurrent readers instead of re-fetching per waiter', async () => {
+		let calls = 0;
+		const fetchSpy = vi.fn(async () => {
+			calls += 1;
+			await new Promise(r => setTimeout(r, 20));
+			throw new Error('ECONNRESET');
+		});
+		const cache = new HttpCache(fetchSpy as any);
+
+		await expect(Promise.all([
+			cache.readRemoteWithCache('https://x.example/doc'),
+			cache.readRemoteWithCache('https://x.example/doc'),
+			cache.readRemoteWithCache('https://x.example/doc')
+		])).rejects.toThrow('ECONNRESET');
+		expect(calls).toBe(1);
+	});
+});
+
 describe('validateTheme', () => {
 	it('accepts a well-formed theme with relative and absolute icons', async () => {
 		const fetcher = fetcherFor({

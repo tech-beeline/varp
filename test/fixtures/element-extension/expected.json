@@ -1,0 +1,60 @@
+{
+    "name": "Extension",
+    "description": "Description",
+    "model": {
+        "properties": {},
+        "softwareSystems": [
+            {
+                "id": "softwaresystem_4e066da2",
+                "name": "Software System",
+                "tags": "Element,Software System",
+                "containers": [
+                    {
+                        "id": "container_5b128fe5",
+                        "name": "Web Application",
+                        "tags": "Element,Container",
+                        "components": [
+                            {
+                                "id": "component_6a995cb3",
+                                "name": "UI",
+                                "tags": "Element,Component",
+                                "relationships": []
+                            }
+                        ],
+                        "relationships": []
+                    }
+                ],
+                "relationships": []
+            }
+        ]
+    },
+    "views": {
+        "containerViews": [
+            {
+                "softwareSystemId": "softwaresystem_4e066da2",
+                "key": "Software System-Container-b7e2c74b",
+                "elements": [
+                    {
+                        "id": "container_5b128fe5",
+                        "x": 450,
+                        "y": 449,
+                        "width": 450,
+                        "height": 300
+                    }
+                ],
+                "relationships": [],
+                "dimensions": {
+                    "width": 1350,
+                    "height": 1279
+                }
+            }
+        ],
+        "configuration": {
+            "properties": {},
+            "styles": {
+                "elements": [],
+                "relationships": []
+            }
+        }
+    }
+}

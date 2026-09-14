@@ -50,11 +50,9 @@
                     {
                         "id": "container_5b128c0a",
                         "name": "Database",
-                        "tags": "Element,Container",
-                        "relationships": []
+                        "tags": "Element,Container"
                     }
-                ],
-                "relationships": []
+                ]
             }
         ]
     },
@@ -127,11 +125,7 @@
             }
         ],
         "configuration": {
-            "properties": {},
-            "styles": {
-                "elements": [],
-                "relationships": []
-            }
+            "properties": {}
         }
     }
 }

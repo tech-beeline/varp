@@ -17,14 +17,11 @@
                             {
                                 "id": "component_6a995cb3",
                                 "name": "UI",
-                                "tags": "Element,Component",
-                                "relationships": []
+                                "tags": "Element,Component"
                             }
-                        ],
-                        "relationships": []
+                        ]
                     }
-                ],
-                "relationships": []
+                ]
             }
         ]
     },
@@ -42,7 +39,6 @@
                         "height": 300
                     }
                 ],
-                "relationships": [],
                 "dimensions": {
                     "width": 1350,
                     "height": 1279
@@ -50,11 +46,7 @@
             }
         ],
         "configuration": {
-            "properties": {},
-            "styles": {
-                "elements": [],
-                "relationships": []
-            }
+            "properties": {}
         }
     }
 }

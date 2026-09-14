@@ -15,7 +15,7 @@
 */
 
 import { AstNode, AstUtils, Reference } from 'langium';
-import { URI, Utils } from 'vscode-uri';
+import { URI } from 'vscode-uri';
 import { flatId, C4Utils, type FlatIdResolvers } from './c4-utils';
 import { Graphviz } from '@hpcc-js/wasm-graphviz';
 
@@ -238,11 +238,27 @@ class JsonGenerator {
                 configuration: {
                     properties: this.propertiesViews,
                     themes: themesArray.length > 0 ? themesArray : undefined,
-                    styles: this.styles,
+                    styles: this.styles.elements.length > 0 || this.styles.relationships.length > 0 ? this.styles : undefined,
                     terminology: Object.keys(this.terminology).length > 0 ? this.terminology : undefined
                 }
             }
         };
+
+        // Diagnostic: dump all collected software system ids (from this.elements),
+        // the ids emitted into model.softwareSystems, and every softwareSystemId
+        // used by views, to spot model/view scope mismatches.
+        try {
+            const allSysIds = this.elements.filter(isSoftwareSystem).map((s) => `${this.getId(s)}(type=${(s as any).$type}@${(s as any).$cstNode?.offset ?? -1}:${this.substitute(s.name)})`);
+            const emittedSysIds = (model.softwareSystems ?? []).map((s: any) => `${s.id}:${s.name}`);
+            const viewSysIds: string[] = [];
+            for (const v of (jsonOutput.views.systemContextViews ?? [])) { if (v) viewSysIds.push(String(v.softwareSystemId)); }
+            for (const v of (jsonOutput.views.containerViews ?? [])) { if (v) viewSysIds.push(String(v.softwareSystemId)); }
+            console.warn(`[C4 Gen] SYSOUT all=${JSON.stringify(allSysIds)}`);
+            console.warn(`[C4 Gen] SYSOUT emitted=${JSON.stringify(emittedSysIds)}`);
+            console.warn(`[C4 Gen] SYSOUT viewScopes=${JSON.stringify(viewSysIds)}`);
+        } catch (err) {
+            console.warn(`[C4 Gen] SYSOUT diagnostic error: ${err instanceof Error ? err.message : String(err)}`);
+        }
 
         // Run Graphviz in the plugin (full model context) and bake the resulting
         // coordinates/sizes directly into the view JSON. The webview then renders
@@ -856,7 +872,9 @@ class JsonGenerator {
      * for group paths, converts implicit relationships to synthetic ones.
      */
     private collectLocal(node: any, groupStack: string[] = [], visitedDocs: Set<string> = new Set()) {
-        // Handle C4Document root wrapper: delegate to workspace or model block
+        // Handle C4Document root wrapper: delegate to workspace or model block, but
+        // in a bare include fragment (no owns workspace/model) the elements and
+        // relationships live directly on the C4Document root — keep processing them.
         if (isC4Document(node)) {
             if (node.workspaces.at(0)) {
                 this.collectLocal(node.workspaces.at(0), groupStack, visitedDocs);
@@ -873,6 +891,9 @@ class JsonGenerator {
             }
             return;
         }
+        // --- Bare fragment root (C4Document with only top-level fragments) ---
+        // Straight-through: process this node's own collections (elements,
+        // relationships, includes) before returning to the caller.
         // Process !include directives on this node — works for model blocks
         // (`model { !include ... }`) and element blocks (e.g. a softwareSystem or
         // container with `!include "..."`). ModelBlocks and element blocks are not
@@ -918,6 +939,7 @@ class JsonGenerator {
                     if (groupStack.length > 0) {
                         this.groupPathMap.set(this.getId(item), groupStack.join(this.groupSeparator));
                     }
+                    console.warn(`[C4 Gen][collectLocal] add element id=${this.getId(item)} name=${this.substitute((item as any).name)} type=${(item as any).$type} cstOffset=${(item as any).$cstNode?.offset ?? -1}`);
                     this.elements.push(item);
                     // Recurse into element children (SoftwareSystem → Containers, etc.) with empty group stack
                     this.collectLocal(item, [], visitedDocs);
@@ -934,6 +956,25 @@ class JsonGenerator {
         if (node.genericInstances) processItems(node.genericInstances);
         if (node.elements) processItems(node.elements);
         if (node.relationships) processItems(node.relationships);
+        // Process !element (ElementExtension) contributions. Their children
+        // (containers/components/nodes/...) are REAL model elements that must be
+        // collected so relationships targeting them (e.g. Parent.Child -> Sibling)
+        // resolve and appear in the generated JSON. The ElementExtension itself is
+        // a directive, not an element - only its child collections are processed.
+        if (Array.isArray(node.elementExtensions)) {
+            for (const ext of node.elementExtensions) {
+                processItems(ext.containers ?? []);
+                processItems(ext.components ?? []);
+                processItems(ext.nodes ?? []);
+                processItems(ext.infrastructureNodes ?? []);
+                processItems(ext.softwareSystemInstances ?? []);
+                processItems(ext.containerInstances ?? []);
+                processItems(ext.genericInstances ?? []);
+                processItems(ext.groups ?? []);
+                // Relationships declared inside the extension body are also real.
+                processItems(ext.relationships ?? []);
+            }
+        }
     }
 
     /**
@@ -1047,10 +1088,11 @@ class JsonGenerator {
         // Prevent infinite cycles via document URI tracking
         const docUri = AstUtils.getDocument(node)?.uri.toString();
         if (docUri) {
-            if (visited.has(docUri)) return;
+            if (visited.has(docUri)) { console.warn(`[C4 Gen][collectER] skip (visited) ${docUri}`); return; }
             visited.add(docUri);
         }
         const anyNode = node as any;
+        console.warn(`[C4 Gen][collectER] enter nodeType=${(node as any).$type} doc=${docUri ?? '<none>'} isWorkspace=${isWorkspace(node)} extends=${(node as any).extendsUri ?? '<none>'}`);
         // Collect elements and relationships from the current node (works for Workspace, ModelBlock, included files)
         this.collectLocal(anyNode);
         // Recursively process nested elements (SoftwareSystem → Containers, etc.)
@@ -1087,22 +1129,16 @@ class JsonGenerator {
     /**
      * Resolves a parent workspace via extendsUri by looking up the target document
      * in the Langium document index. Works in both Node.js and browser environments.
+     *
+     * Unlike the old Utils.resolvePath(..., rawPath) implementation, this goes
+     * through the shared includeResolver pipeline, which strips quotes, resolves
+     * ${CONST} placeholders, and adds the .dsl fallback - matching exactly the
+     * URIs the document builder loaded (so `extends "path.dsl"` resolves).
      */
     private resolveParentWorkspace(currentWs: Workspace, relativePath: string): Workspace | undefined {
-        const currentDoc = AstUtils.getDocument(currentWs);
-        const sourceUri = currentDoc.uri;
-        const parentUri = Utils.resolvePath(Utils.dirname(sourceUri), relativePath);
-        try {
-            const langiumDocuments = this.services.shared.workspace.LangiumDocuments;
-            const parentDoc = langiumDocuments.getDocument(parentUri);
-            if (parentDoc) {
-                const root = parentDoc.parseResult.value;
-                if (isWorkspace(root)) return root;
-                if (isC4Document(root)) return root.workspaces.at(0);
-            }
-        } catch (e) {
-            console.error(`[C4 Gen] Error accessing LangiumDocuments:`, e);
-        }
+        const root = this.resolveIncludedRoot(currentWs, relativePath);
+        if (isWorkspace(root)) return root;
+        if (isC4Document(root)) return root.workspaces.at(0);
         return undefined;
     }
 
@@ -1169,13 +1205,31 @@ class JsonGenerator {
         return this.substitute(node?.description ?? node?.descriptionProps?.[0]?.value);
     }
 
-    /** Returns the technology text for a node, with constant substitution applied. */
+    /**
+     * Returns the technology text for a node, with constant substitution applied.
+     * Comma-separated unquoted segments (`technology L4,TCP`) are stored as
+     * `technology` + `technologyParts` and rejoined here with commas.
+     */
     private technology(node: any) {
-        return this.substitute(node?.technology ?? node?.technologyProps?.[0]?.value);
+        const parts: string[] = [];
+        const base = node?.technology ?? node?.technologyProps?.[0]?.value;
+        if (base !== undefined && base !== null && base !== '') parts.push(base);
+        if (Array.isArray(node?.technologyParts)) {
+            for (const p of node.technologyParts) {
+                const s = String(p ?? '').trim();
+                if (s) parts.push(s);
+            }
+        }
+        return this.substitute(parts.length > 0 ? parts.join(',') : undefined);
     }
 
     /** Helper to create a minimal element JSON stub with id and default position. */
     private readonly elementJson = (el: any) => ({ id: this.getId(el), x: 0, y: 0 });
+
+    /** Returns undefined when the array is empty, so empty collections are never emitted in JSON. */
+    private onlyIfNotEmpty<T>(arr: T[] | undefined): T[] | undefined {
+        return arr && arr.length > 0 ? arr : undefined;
+    }
 
     /** Extracts all Person elements from the collected elements list into JSON format. */
     private extractPeople() {
@@ -1187,7 +1241,7 @@ class JsonGenerator {
                     name: this.substitute(p.name),
                     group: this.extractGroup(p),
                     tags: this.extractTags(p, 'Element', 'Person'),
-                    relationships: this.extractRelationshipsForPerson(p).map(el => this.relationshipToJson(el))
+                    relationships: this.onlyIfNotEmpty(this.extractRelationshipsForPerson(p).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(result, p);
                 return result;
@@ -2088,7 +2142,7 @@ class JsonGenerator {
                 group: this.extractGroup(container),
                 tags: this.extractTags(container, 'Element', 'Container'),
                 technology: this.technology(container),
-            components: this.collectNested(container, isComponent)?.map(comp => {
+            components: this.onlyIfNotEmpty(this.collectNested(container, isComponent)?.map(comp => {
                 // Get base group path (e.g., "a-api.jar")
                 let compGroup = this.extractGroup(comp);
                 // Extract inline GroupProperty from grammar
@@ -2107,12 +2161,12 @@ class JsonGenerator {
                     technology: this.technology(comp),
                     group: compGroup || undefined,
                     tags: this.extractTags(comp, 'Element', 'Component'),
-                    relationships: this.extractRelationshipsForComponent(comp).map(el => this.relationshipToJson(el))
+                    relationships: this.onlyIfNotEmpty(this.extractRelationshipsForComponent(comp).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(compResult, comp);
                 return compResult;
-            }),
-            relationships: this.extractRelationshipsForContainer(container).map(el => this.relationshipToJson(el))
+            })),
+            relationships: this.onlyIfNotEmpty(this.extractRelationshipsForContainer(container).map(el => this.relationshipToJson(el)))
         };
         this.applyElementOverlay(result, container);
         this.applyElementExtensions(result, container);
@@ -2127,7 +2181,7 @@ class JsonGenerator {
                 const result: any = {
                     id: this.getId(ce),
                     name: this.substitute(ce.name),
-                    relationships: this.extractRelationshipsForCustom(ce).map(el => this.relationshipToJson(el)),
+                    relationships: this.onlyIfNotEmpty(this.extractRelationshipsForCustom(ce).map(el => this.relationshipToJson(el))),
                     tags: this.extractTags(ce, 'Element')
                 };
                 this.applyElementOverlay(result, ce);
@@ -2145,8 +2199,19 @@ class JsonGenerator {
      * - All relationships (direct + implied) extracted via extractRelationshipsForSoftwareSystem
      */
     private extractSystems() {
-        const systems = this.elements
-            .filter(isSoftwareSystem)
+        // Diagnostic: list every collected element that IS a software system and the
+        // ids of the ones that pass the model filter, to localize id mismatches
+        // between the emitted model and the view scopes.
+        const systemCandidates = this.elements.filter(isSoftwareSystem);
+        if (systemCandidates.length === 0) {
+            console.warn(`[C4 Gen][extractSystems] NO software systems in this.elements (count=${this.elements.length})`);
+        } else {
+            console.warn(`[C4 Gen][extractSystems] systems in this.elements:`);
+            for (const s of systemCandidates) {
+                console.warn(`  - id=${this.getId(s)} name=${this.substitute(s.name)} type=${(s as any).$type} cstOffset=${(s as any).$cstNode?.offset ?? -1}`);
+            }
+        }
+        const systems = systemCandidates
             .map(s => {
                 const result: any = {
                     id: this.getId(s),
@@ -2154,13 +2219,14 @@ class JsonGenerator {
                     description: this.description(s),
                     group: this.extractGroup(s),
                     tags: this.extractTags(s, 'Element', 'Software System'),
-                    containers: this.collectNested(s, isContainer)?.map(c => this.transformContainer(c)),
-                    relationships: this.extractRelationshipsForSoftwareSystem(s).map(el => this.relationshipToJson(el))
+                    containers: this.onlyIfNotEmpty(this.collectNested(s, isContainer)?.map(c => this.transformContainer(c))),
+                    relationships: this.onlyIfNotEmpty(this.extractRelationshipsForSoftwareSystem(s).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(result, s);
                 this.applyElementExtensions(result, s);
                 return result;
             });
+        console.warn(`[C4 Gen][extractSystems] emitted ${systems.length} systems`);
         return systems.length > 0 ? systems : undefined;
     }
 
@@ -2215,13 +2281,13 @@ class JsonGenerator {
             environment: this.getEnvironment(node),
             instances: String(node.instances || "1"),
             // Find nested child deployment nodes (traversing through groups)
-            children: this.collectNested(node, isDeploymentNode)?.map(child => {
+            children: this.onlyIfNotEmpty(this.collectNested(node, isDeploymentNode)?.map(child => {
                 const childJson = this.transformDeploymentNode(child);
                 this.applyElementOverlay(childJson, child);
                 return childJson;
-            }),
+            })),
             // Find infrastructure nodes (traversing through groups)
-            infrastructureNodes: this.collectNested(node, isInfrastructureNode)?.map(infra => {
+            infrastructureNodes: this.onlyIfNotEmpty(this.collectNested(node, isInfrastructureNode)?.map(infra => {
                 const infraJson: any = {
                     id: this.getId(infra),
                     name: this.substitute(infra.name),
@@ -2229,13 +2295,13 @@ class JsonGenerator {
                     tags: this.extractTags(infra, 'Element', 'Infrastructure Node'),
                     description: this.description(infra),
                     technology: this.technology(infra),
-                    relationships: this.extractRelationshipsForInfrastructureNode(infra).map(el => this.relationshipToJson(el))
+                    relationships: this.onlyIfNotEmpty(this.extractRelationshipsForInfrastructureNode(infra).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(infraJson, infra);
                 return infraJson;
-            }),
+            })),
             // Find software system instances (traversing through groups)
-            softwareSystemInstances: this.collectNested(node, isSoftwareSystemInstance)?.
+            softwareSystemInstances: this.onlyIfNotEmpty(this.collectNested(node, isSoftwareSystemInstance)?.
             filter((ssi): ssi is typeof ssi & { softwareSystem: { ref: NonNullable<typeof ssi.softwareSystem.ref> } } => ssi.softwareSystem.ref !== undefined).
             map(ssi => {
                 const ssiJson: any = {
@@ -2246,14 +2312,14 @@ class JsonGenerator {
                     environment: this.getEnvironment(ssi),
                     name: this.substitute(ssi.softwareSystem.ref?.name),
                     description: this.description(ssi.softwareSystem.ref),
-                    relationships: this.extractRelationshipsForSoftwareSystemInstance(ssi).map(el => this.relationshipToJson(el))
+                    relationships: this.onlyIfNotEmpty(this.extractRelationshipsForSoftwareSystemInstance(ssi).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(ssiJson, ssi);
                 return ssiJson;
-            }),
+            })),
             
             // Find container instances (traversing through groups)
-            containerInstances: this.collectNested(node, isContainerInstance)?.
+            containerInstances: this.onlyIfNotEmpty(this.collectNested(node, isContainerInstance)?.
             filter((ci): ci is typeof ci & { container: { ref: NonNullable<typeof ci.container.ref> } } => ci.container.ref !== undefined).map(ci => {
                 const ciJson: any = {
                     id: this.getId(ci),
@@ -2264,14 +2330,14 @@ class JsonGenerator {
                     name: ci.container.ref?.name,
                     description: this.description(ci.container.ref),
                     technology: this.technology(ci.container.ref),
-                    relationships: this.extractRelationshipsForContainerInstance(ci).map(el => this.relationshipToJson(el)),
+                    relationships: this.onlyIfNotEmpty(this.extractRelationshipsForContainerInstance(ci).map(el => this.relationshipToJson(el))),
                     parentId: this.getId(this.resolveDeploymentNodeParent(ci))
                 };
                 this.applyElementOverlay(ciJson, ci);
                 return ciJson;
-            }),
-
-            relationships: this.extractRelationshipsForDeploymentNode(node).map(el => this.relationshipToJson(el))
+            })),
+            
+            relationships: this.onlyIfNotEmpty(this.extractRelationshipsForDeploymentNode(node).map(el => this.relationshipToJson(el)))
         };
         this.applyElementOverlay(jsonNode, node);
         this.applyElementExtensions(jsonNode, node);
@@ -2412,8 +2478,8 @@ class JsonGenerator {
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
-                    elements: Array.from(elements).map(el => this.elementJson(el)),
-                    relationships: Array.from(relationships).map(rel => this.elementJson(rel)),
+                    elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),
+                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships)
@@ -2436,8 +2502,8 @@ class JsonGenerator {
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
-                    elements: Array.from(elements).map(el => this.elementJson(el)),
-                    relationships: Array.from(relationships).map(rel => this.elementJson(rel)),
+                    elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),
+                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
                     enterpriseBoundaryVisible: true,
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
@@ -3231,7 +3297,9 @@ class JsonGenerator {
         const shiftX = margin - minX;
         const shiftY = margin - minY;
 
-        for (const el of view.elements) {
+        // view.elements may be absent (empty view with no elements - onlyIfNotEmpty
+        // drops the empty array), so iterate over [] in that case.
+        for (const el of (view.elements ?? [])) {
             const r = rects[el.id];
             if (r) {
                 el.x = Math.floor(r.x + shiftX);
@@ -4186,7 +4254,23 @@ class JsonGenerator {
             for (const ext of anyNode.elementExtensions) {
                 if (!isElementExtension(ext)) continue;
                 const target = (ext.target as any)?.ref as NamedElement | undefined;
-                const key = target ?? ((ext.id as any)?.ref ?? ext.id as any);
+                let key: NamedElement | undefined = target;
+                // Form 2 (`!element <id>`): `ext.id` is a plain identifier string
+                // (not a resolved reference). The docs say it "finds a previously
+                // defined element", so resolve that string to the actual AST node
+                // (by element id or name) from the already-collected this.elements.
+                // this.elements includes elements from ALL documents (the root
+                // workspace and every !include fragment), so the extended element
+                // can live in a different fragment than the !element itself.
+                if (!key && !(ext.target as any) && ext.id) {
+                    const raw = C4Utils.stripQuotes(String(ext.id));
+                    const found = this.elements.find(el => {
+                        const elId = String((el as any).id ?? '');
+                        const elName = C4Utils.stripQuotes(String((el as any).name ?? ''));
+                        return elId === raw || elName === raw;
+                    });
+                    if (found) key = found as NamedElement;
+                }
                 if (!key) continue;
                 const list = this.elementExtensionsByTarget.get(key);
                 if (list) {
@@ -4263,12 +4347,12 @@ class JsonGenerator {
 
         for (const ext of exts) {
             // Child containers (target is a SoftwareSystem) -> json.containers
-            if (Array.isArray(ext.containers)) {
+            if (Array.isArray(ext.containers) && ext.containers.length > 0) {
                 const list = ext.containers.map(c => this.transformContainer(c));
                 jsonElement.containers = (jsonElement.containers ?? []).concat(list);
             }
             // Child components (target is a Container) -> json.components
-            if (Array.isArray(ext.components)) {
+            if (Array.isArray(ext.components) && ext.components.length > 0) {
                 const list = ext.components.map(c => {
                     const json: any = {
                         id: this.getId(c),
@@ -4277,7 +4361,7 @@ class JsonGenerator {
                         technology: this.technology(c),
                         group: this.extractGroup(c),
                         tags: this.extractTags(c, 'Element', 'Component'),
-                        relationships: this.extractRelationshipsForComponent(c).map(el => this.relationshipToJson(el))
+                        relationships: this.onlyIfNotEmpty(this.extractRelationshipsForComponent(c).map(el => this.relationshipToJson(el)))
                     };
                     this.applyElementOverlay(json, c);
                     return json;
@@ -4285,7 +4369,7 @@ class JsonGenerator {
                 jsonElement.components = (jsonElement.components ?? []).concat(list);
             }
             // Child deployment nodes (target is a DeploymentNode) -> json.children
-            if (Array.isArray(ext.nodes)) {
+            if (Array.isArray(ext.nodes) && ext.nodes.length > 0) {
                 const list = ext.nodes.map(n => {
                     const json = this.transformDeploymentNode(n);
                     this.applyElementOverlay(json, n);
@@ -4295,7 +4379,7 @@ class JsonGenerator {
                 jsonElement.children = (jsonElement.children ?? []).concat(list);
             }
             // Infrastructure nodes -> json.infrastructureNodes
-            if (Array.isArray(ext.infrastructureNodes)) {
+            if (Array.isArray(ext.infrastructureNodes) && ext.infrastructureNodes.length > 0) {
                 const list = ext.infrastructureNodes.map(infra => {
                     const infraJson: any = {
                         id: this.getId(infra),
@@ -4304,7 +4388,7 @@ class JsonGenerator {
                         technology: this.technology(infra),
                         group: this.extractGroup(infra),
                         tags: this.extractTags(infra, 'Element', 'Infrastructure Node'),
-                        relationships: this.extractRelationshipsForInfrastructureNode(infra).map(el => this.relationshipToJson(el))
+                        relationships: this.onlyIfNotEmpty(this.extractRelationshipsForInfrastructureNode(infra).map(el => this.relationshipToJson(el)))
                     };
                     this.applyElementOverlay(infraJson, infra);
                     return infraJson;
@@ -4312,11 +4396,11 @@ class JsonGenerator {
                 jsonElement.infrastructureNodes = (jsonElement.infrastructureNodes ?? []).concat(list);
             }
             // Relationships added inside the extension body
-            if (Array.isArray(ext.relationships)) {
+            if (Array.isArray(ext.relationships) && ext.relationships.length > 0) {
                 const rels = ext.relationships
                     .map(r => this.relationshipToJson(r as any))
                     .filter(Boolean);
-                jsonElement.relationships = (jsonElement.relationships ?? []).concat(rels);
+                jsonElement.relationships = this.onlyIfNotEmpty((jsonElement.relationships ?? []).concat(rels));
             }
             // Overlay fields (tags/url/properties) — reusing the same merge as !elements.
             const overlayMods = this.collectExtensionOverlay(ext);
@@ -5252,6 +5336,11 @@ class JsonGenerator {
         .map(view => {
             const scopeSystem = view.softwareSystem?.ref;
             if(scopeSystem === undefined) return undefined;
+            // Diagnostic: is the view's scope system present in this.elements, and does
+            // its id match the one emitted for the model?
+            const scopeInElements = this.elements.some(el => el === scopeSystem);
+            const sameIdInElements = this.elements.some(el => isSoftwareSystem(el) && this.getId(el) === this.getId(scopeSystem));
+            console.warn(`[C4 Gen][SystemContext] scopeSystem id=${this.getId(scopeSystem)} name=${this.substitute(scopeSystem.name)} type=${(scopeSystem as any).$type} inElements=${scopeInElements} sameIdInElements=${sameIdInElements}`);
             const elements = new Set<RelationshipMember>();
             const relationships = new Set<Relationship>();
             this.resolveSystemContext(view, elements, relationships, scopeSystem);
@@ -5259,8 +5348,8 @@ class JsonGenerator {
                 softwareSystemId: this.getId(scopeSystem),
                 key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                 title: this.substitute(view.titleProps?.at(0)?.value),
-                elements: Array.from(elements).map(el => this.elementJson(el)),
-                relationships: Array.from(relationships).map(el => this.elementJson(el)),
+                elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),
+                relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
                 enterpriseBoundaryVisible: true,
                 automaticLayout: this.transformAutoLayout(view),
                 // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
@@ -5279,6 +5368,9 @@ class JsonGenerator {
             .map(view => {
                 const scopeSystem = view.softwareSystem?.ref;
                 if(scopeSystem === undefined) return undefined;
+                const scopeInElements = this.elements.some(el => el === scopeSystem);
+                const sameIdInElements = this.elements.some(el => isSoftwareSystem(el) && this.getId(el) === this.getId(scopeSystem));
+                console.warn(`[C4 Gen][ContainerView] scopeSystem id=${this.getId(scopeSystem)} name=${this.substitute(scopeSystem.name)} type=${(scopeSystem as any).$type} inElements=${scopeInElements} sameIdInElements=${sameIdInElements}`);
                 let elements = new Set<RelationshipMember>();
                 let relationships = new Set<Relationship>();
                 this.resolveContainer(view, elements, relationships, scopeSystem);
@@ -5287,8 +5379,8 @@ class JsonGenerator {
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
-                    elements: Array.from(elements).map(el => this.elementJson(el)),// elements,,
-                    relationships: Array.from(relationships).map(el => this.elementJson(el)),
+                    elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),// elements,,
+                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeSystem, true, elements, relationships)
@@ -5314,8 +5406,8 @@ class JsonGenerator {
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
-                    elements: Array.from(elements).map(el => this.elementJson(el)),// elements,,
-                    relationships: Array.from(relationships).map(el => this.elementJson(el)),
+                    elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),// elements,,
+                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeContainer, true, elements, relationships)
@@ -5382,8 +5474,8 @@ class JsonGenerator {
                     description: this.description(view),
                     softwareSystemId: scopeSystem ? this.getId(scopeSystem) : undefined,
                     environment: environment,
-                    elements: Array.from(elements).map(el => this.elementJson(el)),// elements,,
-                    relationships: Array.from(relationships).map(el => this.elementJson(el)),
+                    elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),// elements,,
+                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships)
@@ -5415,8 +5507,8 @@ class JsonGenerator {
                     title: this.substitute(view.titleProps?.[0]?.value) ?? "Dynamic View",
                     description: this.description(view),
                     elementId: scopeElement ? this.getId(scopeElement) : undefined,
-                    elements: content.elements,
-                    relationships: content.relationships,
+                    elements: this.onlyIfNotEmpty(content.elements),
+                    relationships: this.onlyIfNotEmpty(content.relationships),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     // Dynamic views use the scope element as a frame (like the reference

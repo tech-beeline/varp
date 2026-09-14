@@ -1209,7 +1209,7 @@ PropertyKey returns string:
     UNQUOTED_STRING | ASSIGNMENT | DOT_SUFFIX | STRING | AnyKeyword;
 
 PropertyValue returns string:
-    (UNQUOTED_STRING | PATH_TOKEN | ASSIGNMENT | DOT_SUFFIX | INT | STRING | AnyKeyword | '=' | ';' | '.' | '/' | '-' )+;
+    (UNQUOTED_STRING | PATH_TOKEN | ASSIGNMENT | DOT_SUFFIX | HYPHEN_SUFFIX | SLASH_SUFFIX | INT | STRING | AnyKeyword | '=' | ';' | '.' | '/' | '-' | '(' | ')' | '[' | ']' )+;
 
 NameProperty:
     NAME_KW value=STRING;
@@ -1541,15 +1541,15 @@ DeploymentGroup:
 // Parses description, technology, tags (quoted/unquoted), and instances count
 fragment DeploymentNodeMeta:
     (
-        (description=STRING technology=STRING QuotedTag instances=INT)
+        (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))* QuotedTag instances=INT)
         |
-        (description=STRING technology=STRING UnquotedTag instances=INT)
+        (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))* UnquotedTag instances=INT)
         |
-        (description=STRING technology=STRING QuotedTag)
+        (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))* QuotedTag)
         |
-        (description=STRING technology=STRING UnquotedTag)
+        (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))* UnquotedTag)
         |
-        (description=STRING technology=STRING)
+        (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))*)
         |
         (description=STRING UnquotedTag instances=INT)
         |
@@ -1608,9 +1608,9 @@ fragment Name:
 // Meta fragment: description [technology] [quoted|unquoted tags]
 // Shared by SoftwareSystem, Container, Component, CustomElement, InfrastructureNode
 fragment Meta:
-    (description=STRING technology=STRING QuotedTag)
-    | (description=STRING technology=STRING UnquotedTag)
-    | (description=STRING technology=STRING)
+    (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))* QuotedTag)
+    | (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))* UnquotedTag)
+    | (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))*)
     | (description=STRING UnquotedTag)
     | (description=STRING);
 
@@ -2065,7 +2065,12 @@ terminal INSTANCE_RANGE: /[0-9]+\.\.([0-9]+|N|\*)?/;
 
 // ─── Base tokens ───────────────────────────────────────────────────────────
 
-terminal INT returns string: /[0-9]+/;
+// Note: the negative lookahead (?![a-zA-Z_]) prevents INT from eating a leading
+// digit prefix of an alphanumeric identifier (e.g. 1CRETAIL). Otherwise the
+// tokenizer would split it into INT "1" + UNQUOTED_STRING "CRETAIL" (INT is
+// declared before UNQUOTED_STRING and wins on overlap), which breaks references
+// like `ENSEMBLE.Waltz -> 1CRETAIL` because Identifier has no INT alternative.
+terminal INT returns string: /[0-9]+(?![a-zA-Z_])/;
 
 terminal UNQUOTED_STRING: /[a-zA-Z0-9_\u00A0-\uFFFF]([\w\u00A0-\uFFFF.\/:]|-(?![>\/]))*/;
 

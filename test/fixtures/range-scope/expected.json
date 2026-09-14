@@ -1,0 +1,44 @@
+{
+    "name": "Name",
+    "description": "Description",
+    "model": {
+        "properties": {},
+        "people": [
+            {
+                "id": "person_64a01998",
+                "name": "Alice",
+                "tags": "Element,Person",
+                "relationships": [
+                    {
+                        "id": "relationship_3489685a",
+                        "sourceId": "person_64a01998",
+                        "destinationId": "softwaresystem_14f21264",
+                        "tags": "Relationship"
+                    }
+                ]
+            }
+        ],
+        "softwareSystems": [
+            {
+                "id": "softwaresystem_72c73c28",
+                "name": "Workspace B System",
+                "tags": "Element,Software System"
+            },
+            {
+                "id": "softwaresystem_7f52555c",
+                "name": "Workspace C System",
+                "tags": "Element,Software System"
+            },
+            {
+                "id": "softwaresystem_14f21264",
+                "name": "Target System",
+                "tags": "Element,Software System"
+            }
+        ]
+    },
+    "views": {
+        "configuration": {
+            "properties": {}
+        }
+    }
+}

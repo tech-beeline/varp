@@ -14,11 +14,11 @@
 	limitations under the License.
 */
 
-import { 
-    DefaultScopeProvider, Scope, ReferenceInfo, AstUtils, 
-    AstNode, LangiumCoreServices, AstNodeDescription, MapScope, WorkspaceCache, 
-    LangiumDocument} from 'langium';
-import { isModelBlock, isWorkspace, isNamedElement, Workspace, NamedElement, isArchetypeDefinition, isDeploymentEnvironment, isInclude, Include, isC4Document, isGroup, isIdentifiersProperty } from '../generated/ast';
+import {
+    DefaultScopeProvider, Scope, ReferenceInfo, AstUtils,
+    AstNode, LangiumCoreServices, AstNodeDescription, MapScope, WorkspaceCache,
+    LangiumDocument, Stream, stream} from 'langium';
+import { isModelBlock, isWorkspace, isNamedElement, Workspace, NamedElement, isArchetypeDefinition, isDeploymentEnvironment, isInclude, Include, isC4Document, isGroup, isIdentifiersProperty, isElementExtension } from '../generated/ast';
 import { URI } from 'vscode-uri';
 import * as includeResolver from './c4-include-resolver';
 
@@ -40,6 +40,17 @@ interface LocalScopePackage {
     localDescriptions: AstNodeDescription[];
     suffixAliasesByScope: Map<AstNode, AstNodeDescription[]>;
 }
+
+/**
+ * Descriptions whose `name` is an identifier (left-hand side of `X = ...` or an
+ * `!element` id), as opposed to an element's `name` (right-hand side). Identifier
+ * lookup is case-insensitive (matches Structurizr DSL: IdentifiersRegister uses
+ * equalsIgnoreCase), while name-based lookup stays case-sensitive (Structurizr
+ * Model.getSoftwareSystemWithName uses equals). We tag the identifier descriptions
+ * so a case-insensitive fallback can be applied to them without weakening name
+ * lookups.
+ */
+const IDENTIFIER_DESCRIPTION_TAG = Symbol('c4IdentifierDescription');
 
 /**
  * Per-document identifier-style regions: a base region at offset -1 (inherited
@@ -90,6 +101,63 @@ const ELEMENT_REFERENCE_TYPES = new Set([
     'DeploymentGroup',
     'DeploymentEnvironment'
 ]);
+
+/**
+ * Case-insensitive wrapper for a scope chain that targets identifiers only.
+ *
+ * Structurizr DSL resolves element/relationship identifiers case-insensitively
+ * (IdentifiersRegister.getElement uses String.equalsIgnoreCase, and
+ * DslContext.getElement lowercases the identifier before lookup), while
+ * NAME-based references stay case-sensitive (Model.getSoftwareSystemWithName
+ * uses String.equals). So a plain `caseInsensitive` MapScope/StreamScope would
+ * be too aggressive - it would also weaken name lookups.
+ *
+ * This wrapper delegates to the wrapped scope chain and only when the exact
+ * lookup misses does it do a case-insensitive fallback, restricted to
+ * descriptions that represent identifiers (tagged with
+ * IDENTIFIER_DESCRIPTION_TAG). It honours the chain's priority order: a hit in
+ * an inner scope shadows the same (case-variant) name in an outer scope.
+ */
+class CaseInsensitiveIdentifierScope implements Scope {
+    private readonly wrapped: Scope;
+    private readonly identifierDescriptions: AstNodeDescription[];
+
+    constructor(wrapped: Scope, taggedDescriptions: Iterable<AstNodeDescription>) {
+        this.wrapped = wrapped;
+        this.identifierDescriptions = Array.from(taggedDescriptions);
+    }
+
+    getElement(name: string): AstNodeDescription | undefined {
+        const exact = this.wrapped.getElement(name);
+        if (exact) {
+            return exact;
+        }
+        const lower = name.toLowerCase();
+        // Fallback restricted to identifier descriptions (exact match also
+        // missed, so a lowercased description name or a case-insensitive match
+        // would hit here).
+        for (const desc of this.identifierDescriptions) {
+            if (desc.name.toLowerCase() === lower) {
+                return desc;
+            }
+        }
+        return undefined;
+    }
+
+    getElements(name: string): Stream<AstNodeDescription> {
+        const exacts = this.wrapped.getElements(name).toArray();
+        if (exacts.length > 0) {
+            return stream(exacts);
+        }
+        const lower = name.toLowerCase();
+        const matches = this.identifierDescriptions.filter((d) => d.name.toLowerCase() === lower);
+        return stream(matches);
+    }
+
+    getAllElements(): Stream<AstNodeDescription> {
+        return this.wrapped.getAllElements();
+    }
+}
 
 export class C4ScopeProvider extends DefaultScopeProvider {
     protected readonly services: LangiumCoreServices;
@@ -161,6 +229,23 @@ export class C4ScopeProvider extends DefaultScopeProvider {
      * @param suffixAliasesByScope Optional map to collect suffix aliases per ancestor scope
      * @returns Array of AstNodeDescription for the element
      */
+    /**
+     * Returns true when `node` sits inside an `!element` (ElementExtension)
+     * container chain. Elements contributed via an ElementExtension body are
+     * namespaced by the extension's own id (e.g. `ENS` inside `!element ENSEMBLE`
+     * resolves as `ENSEMBLE.ENS`), so they must be exposed with that FQN prefix.
+     */
+    private hasElementExtensionAncestor(node: AstNode | undefined): boolean {
+        let current = node;
+        while (current) {
+            if (isElementExtension(current)) {
+                return true;
+            }
+            current = current.$container;
+        }
+        return false;
+    }
+
     private exportElementDescriptions(
         element: AstNode,
         document: LangiumDocument,
@@ -182,6 +267,9 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 const parts = this.calculateHierarchicalParts(element, elementId);
                 const fqn = parts.join('.');
                 const fqnDesc = this.services.workspace.AstNodeDescriptionProvider.createDescription(element, fqn, document);
+                // Tag as identifier: FQN lookup is case-insensitive (Structurizr's
+                // IdentifiersRegister.getElement uses equalsIgnoreCase).
+                (fqnDesc as any)[IDENTIFIER_DESCRIPTION_TAG] = true;
                 descriptions.push(fqnDesc);
 
                 // Create suffix aliases for ancestor scopes.
@@ -195,14 +283,33 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                         const scopeOwner = ancestors[k - 1];
                         if (!scopeOwner) break;
                         const list = suffixAliasesByScope.get(scopeOwner) ?? [];
-                        list.push({ ...fqnDesc, name: suffix });
+                        const aliasDesc = { ...fqnDesc, name: suffix };
+                        (aliasDesc as any)[IDENTIFIER_DESCRIPTION_TAG] = true;
+                        list.push(aliasDesc);
                         suffixAliasesByScope.set(scopeOwner, list);
                     }
                 }
             } else {
                 // Flat mode: just use the bare ID
                 const fqnDesc = this.services.workspace.AstNodeDescriptionProvider.createDescription(element, elementId, document);
+                (fqnDesc as any)[IDENTIFIER_DESCRIPTION_TAG] = true;
                 descriptions.push(fqnDesc);
+
+                // Elements nested inside an `!element` (ElementExtension) are
+                // additionally registered under their FULL hierarchical path
+                // (e.g. ENSEMBLE.ENS) because the !element id acts as a
+                // namespace prefix that must resolve even in flat mode.
+                // This makes `ENSEMBLE.ENS -> CCBO` (added via a !element)
+                // resolvable regardless of the document's identifier style.
+                if (this.hasElementExtensionAncestor(element)) {
+                    const parts = this.calculateHierarchicalParts(element, elementId);
+                    if (parts.length > 1) {
+                        const fqn = parts.join('.');
+                        const fqnExt = this.services.workspace.AstNodeDescriptionProvider.createDescription(element, fqn, document);
+                        (fqnExt as any)[IDENTIFIER_DESCRIPTION_TAG] = true;
+                        descriptions.push(fqnExt);
+                    }
+                }
             }
         }
 
@@ -305,11 +412,44 @@ export class C4ScopeProvider extends DefaultScopeProvider {
         const isElementRef = ELEMENT_REFERENCE_TYPES.has(referenceType);
 
         if (isElementRef) {
-            const workspace = AstUtils.getContainerOfType(context.container, isWorkspace);
-            const model = AstUtils.getContainerOfType(context.container, isModelBlock);
+            let workspace = AstUtils.getContainerOfType(context.container, isWorkspace);
+            let model = AstUtils.getContainerOfType(context.container, isModelBlock);
             // Determine the root for scope traversal: start from ModelBlock if inside one,
             // otherwise from Workspace, or finally from C4Document
-            const root = model || workspace || AstUtils.getContainerOfType(context.container, isC4Document);
+            let root = model || workspace || AstUtils.getContainerOfType(context.container, isC4Document);
+
+            // If the reference sits inside an !include fragment (no workspace of
+            // its own), its scope must also contain the ROOT workspace that
+            // includes it. Otherwise a `!element` declared in the fragment cannot
+            // resolve the element it extends (e.g. `!element ENSEMBLE { ... }` in
+            // a fragment, where `ENSEMBLE` is declared in the parent file). Climb
+            // the include/extends ancestor chain and use the owning workspace as
+            // the scope root, so its local elements become visible here.
+            if (root && !workspace) {
+                const containerDoc = AstUtils.getDocument(context.container);
+                if (containerDoc) {
+                    const chain = includeResolver.getAncestorChain(this.services.shared, containerDoc.uri.toString());
+                    // Walk from the NEAREST ancestor (chain[0]) toward the root, and stop at the
+                    // first document that owns a workspace. That workspace is the one that (directly
+                    // or via a fragment chain) includes the current reference, so it is the correct
+                    // scope root. Its extends-ancestors are pulled in separately by
+                    // resolveExtendsRecursive below, which recurses up the whole extendsUri chain.
+                    for (let i = 0; i < chain.length; i++) {
+                        const ancDoc = this.services.shared.workspace.LangiumDocuments.getDocument(URI.parse(chain[i]));
+                        const ancRoot = ancDoc?.parseResult.value;
+                        if (!ancRoot) continue;
+                        const ancWs = isWorkspace(ancRoot)
+                            ? ancRoot
+                            : (isC4Document(ancRoot) && ancRoot.workspaces.length > 0 ? ancRoot.workspaces[0] : undefined);
+                        if (ancWs) {
+                            workspace = ancWs;
+                            model = ancWs.modelBlocks[0] ?? undefined;
+                            root = model || ancWs;
+                            break;
+                        }
+                    }
+                }
+            }
 
             if (root) {
                 const globalDescriptions: AstNodeDescription[] = [];
@@ -368,6 +508,28 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                     const aliases = pkg.suffixAliasesByScope.get(enclosingChain[i])!;
                     scope = new MapScope(aliases, scope);
                 }
+
+                // 5. Case-insensitive fallback for IDENTIFIERS only.
+                // Structurizr DSL resolves identifiers case-insensitively
+                // (IdentifiersRegister.getElement uses equalsIgnoreCase), so
+                // `MassPrint` must resolve `MASSPRINT = softwareSystem "MassPrint"`.
+                // Collect every description tagged as an identifier (FQN, flat id,
+                // !element-prefixed FQN, and suffix aliases) across all scope levels,
+                // and wrap the final chain so an exact miss falls back to a
+                // case-insensitive identifier hit - preserving the chain's priority
+                // order. Name-based lookups are untouched (they stay case-sensitive,
+                // matching Model.getSoftwareSystemWithName).
+                const tagged: AstNodeDescription[] = [];
+                const collectTagged = (descs: Iterable<AstNodeDescription>) => {
+                    for (const d of descs) {
+                        if ((d as any)[IDENTIFIER_DESCRIPTION_TAG]) tagged.push(d);
+                    }
+                };
+                collectTagged(globalDescriptions);
+                for (const aliases of pkg.suffixAliasesByScope.values()) {
+                    collectTagged(aliases);
+                }
+                scope = new CaseInsensitiveIdentifierScope(scope, tagged);
 
                 return scope;
             }
@@ -511,6 +673,13 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                          const document = AstUtils.getDocument(element);
                          descriptions.push(...this.exportElementDescriptions(element, document, remoteHierarchical));
                     });
+
+                // An extended workspace may itself pull in elements via !include
+                // (e.g. a system declared in a fragment included by the parent
+                // workspace). Without this, those elements are invisible to the
+                // extending workspace and to any fragment included downstream
+                // ("Could not resolve reference to 'X'").
+                descriptions.push(...this.resolveIncludesRecursive(rootEx, new Set<string>([uriString])));
             }
         }
         

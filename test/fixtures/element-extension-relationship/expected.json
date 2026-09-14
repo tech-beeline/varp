@@ -1,0 +1,39 @@
+{
+    "name": "Name",
+    "description": "Description",
+    "model": {
+        "properties": {},
+        "softwareSystems": [
+            {
+                "id": "softwaresystem_4e066da5",
+                "name": "Parent",
+                "tags": "Element,Software System",
+                "containers": [
+                    {
+                        "id": "container_5b1284c6",
+                        "name": "Child storage",
+                        "tags": "Element,Container",
+                        "relationships": [
+                            {
+                                "id": "relationship_6b2e515f",
+                                "sourceId": "container_5b1284c6",
+                                "destinationId": "softwaresystem_72c733d2",
+                                "tags": "Relationship"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "id": "softwaresystem_72c733d2",
+                "name": "Sibling",
+                "tags": "Element,Software System"
+            }
+        ]
+    },
+    "views": {
+        "configuration": {
+            "properties": {}
+        }
+    }
+}

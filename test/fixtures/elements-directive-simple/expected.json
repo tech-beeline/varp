@@ -55,14 +55,12 @@
                         "id": "container_5b128c0a",
                         "name": "Database",
                         "tags": "Element,Container,FromDirective",
-                        "relationships": [],
                         "url": "https://example.com/containers",
                         "properties": {
                             "directive-applied": "true"
                         }
                     }
-                ],
-                "relationships": []
+                ]
             }
         ]
     },
@@ -135,11 +133,7 @@
             }
         ],
         "configuration": {
-            "properties": {},
-            "styles": {
-                "elements": [],
-                "relationships": []
-            }
+            "properties": {}
         }
     }
 }

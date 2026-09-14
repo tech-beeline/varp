@@ -110,6 +110,14 @@ function compareObjects(actual: any, expected: any, path: string, diffs: Compare
         if (Array.isArray(actualVal) && actualVal.length === 0 && expectedVal === undefined) continue;
         if (Array.isArray(expectedVal) && expectedVal.length === 0 && actualVal === undefined) continue;
 
+        // An empty styles block ({elements: [], relationships: []}) is equivalent to
+        // an absent styles field — the generator now omits empty style collections.
+        if (key === 'styles' && actualVal === undefined &&
+            expectedVal && Array.isArray(expectedVal.elements) && expectedVal.elements.length === 0 &&
+            Array.isArray(expectedVal.relationships) && expectedVal.relationships.length === 0) {
+            continue;
+        }
+
         const childPath = path ? `${path}.${key}` : key;
 
         // Special handling for named elements (model)
@@ -173,6 +181,10 @@ function compareArrays(actual: any[], expected: any[], path: string, diffs: Comp
  */
 function compareNamedArrays(actual: any[], expected: any[], path: string, keyField: string, diffs: CompareResult[]): void {
     if (!Array.isArray(actual) && !Array.isArray(expected)) return;
+    // An absent field (undefined) is equivalent to an empty array — the generator
+    // now omits empty collections entirely.
+    if (Array.isArray(actual) && actual.length === 0 && expected === undefined) return;
+    if (Array.isArray(expected) && expected.length === 0 && actual === undefined) return;
     if (!Array.isArray(actual)) { diffs.push({ path, message: 'Expected array', expected: 'array', actual }); return; }
     if (!Array.isArray(expected)) { diffs.push({ path, message: 'Expected array', actual: 'array', expected }); return; }
 
@@ -212,6 +224,10 @@ function compareNamedArrays(actual: any[], expected: any[], path: string, keyFie
  */
 function compareRelationshipArrays(actual: any[], expected: any[], path: string, diffs: CompareResult[]): void {
     if (!Array.isArray(actual) && !Array.isArray(expected)) return;
+    // An absent field (undefined) is equivalent to an empty array — the generator
+    // now omits empty collections entirely.
+    if (Array.isArray(actual) && actual.length === 0 && expected === undefined) return;
+    if (Array.isArray(expected) && expected.length === 0 && actual === undefined) return;
     if (!Array.isArray(actual)) { diffs.push({ path, message: 'Expected array', expected: 'array', actual }); return; }
     if (!Array.isArray(expected)) { diffs.push({ path, message: 'Expected array', actual: 'array', expected }); return; }
 

@@ -7,20 +7,17 @@
             {
                 "id": "person_187c83e5",
                 "name": "User 3",
-                "tags": "Element,Person",
-                "relationships": []
+                "tags": "Element,Person"
             },
             {
                 "id": "person_4f64a8fa",
                 "name": "User 2",
-                "tags": "Element,Person",
-                "relationships": []
+                "tags": "Element,Person"
             },
             {
                 "id": "person_48ba2a04",
                 "name": "User 1",
-                "tags": "Element,Person",
-                "relationships": []
+                "tags": "Element,Person"
             }
         ]
     },
@@ -37,7 +34,6 @@
                         "height": 300
                     }
                 ],
-                "relationships": [],
                 "enterpriseBoundaryVisible": true,
                 "dimensions": {
                     "width": 1250,
@@ -46,11 +42,7 @@
             }
         ],
         "configuration": {
-            "properties": {},
-            "styles": {
-                "elements": [],
-                "relationships": []
-            }
+            "properties": {}
         }
     }
 }

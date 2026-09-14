@@ -11,3 +11,5 @@ plans/
 .env*
 !.env.example
 *.vsix
+.roo
+.deep-copilot

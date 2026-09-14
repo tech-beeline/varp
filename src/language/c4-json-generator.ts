@@ -244,21 +244,7 @@ class JsonGenerator {
             }
         };
 
-        // Diagnostic: dump all collected software system ids (from this.elements),
-        // the ids emitted into model.softwareSystems, and every softwareSystemId
-        // used by views, to spot model/view scope mismatches.
-        try {
-            const allSysIds = this.elements.filter(isSoftwareSystem).map((s) => `${this.getId(s)}(type=${(s as any).$type}@${(s as any).$cstNode?.offset ?? -1}:${this.substitute(s.name)})`);
-            const emittedSysIds = (model.softwareSystems ?? []).map((s: any) => `${s.id}:${s.name}`);
-            const viewSysIds: string[] = [];
-            for (const v of (jsonOutput.views.systemContextViews ?? [])) { if (v) viewSysIds.push(String(v.softwareSystemId)); }
-            for (const v of (jsonOutput.views.containerViews ?? [])) { if (v) viewSysIds.push(String(v.softwareSystemId)); }
-            console.warn(`[C4 Gen] SYSOUT all=${JSON.stringify(allSysIds)}`);
-            console.warn(`[C4 Gen] SYSOUT emitted=${JSON.stringify(emittedSysIds)}`);
-            console.warn(`[C4 Gen] SYSOUT viewScopes=${JSON.stringify(viewSysIds)}`);
-        } catch (err) {
-            console.warn(`[C4 Gen] SYSOUT diagnostic error: ${err instanceof Error ? err.message : String(err)}`);
-        }
+        // Diagnostic SYSOUT block (removed after debugging).
 
         // Run Graphviz in the plugin (full model context) and bake the resulting
         // coordinates/sizes directly into the view JSON. The webview then renders
@@ -939,7 +925,6 @@ class JsonGenerator {
                     if (groupStack.length > 0) {
                         this.groupPathMap.set(this.getId(item), groupStack.join(this.groupSeparator));
                     }
-                    console.warn(`[C4 Gen][collectLocal] add element id=${this.getId(item)} name=${this.substitute((item as any).name)} type=${(item as any).$type} cstOffset=${(item as any).$cstNode?.offset ?? -1}`);
                     this.elements.push(item);
                     // Recurse into element children (SoftwareSystem → Containers, etc.) with empty group stack
                     this.collectLocal(item, [], visitedDocs);
@@ -1088,11 +1073,10 @@ class JsonGenerator {
         // Prevent infinite cycles via document URI tracking
         const docUri = AstUtils.getDocument(node)?.uri.toString();
         if (docUri) {
-            if (visited.has(docUri)) { console.warn(`[C4 Gen][collectER] skip (visited) ${docUri}`); return; }
+            if (visited.has(docUri)) return;
             visited.add(docUri);
         }
         const anyNode = node as any;
-        console.warn(`[C4 Gen][collectER] enter nodeType=${(node as any).$type} doc=${docUri ?? '<none>'} isWorkspace=${isWorkspace(node)} extends=${(node as any).extendsUri ?? '<none>'}`);
         // Collect elements and relationships from the current node (works for Workspace, ModelBlock, included files)
         this.collectLocal(anyNode);
         // Recursively process nested elements (SoftwareSystem → Containers, etc.)
@@ -2203,14 +2187,6 @@ class JsonGenerator {
         // ids of the ones that pass the model filter, to localize id mismatches
         // between the emitted model and the view scopes.
         const systemCandidates = this.elements.filter(isSoftwareSystem);
-        if (systemCandidates.length === 0) {
-            console.warn(`[C4 Gen][extractSystems] NO software systems in this.elements (count=${this.elements.length})`);
-        } else {
-            console.warn(`[C4 Gen][extractSystems] systems in this.elements:`);
-            for (const s of systemCandidates) {
-                console.warn(`  - id=${this.getId(s)} name=${this.substitute(s.name)} type=${(s as any).$type} cstOffset=${(s as any).$cstNode?.offset ?? -1}`);
-            }
-        }
         const systems = systemCandidates
             .map(s => {
                 const result: any = {
@@ -2226,7 +2202,6 @@ class JsonGenerator {
                 this.applyElementExtensions(result, s);
                 return result;
             });
-        console.warn(`[C4 Gen][extractSystems] emitted ${systems.length} systems`);
         return systems.length > 0 ? systems : undefined;
     }
 
@@ -5336,11 +5311,6 @@ class JsonGenerator {
         .map(view => {
             const scopeSystem = view.softwareSystem?.ref;
             if(scopeSystem === undefined) return undefined;
-            // Diagnostic: is the view's scope system present in this.elements, and does
-            // its id match the one emitted for the model?
-            const scopeInElements = this.elements.some(el => el === scopeSystem);
-            const sameIdInElements = this.elements.some(el => isSoftwareSystem(el) && this.getId(el) === this.getId(scopeSystem));
-            console.warn(`[C4 Gen][SystemContext] scopeSystem id=${this.getId(scopeSystem)} name=${this.substitute(scopeSystem.name)} type=${(scopeSystem as any).$type} inElements=${scopeInElements} sameIdInElements=${sameIdInElements}`);
             const elements = new Set<RelationshipMember>();
             const relationships = new Set<Relationship>();
             this.resolveSystemContext(view, elements, relationships, scopeSystem);
@@ -5368,9 +5338,6 @@ class JsonGenerator {
             .map(view => {
                 const scopeSystem = view.softwareSystem?.ref;
                 if(scopeSystem === undefined) return undefined;
-                const scopeInElements = this.elements.some(el => el === scopeSystem);
-                const sameIdInElements = this.elements.some(el => isSoftwareSystem(el) && this.getId(el) === this.getId(scopeSystem));
-                console.warn(`[C4 Gen][ContainerView] scopeSystem id=${this.getId(scopeSystem)} name=${this.substitute(scopeSystem.name)} type=${(scopeSystem as any).$type} inElements=${scopeInElements} sameIdInElements=${sameIdInElements}`);
                 let elements = new Set<RelationshipMember>();
                 let relationships = new Set<Relationship>();
                 this.resolveContainer(view, elements, relationships, scopeSystem);

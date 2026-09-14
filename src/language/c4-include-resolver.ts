@@ -209,6 +209,27 @@ export function findParentDocument(shared: LangiumSharedCoreServices, childUri: 
 // Cached per shared-services instance and auto-invalidated on workspace changes
 // (see the constants cache above for the same pattern).
 const ancestorChainCaches = new WeakMap<LangiumSharedCoreServices, WorkspaceCache<string, string[]>>();
+// Caches the DIRECT parent of each document URI (childUri -> parentUri). Walking a
+// parent is a full scan of LangiumDocuments.all (via findParentDocument), so caching
+// every edge lets getAncestorChain and the scope provider reuse it instead of
+// rescaming the whole document set per step.
+const parentByChildCaches = new WeakMap<LangiumSharedCoreServices, WorkspaceCache<string, string | undefined>>();
+
+/**
+ * Returns the URI of the document that directly references `childUri` through a
+ * `!include` directive or a workspace `extendsUri`, or undefined when no loaded
+ * document references it. Cached per child URI (auto-invalidated on workspace
+ * changes). Deterministic: when several documents reference the same target, the
+ * one with the lowest URI string wins (same rule as findParentDocument).
+ */
+export function getParentUri(shared: LangiumSharedCoreServices, childUri: string): string | undefined {
+    let cache = parentByChildCaches.get(shared);
+    if (!cache) {
+        cache = new WorkspaceCache<string, string | undefined>(shared);
+        parentByChildCaches.set(shared, cache);
+    }
+    return cache.get(childUri, () => findParentDocument(shared, childUri)?.uri.toString());
+}
 
 /**
  * Returns the ancestor chain of the document with the given URI: the closest
@@ -227,9 +248,8 @@ export function getAncestorChain(shared: LangiumSharedCoreServices, docUri: stri
         const visited = new Set<string>([docUri]);
         let current = docUri;
         for (let depth = 0; depth < 100; depth++) {
-            const parent = findParentDocument(shared, current);
-            if (!parent) break;
-            const parentUri = parent.uri.toString();
+            const parentUri = getParentUri(shared, current);
+            if (!parentUri) break;
             if (visited.has(parentUri)) break; // cycle detected
             visited.add(parentUri);
             chain.push(parentUri);

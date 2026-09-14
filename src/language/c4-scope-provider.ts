@@ -168,8 +168,15 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     private readonly styleRegionsCache: WorkspaceCache<string, StyleRegions>;
     // Cache for extends-resolved elements to avoid repeated traversal
     private readonly extendedElementsCache: WorkspaceCache<string, AstNodeDescription[]>;
-    // Cache for include-resolved elements
+    // Cache for include-resolved elements (per root document URI). Rebuilding the
+    // include descriptions is expensive (resolves each fragment + walks its AST),
+    // so it is memoized per including document (auto-invalidated on workspace change).
     private readonly includeCache: WorkspaceCache<string, AstNodeDescription[]>;
+    // Cache of the inherited identifier style per included-fragment URI. Computing
+    // it walks the ancestor chain + the parent AST to find the matching !include
+    // directive, so the result is memoized per fragment URI (cleared on any
+    // workspace change via WorkspaceCache).
+    private readonly fragmentStyleCache: WorkspaceCache<string, boolean>;
     // Cache for the local element package (FQN/name descriptions + suffix aliases) per root
     // node. Built once per root per build (see buildLocalScopePackage) - this removes the
     // O(references x elements) blow-up where every getScope() call re-traversed the whole
@@ -184,6 +191,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
         this.styleRegionsCache = new WorkspaceCache<string, StyleRegions>(services.shared);
         this.extendedElementsCache = new WorkspaceCache<string, AstNodeDescription[]>(services.shared);
         this.includeCache = new WorkspaceCache<string, AstNodeDescription[]>(services.shared);
+        this.fragmentStyleCache = new WorkspaceCache<string, boolean>(services.shared);
         this.localScopeCache = new WorkspaceCache<string, LocalScopePackage>(services.shared);
     }
 
@@ -455,16 +463,14 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 const globalDescriptions: AstNodeDescription[] = [];
 
                 // --- 1. RESOLVE !include FILES ---
-                // External elements get global FQN only. No suffix aliases are created for them
-                // because external files should not introduce shorthand names into the local scope.
+                // Included fragment elements are collected inside buildLocalScopePackage
+                // (step 3) so they share the SAME suffix-alias map as local elements -
+                // matching Structurizr's inline-splice semantics. They end up in
+                // pkg.localDescriptions, hence no separate include pass here.
                 const currentDoc = AstUtils.getDocument(root);
-                const includeDescriptions = this.includeCache.get(currentDoc.uri.toString(), () => {
-                    const visited = new Set<string>([currentDoc.uri.toString()]);
-                    return this.resolveIncludesRecursive(root, visited);
-                });
-                globalDescriptions.push(...includeDescriptions);
 
-                // 2. LOAD ELEMENTS FROM EXTENDS (also global only, cached)
+                // 2. LOAD ELEMENTS FROM EXTENDS (global only, cached; external workspace
+                //    elements stay FQN-only - they are not part of the local element tree)
                 if (workspace?.extendsUri) {
                     const workspaceUri = AstUtils.getDocument(workspace).uri.toString();
                     const extDescriptions = this.extendedElementsCache.get(workspaceUri, () =>
@@ -549,7 +555,10 @@ export class C4ScopeProvider extends DefaultScopeProvider {
      */
     private buildLocalScopePackage(root: AstNode): LocalScopePackage {
         const localDescriptions: AstNodeDescription[] = [];
-        // Map: enclosing NamedElement -> list of suffix aliases for nested elements
+        // Map: enclosing NamedElement -> list of suffix aliases for nested elements.
+        // Keys are the REAL AST nodes of the ancestors (from the root document or from
+        // any included fragment) so that `enclosingChain` in getScope (which walks the
+        // $container chain of the reference) finds the exact same nodes as keys.
         const suffixAliasesByScope = new Map<AstNode, AstNodeDescription[]>();
 
         // For each NamedElement in the root, determine if hierarchical or flat mode,
@@ -565,7 +574,62 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 localDescriptions.push(...elementDescriptions);
             });
 
+        // Elements contributed via `!include` fragments are ALSO registered with the
+        // SAME suffix-alias map. In Structurizr a fragment is spliced inline into the
+        // including file, so `a -> b` inside a `softwareSystem` defined in a fragment
+        // must resolve `a`/`b` against the fragment's own enclosing scope (see the
+        // sibling-relationship scenario). Without this, include elements only get FQN
+        // descriptions (`s.a`, `s.b`) and short names are invisible.
+        const currentDoc = AstUtils.getDocument(root);
+        const docUri = currentDoc?.uri.toString() ?? '';
+        const includeDescriptions = this.includeCache.get(docUri, () =>
+            this.resolveIncludesRecursive(root, new Set<string>([docUri]))
+        );
+        localDescriptions.push(...includeDescriptions);
+
+        // Suffix aliases for included elements cannot be replayed from the cached
+        // descriptions (they need the real ancestor AST nodes as map keys), so build
+        // them with a dedicated pass sharing this root's suffixAliasesByScope map.
+        this.collectIncludeSuffixAliases(root, suffixAliasesByScope, new Set<string>([docUri]));
+
         return { localDescriptions, suffixAliasesByScope };
+    }
+
+    /**
+     * Recursively walks `!include` fragments reachable from `node` and registers the
+     * suffix aliases of their NamedElements into `suffixAliasesByScope` (keys are the
+     * real AST nodes of the ancestors inside the fragments). This mirrors
+     * exportElementDescriptions' suffix logic but for fragments, so short sibling
+     * names resolve inside relationship scopes that live in those fragments.
+     */
+    private collectIncludeSuffixAliases(
+        node: AstNode,
+        suffixAliasesByScope: Map<AstNode, AstNodeDescription[]>,
+        visitedUris: Set<string>
+    ): void {
+        for (const inc of AstUtils.streamAllContents(node).filter(isInclude).toArray()) {
+            const uri = this.resolvePathToUri(inc.file, node);
+            if (!uri || visitedUris.has(uri.toString())) continue;
+            visitedUris.add(uri.toString());
+
+            const langiumDoc = this.services.shared.workspace.LangiumDocuments.getDocument(uri);
+            const rootNode = langiumDoc?.parseResult.value;
+            if (!rootNode) continue;
+
+            const hasOwnDirective = AstUtils.streamAllContents(rootNode)
+                .filter(isIdentifiersProperty).head() !== undefined;
+            const remoteHierarchical = hasOwnDirective
+                ? this.isHierarchicalMode(rootNode)
+                : this.inheritedIncludeStyle(uri.toString());
+
+            AstUtils.streamAllContents(rootNode)
+                .filter(isNamedElement)
+                .forEach((element) => {
+                    this.exportElementDescriptions(element, langiumDoc, remoteHierarchical, suffixAliasesByScope);
+                });
+
+            this.collectIncludeSuffixAliases(rootNode, suffixAliasesByScope, visitedUris);
+        }
     }
 
     /**
@@ -580,15 +644,20 @@ export class C4ScopeProvider extends DefaultScopeProvider {
      * 5. Manually traverses all NamedElement nodes in the included file and exports their descriptions.
      * 6. Recurse into nested !include directives within the included file.
      *
-     * IMPORTANT: External elements are registered with global FQN only.
-     * No suffix aliases are created because external files should not introduce
-     * shorthand names that could conflict with local scope names.
-     *
      * @param node The AST node to search for !include directives
      * @param visitedUris Set of already-processed document URIs (cycle prevention)
+     * @param suffixAliasesByScope Optional suffix-alias map, shared with the caller's
+     *        local scope package so fragment elements create suffix aliases for their
+     *        ancestor scopes (matching Structurizr's inline-splice semantics - a
+     *        relationship from one child to a sibling within a fragment's element
+     *        resolves the short names). When omitted, elements are FQN-only.
      * @returns Flat array of AstNodeDescription for all elements found in included files
      */
-    private resolveIncludesRecursive(node: AstNode, visitedUris: Set<string>): AstNodeDescription[] {
+    private resolveIncludesRecursive(
+        node: AstNode,
+        visitedUris: Set<string>,
+        suffixAliasesByScope?: Map<AstNode, AstNodeDescription[]>
+    ): AstNodeDescription[] {
         const descriptions: AstNodeDescription[] = [];
         const includes = AstUtils.streamAllContents(node).filter(isInclude).toArray();
 
@@ -606,17 +675,38 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             if (langiumDoc?.parseResult.value) {
                 const rootNode = langiumDoc.parseResult.value;
 
-                // Each external file determines its own identifier style independently
-                const remoteHierarchical = this.isHierarchicalMode(rootNode);
-                // Traverse all named elements and register them (FQN only, no suffix aliases)
+                // Identifier style for included elements. In Structurizr, `!include` is an
+                // inline splice at the directive's position into the SAME IdentifiersRegister
+                // that the including file uses, so the fragment inherits the identifier style
+                // of the region where the !include directive sits in the parent:
+                //  - if the fragment has its OWN `!identifiers` directive (possibly several),
+                //    they build their own style regions exactly like a standalone document
+                //    (default flat until the first directive, then per-region shifts);
+                //  - otherwise the fragment uses the parent's style for the region at the
+                //    offset of the `!include` directive (closest ancestor that includes it).
+                const hasOwnDirective = AstUtils.streamAllContents(rootNode)
+                    .filter(isIdentifiersProperty).head() !== undefined;
+                let remoteHierarchical: boolean;
+                if (hasOwnDirective) {
+                    remoteHierarchical = this.isHierarchicalMode(rootNode);
+                } else {
+                    remoteHierarchical = this.inheritedIncludeStyle(uriString);
+                }
+
+                // Traverse all named elements and register them. When `suffixAliasesByScope`
+                // is provided (from buildLocalScopePackage), fragment elements also get
+                // suffix aliases in their ancestor scopes, so short sibling names are
+                // visible to relationships defined inside the fragment.
                 AstUtils.streamAllContents(rootNode)
                     .filter(isNamedElement)
                     .forEach((element) => {
-                        descriptions.push(...this.exportElementDescriptions(element, langiumDoc, remoteHierarchical));
+                        descriptions.push(...this.exportElementDescriptions(
+                            element, langiumDoc, remoteHierarchical, suffixAliasesByScope
+                        ));
                     });
 
                 // Recurse into nested includes within the included file
-                descriptions.push(...this.resolveIncludesRecursive(rootNode, visitedUris));
+                descriptions.push(...this.resolveIncludesRecursive(rootNode, visitedUris, suffixAliasesByScope));
             }
         }
         return descriptions;
@@ -741,6 +831,36 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             }
         }
         return result.hierarchical;
+    }
+
+    /**
+     * Computes the identifier style an `!include` fragment inherits from its parent.
+     *
+     * In Structurizr, `!include` splices the fragment inline at the directive's
+     * position into the SAME IdentifiersRegister that the including file uses, so
+     * the fragment shares the identifier scope of the region where the `!include`
+     * sits. This finds the closest ancestor document that includes `fragmentUri`,
+     * locates the `!include` directive that references it, and returns that
+     * parent's style at the directive's CST offset. Falls back to false (flat)
+     * when no parent / matching directive can be found.
+     */
+    private inheritedIncludeStyle(fragmentUri: string): boolean {
+        return this.fragmentStyleCache.get(fragmentUri, () => {
+            const chain = includeResolver.getAncestorChain(this.services.shared, fragmentUri);
+            for (const ancUri of chain) {
+                const ancDoc = this.services.shared.workspace.LangiumDocuments.getDocument(URI.parse(ancUri));
+                const ancRoot = ancDoc?.parseResult.value;
+                if (!ancRoot) continue;
+
+                for (const inc of AstUtils.streamAllContents(ancRoot).filter(isInclude).toArray()) {
+                    const targetUri = this.resolvePathToUri(inc.file, inc);
+                    if (targetUri?.toString() === fragmentUri) {
+                        return this.styleAtOffset(ancDoc, inc.$cstNode?.offset ?? 0);
+                    }
+                }
+            }
+            return false;
+        });
     }
 
     /**

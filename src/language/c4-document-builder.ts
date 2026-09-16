@@ -19,6 +19,7 @@ import {
     LangiumDocument,
     AstUtils,
     AstNode,
+    type BuildOptions,
     type LangiumSharedCoreServices,
 } from 'langium';
 import { URI } from 'vscode-uri';
@@ -27,12 +28,14 @@ import * as includeResolver from './c4-include-resolver';
 
 /**
  * C4DocumentBuilder - extends DefaultDocumentBuilder to auto-load !include files.
- * 
- * The approach:
- * 1. Override update() to first call super.update() which processes documents
- * 2. After processing, scan the AST of all documents for !include directives and extendsUri
- * 3. Load any new include files using the FileSystemProvider (works in Node.js AND browser)
- * 4. Trigger a rebuild if new includes were loaded
+ *
+ * Include/extends targets are discovered dynamically: a directive cannot be read
+ * until its file has been parsed, so the flow is "build, scan, load, rebuild".
+ * Langium reaches this flow through two entry points, and both are handled here:
+ * update() for LSP changes (didOpen/didChange/watched files) and build() for
+ * workspace initialization. build() calls emitUpdate/buildDocuments directly and
+ * never reaches update(), so handling update() alone would leave the first build
+ * without its !include fragments.
  */
 export class C4DocumentBuilder extends DefaultDocumentBuilder {
 
@@ -52,8 +55,11 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
         // Step 1: Let the parent process all documents through build phases
         await super.update(changed, deleted, cancelToken);
 
-        // Step 2: After processing, scan all documents for !include directives and extendsUri
-        const result = await this.discoverNewIncludes();
+        // Step 2: After processing, scan the changed documents for !include directives
+        // and extendsUri. Only a changed document can introduce new targets; for any
+        // other document the guards in loadIncludeFile/loadExtendsUri returned early
+        // on a previous cycle because its targets are already loaded.
+        const result = await this.discoverNewIncludes(changed);
 
         // Step 3: If new include files were found, trigger another update to reprocess them
         // along with their parent documents (so validation re-runs with includes available)
@@ -66,24 +72,79 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
     }
 
     /**
-     * Scan all parsed documents for !include directives and extendsUri.
-     * Returns newly loaded include URIs and their parent document URIs.
+     * Workspace initialization entry point. Runs the same discovery flow as
+     * update(), so the first build already sees the !include/extends fragments.
+     *
+     * The initial documents are built first (they must be parsed before their
+     * directives can be read), then every directive target that is not yet loaded
+     * is pulled in and the affected documents are rebuilt, keyed off the documents
+     * handed over by the workspace manager.
      */
-    private async discoverNewIncludes(): Promise<{ newUris: URI[]; parentUris: URI[] }> {
+    override async build<T extends AstNode>(
+        documents: Array<LangiumDocument<T>>,
+        options?: BuildOptions,
+        cancelToken?: any
+    ): Promise<void> {
+        await super.build(documents, options, cancelToken);
+
+        const result = await this.discoverNewIncludes();
+        if (result.newUris.length > 0) {
+            console.log(`[C4 Builder] Discovered ${result.newUris.length} new include file(s) during initialization, rebuilding`);
+            // Follow up with update(): the parents are already Validated and build()
+            // skips every phase for a document whose state is already >= the target
+            // state, so they would never be relinked against the freshly loaded
+            // fragments. update() resets them to Changed, which performs that relink.
+            const allToUpdate = [...new Set([...result.parentUris, ...result.newUris])];
+            await super.update(allToUpdate, [], cancelToken);
+        }
+    }
+
+    /**
+     * Scans the given documents for !include directives and extendsUri and loads
+     * any target that is not loaded yet. Returns the newly loaded URIs together
+     * with the URIs of the documents that referenced them.
+     *
+     * @param scanUris Documents to scan. When omitted, every loaded document is
+     *        scanned (used by build(), where the whole workspace is being
+     *        initialized and nothing has been discovered yet). update() passes only
+     *        the changed documents, because a document whose targets are already
+     *        loaded cannot produce new ones.
+     */
+    private async discoverNewIncludes(scanUris?: URI[]): Promise<{ newUris: URI[]; parentUris: URI[] }> {
         const newUris: URI[] = [];
         const parentUris: URI[] = [];
-        const allDocs = this.langiumDocuments?.all.toArray() ?? [];
+        const parentSeen = new Set<string>();
 
-        for (const doc of allDocs) {
+        // Work queue: a document loaded here may itself contain directives, so it
+        // must be scanned in the same pass; otherwise nested includes would stay
+        // undiscovered until a later update().
+        const queue: LangiumDocument[] = [];
+        if (scanUris) {
+            for (const uri of scanUris) {
+                const doc = this.langiumDocuments?.getDocument(uri);
+                if (doc) queue.push(doc);
+            }
+        } else {
+            queue.push(...(this.langiumDocuments?.all.toArray() ?? []));
+        }
+
+        const scanned = new Set<string>();
+        // URIs already present before this pass - used to detect what the loaders add.
+        const known = new Set<string>(
+            (this.langiumDocuments?.all.toArray() ?? []).map(d => d.uri.toString())
+        );
+
+        while (queue.length > 0) {
+            const doc = queue.shift()!;
+            const docUri = doc.uri.toString();
+            if (scanned.has(docUri)) continue;
+            scanned.add(docUri);
             if (!doc.parseResult?.value) continue;
 
-            const sourceUri = AstUtils.getDocument(doc.parseResult.value)?.uri;
-            if (!sourceUri) continue;
+            let hasNewIncludes = false;
 
             // Find and load !include directives
-            const includes = this.collectIncludes(doc.parseResult.value);
-            let hasNewIncludes = false;
-            for (const inc of includes) {
+            for (const inc of this.collectIncludes(doc.parseResult.value)) {
                 const uri = await this.loadIncludeFile(inc);
                 if (uri) {
                     newUris.push(uri);
@@ -97,9 +158,21 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
                 hasNewIncludes = true;
             }
 
-            // Track parent docs that had new includes (they need re-validation)
             if (hasNewIncludes) {
-                parentUris.push(sourceUri);
+                if (!parentSeen.has(docUri)) {
+                    parentSeen.add(docUri);
+                    parentUris.push(doc.uri);
+                }
+
+                // Enqueue everything the loaders added (a single file, or every file
+                // of a directory !include) so their own directives are followed too.
+                for (const added of this.langiumDocuments?.all.toArray() ?? []) {
+                    const addedUri = added.uri.toString();
+                    if (!known.has(addedUri)) {
+                        known.add(addedUri);
+                        queue.push(added);
+                    }
+                }
             }
         }
 

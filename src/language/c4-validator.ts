@@ -19,7 +19,6 @@ import { ElementStyleDescriptionProperty, InstancesProperty, isArchetypeDefiniti
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
 import * as includeResolver from './c4-include-resolver';
-import { Utils } from 'vscode-uri';
 
 /** Normalizes lowercase shape names to Structurizr PascalCase format (Box, RoundedBox, Cylinder, etc.) */
 export const SHAPE_NORMALIZE: Record<string, string> = {
@@ -436,44 +435,17 @@ export class C4Validator {
         }
     }
 
-    /** Searches all documents in the index for an Include directive referencing the given document URI */
+    /**
+     * Returns the `!include` directive that pulls the given document into the
+     * workspace, or undefined when no loaded document includes it.
+     *
+     * Served by the shared reverse reference index (one AST pass per build).
+     * Path resolution goes through the shared pipeline as well, so quoted paths,
+     * ${CONST} placeholders, http(s) targets and the ".dsl" fallback resolve
+     * exactly as they do in the document builder.
+     */
     private findIncludeForDoc(targetDocUri: string): Include | undefined {
-        const allDocs = this.sharedServices.workspace.LangiumDocuments.all;
-        for (const docWrapper of allDocs) {
-            const root = docWrapper.parseResult.value as any;
-            if (!root) continue;
-            const found = this.findIncludeInTree(root, targetDocUri);
-            if (found) return found;
-        }
-        return undefined;
-    }
-
-    /** Recursively searches an AST subtree for an Include directive matching the target document URI */
-    private findIncludeInTree(node: any, targetDocUri: string): Include | undefined {
-        if (!node || typeof node !== 'object') return undefined;
-        if (node.$type === 'Include' && node.file) {
-            try {
-                const sourceDoc = AstUtils.getDocument(node);
-                if (sourceDoc) {
-                    const resolvedUri = Utils.resolvePath(Utils.dirname(sourceDoc.uri), node.file);
-                    if (resolvedUri.toString() === targetDocUri) return node as Include;
-                }
-            } catch (e) { /* skip unresolvable */ }
-        }
-        for (const key of Object.keys(node)) {
-            if (key.startsWith('$')) continue;
-            const val = node[key];
-            if (Array.isArray(val)) {
-                for (const item of val) {
-                    const result = this.findIncludeInTree(item, targetDocUri);
-                    if (result) return result;
-                }
-            } else if (val && typeof val === 'object') {
-                const result = this.findIncludeInTree(val, targetDocUri);
-                if (result) return result;
-            }
-        }
-        return undefined;
+        return includeResolver.findIncludeDirective(this.sharedServices, targetDocUri);
     }
 
     /** Resolves the root AST node of an included file; skips documents with parse errors (fragments). */

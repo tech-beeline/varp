@@ -14,7 +14,7 @@
 	limitations under the License.
 */
 
-import { LangiumDocument, WorkspaceCache } from 'langium';
+import { DocumentState, LangiumDocument, WorkspaceCache } from 'langium';
 import { isWorkspace, C4Document, isC4Document } from '../generated/ast';
 import { LangiumServices } from 'langium/lsp';
 import { URI } from 'vscode-uri';
@@ -52,7 +52,21 @@ let jsonGeneration = 0;
 export class C4GeneratorHandler {
     private jsonCache: WorkspaceCache<string, GeneratedJson>;
     private services: LangiumServices;
+    /**
+     * Root workspace URIs that currently have cached JSON. Kept in sync with
+     * jsonCache: on every workspace update the WorkspaceCache is wiped wholesale,
+     * so this set must be reset as well (see the onUpdate hook in the
+     * constructor) - otherwise it accumulates phantom projects (deleted,
+     * renamed or closed files) that list-projects would report as available.
+     */
     private cachedUris: Set<string> = new Set();
+    /**
+     * Set when a workspace update invalidated jsonCache. The next
+     * updateMemoryCache() then rebuilds cachedUris from scratch and regenerates
+     * every still-live root, so editing one project does not silently drop the
+     * cached JSON of the other open projects.
+     */
+    private pendingReset = false;
     /** Enriches the render JSON with the Structurizr-only fields the render pipeline does not produce. */
     private enricher: C4JsonEnricher;
     /** In-flight generate() promises keyed by root workspace URI. Coalesces the
@@ -75,9 +89,23 @@ export class C4GeneratorHandler {
         this.jsonCache = new WorkspaceCache<string, any>(services.shared);
         this.enricher = new C4JsonEnricher(services.shared);
 
-        // Hook into build phase 5 (Validated) to regenerate JSON after documents are processed
+        // Mirror the WorkspaceCache lifecycle for cachedUris: jsonCache is wiped
+        // wholesale on every update, so the URI list must be dropped at the same
+        // moment, otherwise it drifts (phantom projects) and its first entry, used
+        // as the default project by the MCP tools, may point at a document that no
+        // longer exists. Dropping it here rather than lazily in updateMemoryCache
+        // also means list-projects never reports a project whose JSON was just
+        // invalidated; the list is repopulated as generation succeeds.
+        services.shared.workspace.DocumentBuilder.onUpdate(() => {
+            this.cachedUris.clear();
+            this.pendingReset = true;
+        });
+
+        // Regenerate JSON once documents are validated. The state is referenced by
+        // name rather than by value, and generation (fire-and-forget) starts only
+        // after the validation phase has completed.
         services.shared.workspace.DocumentBuilder.onBuildPhase(
-            5, // Post-validation
+            DocumentState.Validated,
             (documents) => this.updateMemoryCache(documents)
         );
     }
@@ -109,6 +137,10 @@ export class C4GeneratorHandler {
      * generated once: documents that ARE workspaces map to themselves, fragments
      * resolve to their owning root via findRootWorkspace(), and duplicate roots
      * are collapsed by the Map key (and by the in-flight guard in generateAndCache).
+     *
+     * When the preceding update invalidated the JSON cache (pendingReset), the
+     * list of known roots is rebuilt from the currently loaded documents and all
+     * still-live roots are regenerated, not just the ones this cycle touched.
      */
     private updateMemoryCache(documents: LangiumDocument[]) {
         const roots = new Map<string, any>();
@@ -123,6 +155,25 @@ export class C4GeneratorHandler {
                 const rootNode = rootDoc ? this.workspaceNodeOf(rootDoc) : undefined;
                 if (rootDoc && rootNode) {
                     roots.set(rootDoc.uri.toString(), rootNode);
+                }
+            }
+        }
+
+        if (this.pendingReset) {
+            // The preceding update wiped jsonCache for every root, while the build
+            // cycle only covers the documents it touched. Schedule every root that is
+            // still loaded for regeneration, so a change in one project does not drop
+            // the cached JSON (and the diagram) of the other open projects. cachedUris
+            // was already cleared in the onUpdate hook and is repopulated by
+            // doGenerateAndCache as each generation succeeds, so it never advertises
+            // a project whose JSON failed to build.
+            this.pendingReset = false;
+            for (const doc of this.services.shared.workspace.LangiumDocuments.all.toArray()) {
+                const workspaceNode = this.workspaceNodeOf(doc);
+                if (!workspaceNode) continue;
+                const uri = doc.uri.toString();
+                if (!roots.has(uri)) {
+                    roots.set(uri, workspaceNode);
                 }
             }
         }
@@ -212,7 +263,10 @@ export class C4GeneratorHandler {
      * Used by MCP to enumerate the available projects/workspaces.
      */
     public getCachedUris(): string[] {
-        return Array.from(this.cachedUris);
+        // Sorted so the list (and in particular its first entry, which the MCP
+        // tools use as the default project) is stable across build cycles and does
+        // not depend on document insertion order.
+        return Array.from(this.cachedUris).sort();
     }
 
     /**

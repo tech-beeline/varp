@@ -17,7 +17,7 @@
 import { AstNode, AstUtils, LangiumDocument, WorkspaceCache } from 'langium';
 import type { LangiumSharedCoreServices } from 'langium';
 import { URI, Utils } from 'vscode-uri';
-import { isConstant, isInclude, isWorkspace } from '../generated/ast';
+import { isConstant, isInclude, isWorkspace, type Include } from '../generated/ast';
 
 /**
  * Single source of truth for resolving !include and extendsUri targets across the
@@ -158,9 +158,23 @@ function substituteLocalConstants(shared: LangiumSharedCoreServices, input: stri
 }
 
 /**
- * Returns the document that directly references `childUri` through a `!include`
- * directive or a workspace `extendsUri`, or undefined when no loaded document
- * references it.
+ * One outbound edge of the reference graph: a document referencing another
+ * document through a `!include` directive or a workspace `extendsUri`.
+ */
+interface ReferenceEdge {
+    /** URI of the referencing (parent) document - the lowest URI wins on conflict. */
+    parentUri: string;
+    /** The `!include` directive that created the edge, when one exists for this target. */
+    include?: Include;
+}
+
+/**
+ * Reverse reference index: childUri -> the document that directly references it
+ * through a `!include` directive or a workspace `extendsUri`.
+ *
+ * Built in one pass over all loaded documents: each document's AST is walked
+ * once and every include/extends target resolved once. A lookup is then a plain
+ * map read.
  *
  * Paths are resolved using only the candidate parent's own constants (see
  * substituteLocalConstants) - ancestor discovery must not recurse into the
@@ -170,65 +184,96 @@ function substituteLocalConstants(shared: LangiumSharedCoreServices, input: stri
  * lowest URI string wins, so the result is deterministic regardless of document
  * insertion order.
  */
-export function findParentDocument(shared: LangiumSharedCoreServices, childUri: string): LangiumDocument | undefined {
-    const constantsHook: ConstantsResolver = (path, node) => substituteLocalConstants(shared, path, node);
-    let best: LangiumDocument | undefined;
-    let bestUri = '';
+const parentIndexCaches = new WeakMap<LangiumSharedCoreServices, WorkspaceCache<string, Map<string, ReferenceEdge>>>();
 
-    for (const doc of shared.workspace.LangiumDocuments.all.toArray()) {
-        const docUri = doc.uri.toString();
-        if (docUri === childUri) continue;
-        const root = doc.parseResult.value;
-        if (!root) continue;
+function getParentIndex(shared: LangiumSharedCoreServices): Map<string, ReferenceEdge> {
+    let cache = parentIndexCaches.get(shared);
+    if (!cache) {
+        cache = new WorkspaceCache<string, Map<string, ReferenceEdge>>(shared);
+        parentIndexCaches.set(shared, cache);
+    }
+    return cache.get('*', () => {
+        const index = new Map<string, ReferenceEdge>();
+        const constantsHook: ConstantsResolver = (path, node) => substituteLocalConstants(shared, path, node);
 
-        let referencesChild = false;
-        for (const inc of AstUtils.streamAllContents(root).filter(isInclude)) {
-            if (resolveTargetUri(inc.file, inc, { constants: constantsHook })?.toString() === childUri) {
-                referencesChild = true;
-                break;
+        // Record one edge. `parentUri` follows the deterministic min-URI rule. The
+        // include directive is captured from the first document that includes the
+        // target (an `extendsUri` edge carries none), so it is available to callers
+        // that need it.
+        const addEdge = (target: string | undefined, parentUri: string, include?: Include): void => {
+            if (!target || target === parentUri) return;
+            const existing = index.get(target);
+            if (!existing) {
+                index.set(target, { parentUri, include });
+                return;
             }
-        }
-        if (!referencesChild) {
+            if (parentUri < existing.parentUri) {
+                // This document wins the deterministic min-URI rule, so the directive
+                // must come from it as well - keeping the previous document's include
+                // would pair a parent URI with a directive that belongs to another file.
+                existing.parentUri = parentUri;
+                existing.include = include;
+                return;
+            }
+            if (parentUri === existing.parentUri && !existing.include && include) {
+                existing.include = include;
+            }
+        };
+
+        for (const doc of shared.workspace.LangiumDocuments.all.toArray()) {
+            const docUri = doc.uri.toString();
+            const root = doc.parseResult.value;
+            if (!root) continue;
+            for (const inc of AstUtils.streamAllContents(root).filter(isInclude)) {
+                addEdge(resolveTargetUri(inc.file, inc, { constants: constantsHook })?.toString(), docUri, inc);
+            }
             for (const ws of AstUtils.streamAllContents(root).filter(isWorkspace)) {
                 if (!ws.extendsUri) continue;
-                if (resolveTargetUri(ws.extendsUri, ws, { constants: constantsHook })?.toString() === childUri) {
-                    referencesChild = true;
-                    break;
-                }
+                addEdge(resolveTargetUri(ws.extendsUri, ws, { constants: constantsHook })?.toString(), docUri);
             }
         }
+        return index;
+    });
+}
 
-        if (referencesChild && (!best || docUri < bestUri)) {
-            best = doc;
-            bestUri = docUri;
-        }
-    }
-    return best;
+/**
+ * Returns the document that directly references `childUri` through a `!include`
+ * directive or a workspace `extendsUri`, or undefined when no loaded document
+ * references it. Backed by the shared reverse index (single AST pass per build).
+ */
+export function findParentDocument(shared: LangiumSharedCoreServices, childUri: string): LangiumDocument | undefined {
+    const edge = getParentIndex(shared).get(childUri);
+    if (!edge) return undefined;
+    return shared.workspace.LangiumDocuments.getDocument(URI.parse(edge.parentUri));
+}
+
+/**
+ * Returns the `!include` directive that pulls `targetUri` into the workspace, or
+ * undefined when no loaded document includes it (e.g. it is only reached through
+ * `extendsUri`). Served from the same reverse index as findParentDocument.
+ *
+ * Paths are resolved by the shared pipeline (quotes, ${CONST}, http(s), relative
+ * paths), so the directive found here is the same one the document builder
+ * follows.
+ */
+export function findIncludeDirective(shared: LangiumSharedCoreServices, targetUri: string): Include | undefined {
+    return getParentIndex(shared).get(targetUri)?.include;
 }
 
 // Cached per shared-services instance and auto-invalidated on workspace changes
 // (see the constants cache above for the same pattern).
 const ancestorChainCaches = new WeakMap<LangiumSharedCoreServices, WorkspaceCache<string, string[]>>();
-// Caches the DIRECT parent of each document URI (childUri -> parentUri). Walking a
-// parent is a full scan of LangiumDocuments.all (via findParentDocument), so caching
-// every edge lets getAncestorChain and the scope provider reuse it instead of
-// rescaming the whole document set per step.
-const parentByChildCaches = new WeakMap<LangiumSharedCoreServices, WorkspaceCache<string, string | undefined>>();
 
 /**
  * Returns the URI of the document that directly references `childUri` through a
  * `!include` directive or a workspace `extendsUri`, or undefined when no loaded
- * document references it. Cached per child URI (auto-invalidated on workspace
- * changes). Deterministic: when several documents reference the same target, the
- * one with the lowest URI string wins (same rule as findParentDocument).
+ * document references it. The reverse reference index (see getParentIndex) is
+ * already cached per workspace build, so this is a plain O(1) lookup.
+ * Deterministic: when several documents reference the same target, the one with
+ * the lowest URI string wins (same rule as findParentDocument).
  */
 export function getParentUri(shared: LangiumSharedCoreServices, childUri: string): string | undefined {
-    let cache = parentByChildCaches.get(shared);
-    if (!cache) {
-        cache = new WorkspaceCache<string, string | undefined>(shared);
-        parentByChildCaches.set(shared, cache);
-    }
-    return cache.get(childUri, () => findParentDocument(shared, childUri)?.uri.toString());
+    return getParentIndex(shared).get(childUri)?.parentUri;
 }
 
 /**

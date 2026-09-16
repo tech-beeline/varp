@@ -168,19 +168,18 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     private readonly styleRegionsCache: WorkspaceCache<string, StyleRegions>;
     // Cache for extends-resolved elements to avoid repeated traversal
     private readonly extendedElementsCache: WorkspaceCache<string, AstNodeDescription[]>;
-    // Cache for include-resolved elements (per root document URI). Rebuilding the
-    // include descriptions is expensive (resolves each fragment + walks its AST),
-    // so it is memoized per including document (auto-invalidated on workspace change).
-    private readonly includeCache: WorkspaceCache<string, AstNodeDescription[]>;
     // Cache of the inherited identifier style per included-fragment URI. Computing
     // it walks the ancestor chain + the parent AST to find the matching !include
     // directive, so the result is memoized per fragment URI (cleared on any
     // workspace change via WorkspaceCache).
     private readonly fragmentStyleCache: WorkspaceCache<string, boolean>;
-    // Cache for the local element package (FQN/name descriptions + suffix aliases) per root
-    // node. Built once per root per build (see buildLocalScopePackage) - this removes the
-    // O(references x elements) blow-up where every getScope() call re-traversed the whole
-    // AST and recomputed FQNs from scratch.
+    // Per-ancestor-document index: included-target URI -> CST offset of the !include
+    // directive. Built once per ancestor document and reused by inheritedIncludeStyle
+    // for every fragment.
+    private readonly includeTargetOffsetCache: WorkspaceCache<string, Map<string, number>>;
+    // Cache for the local element package (FQN/name descriptions + suffix aliases) per
+    // root node, built once per root per build (see buildLocalScopePackage) and reused
+    // by getScope().
     private readonly localScopeCache: WorkspaceCache<string, LocalScopePackage>;
 
     constructor(services: LangiumCoreServices) {
@@ -190,8 +189,8 @@ export class C4ScopeProvider extends DefaultScopeProvider {
         // Initialize caches. Automatically cleared on ANY project change via WorkspaceCache.
         this.styleRegionsCache = new WorkspaceCache<string, StyleRegions>(services.shared);
         this.extendedElementsCache = new WorkspaceCache<string, AstNodeDescription[]>(services.shared);
-        this.includeCache = new WorkspaceCache<string, AstNodeDescription[]>(services.shared);
         this.fragmentStyleCache = new WorkspaceCache<string, boolean>(services.shared);
+        this.includeTargetOffsetCache = new WorkspaceCache<string, Map<string, number>>(services.shared);
         this.localScopeCache = new WorkspaceCache<string, LocalScopePackage>(services.shared);
     }
 
@@ -420,11 +419,27 @@ export class C4ScopeProvider extends DefaultScopeProvider {
         const isElementRef = ELEMENT_REFERENCE_TYPES.has(referenceType);
 
         if (isElementRef) {
-            let workspace = AstUtils.getContainerOfType(context.container, isWorkspace);
-            let model = AstUtils.getContainerOfType(context.container, isModelBlock);
+            // Locate the scope root in a single climb up the container chain,
+            // collecting the Workspace, ModelBlock and C4Document ancestors.
+            //
+            // The nesting order is C4Document > Workspace > ModelBlock > element, so the
+            // upward walk meets the ModelBlock first, then the Workspace, then the
+            // C4Document; it stops early once both are known, since the C4Document is
+            // only needed when neither exists (see the root rule below).
+            let workspace: Workspace | undefined;
+            let model: AstNode | undefined;
+            let document: AstNode | undefined;
+            let cur: AstNode | undefined = context.container;
+            while (cur) {
+                if (!model && isModelBlock(cur)) model = cur;
+                else if (!workspace && isWorkspace(cur)) workspace = cur;
+                else if (!document && isC4Document(cur)) document = cur;
+                if (model && workspace) break;
+                cur = cur.$container;
+            }
             // Determine the root for scope traversal: start from ModelBlock if inside one,
             // otherwise from Workspace, or finally from C4Document
-            let root = model || workspace || AstUtils.getContainerOfType(context.container, isC4Document);
+            let root = model || workspace || document;
 
             // If the reference sits inside an !include fragment (no workspace of
             // its own), its scope must also contain the ROOT workspace that
@@ -462,11 +477,6 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             if (root) {
                 const globalDescriptions: AstNodeDescription[] = [];
 
-                // --- 1. RESOLVE !include FILES ---
-                // Included fragment elements are collected inside buildLocalScopePackage
-                // (step 3) so they share the SAME suffix-alias map as local elements -
-                // matching Structurizr's inline-splice semantics. They end up in
-                // pkg.localDescriptions, hence no separate include pass here.
                 const currentDoc = AstUtils.getDocument(root);
 
                 // 2. LOAD ELEMENTS FROM EXTENDS (global only, cached; external workspace
@@ -479,13 +489,17 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                     globalDescriptions.push(...extDescriptions);
                 }
 
-                // 3. COLLECT LOCAL ELEMENTS with suffix alias scoping (cached per root node).
-                // The local package is a constant of the root - it does not depend on the
-                // referencing context - so it is built once per root per build (see
-                // buildLocalScopePackage) instead of being re-traversed on every reference.
-                // The cache key is the root document URI plus the root node's type/offset,
-                // because one document can resolve to different roots (ModelBlock vs Workspace
-                // vs C4Document) depending on where the reference sits.
+                // 3. Collect local elements with suffix alias scoping, cached per
+                // scope root. `root` is the start node of the walk (a ModelBlock, the
+                // Workspace or the C4Document), not the AST root, which is always the
+                // C4Document. One document can therefore yield different scope roots:
+                // inside `model {}` the walk starts at the ModelBlock and sees only the
+                // model subtree, while a reference in `views {}` walks from the
+                // Workspace and additionally sees view-level ElementExtension
+                // (`!element`), Relationship and Group nodes. Since a Workspace may
+                // hold several ModelBlocks, the key includes the root node's
+                // type/offset; keying by document URI alone would let whichever scope
+                // root is cached first serve the other.
                 const rootDocUri = currentDoc.uri.toString();
                 const rootKey = `${rootDocUri}#${root.$type}@${root.$cstNode?.offset ?? -1}`;
                 const pkg = this.localScopeCache.get(rootKey, () => this.buildLocalScopePackage(root));
@@ -494,37 +508,27 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 const globalScope = this.getGlobalScope(referenceType, context);
 
                 // 4. Build chained MapScope: from nearest enclosing NamedElement to root.
-                // Langium's scope lookup works bottom-up — the innermost scope is searched first.
-                // The outermost level contains global FQN descriptions + external (include/extends).
                 let scope: Scope = new MapScope(globalDescriptions, globalScope);
 
-                // Collect enclosing NamedElement chain for the context container
+                // Keys of suffixAliasesByScope are only ever NamedElement nodes
+                // (exportElementDescriptions writes via collectHierarchicalAncestors,
+                // which filters isNamedElement), so the `has` lookup already implies
+                // the type.
                 const enclosingChain: AstNode[] = [];
-                let cur: AstNode | undefined = context.container;
-                while (cur) {
-                    if (isNamedElement(cur) && pkg.suffixAliasesByScope.has(cur)) {
-                        enclosingChain.push(cur);
+                let enclosing: AstNode | undefined = context.container;
+                while (enclosing) {
+                    if (pkg.suffixAliasesByScope.has(enclosing)) {
+                        enclosingChain.push(enclosing);
                     }
-                    cur = cur.$container;
+                    enclosing = enclosing.$container;
                 }
 
-                // Wrap from farthest ancestor to nearest (reverse order),
-                // so the nearest ancestor becomes the innermost (highest priority) scope.
                 for (let i = enclosingChain.length - 1; i >= 0; i--) {
                     const aliases = pkg.suffixAliasesByScope.get(enclosingChain[i])!;
                     scope = new MapScope(aliases, scope);
                 }
 
                 // 5. Case-insensitive fallback for IDENTIFIERS only.
-                // Structurizr DSL resolves identifiers case-insensitively
-                // (IdentifiersRegister.getElement uses equalsIgnoreCase), so
-                // `MassPrint` must resolve `MASSPRINT = softwareSystem "MassPrint"`.
-                // Collect every description tagged as an identifier (FQN, flat id,
-                // !element-prefixed FQN, and suffix aliases) across all scope levels,
-                // and wrap the final chain so an exact miss falls back to a
-                // case-insensitive identifier hit - preserving the chain's priority
-                // order. Name-based lookups are untouched (they stay case-sensitive,
-                // matching Model.getSoftwareSystemWithName).
                 const tagged: AstNodeDescription[] = [];
                 const collectTagged = (descs: Iterable<AstNodeDescription>) => {
                     for (const d of descs) {
@@ -582,9 +586,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
         // descriptions (`s.a`, `s.b`) and short names are invisible.
         const currentDoc = AstUtils.getDocument(root);
         const docUri = currentDoc?.uri.toString() ?? '';
-        const includeDescriptions = this.includeCache.get(docUri, () =>
-            this.resolveIncludesRecursive(root, new Set<string>([docUri]))
-        );
+        const includeDescriptions = this.resolveIncludesRecursive(root, new Set<string>([docUri]));
         localDescriptions.push(...includeDescriptions);
 
         // Suffix aliases for included elements cannot be replayed from the cached
@@ -613,11 +615,11 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             visitedUris.add(uri.toString());
 
             const langiumDoc = this.services.shared.workspace.LangiumDocuments.getDocument(uri);
-            const rootNode = langiumDoc?.parseResult.value;
+            if (!langiumDoc) continue;
+            const rootNode = langiumDoc.parseResult.value;
             if (!rootNode) continue;
 
-            const hasOwnDirective = AstUtils.streamAllContents(rootNode)
-                .filter(isIdentifiersProperty).head() !== undefined;
+            const hasOwnDirective = this.hasOwnIdentifiersDirective(langiumDoc);
             const remoteHierarchical = hasOwnDirective
                 ? this.isHierarchicalMode(rootNode)
                 : this.inheritedIncludeStyle(uri.toString());
@@ -684,8 +686,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 //    (default flat until the first directive, then per-region shifts);
                 //  - otherwise the fragment uses the parent's style for the region at the
                 //    offset of the `!include` directive (closest ancestor that includes it).
-                const hasOwnDirective = AstUtils.streamAllContents(rootNode)
-                    .filter(isIdentifiersProperty).head() !== undefined;
+                const hasOwnDirective = this.hasOwnIdentifiersDirective(langiumDoc);
                 let remoteHierarchical: boolean;
                 if (hasOwnDirective) {
                     remoteHierarchical = this.isHierarchicalMode(rootNode);
@@ -794,6 +795,15 @@ export class C4ScopeProvider extends DefaultScopeProvider {
      * (inherited from the extendsUri chain) plus one region per !identifiers directive,
      * sorted by CST offset. Cached per document URI.
      */
+    /**
+     * Returns true when the document declares at least one `!identifiers` directive
+     * of its own. Derived from the cached style regions: a document without its
+     * own directive has only the single base region at offset -1.
+     */
+    private hasOwnIdentifiersDirective(doc: LangiumDocument): boolean {
+        return this.getStyleRegions(doc).regions.length > 1;
+    }
+
     private getStyleRegions(doc: LangiumDocument, visitedUris?: Set<string>): StyleRegions {
         return this.styleRegionsCache.get(doc.uri.toString(), () => {
             const visited = visitedUris ?? new Set<string>();
@@ -852,11 +862,21 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 const ancRoot = ancDoc?.parseResult.value;
                 if (!ancRoot) continue;
 
-                for (const inc of AstUtils.streamAllContents(ancRoot).filter(isInclude).toArray()) {
-                    const targetUri = this.resolvePathToUri(inc.file, inc);
-                    if (targetUri?.toString() === fragmentUri) {
-                        return this.styleAtOffset(ancDoc, inc.$cstNode?.offset ?? 0);
+                // Per-ancestor map of included-target URI -> !include directive CST offset,
+                // built once per ancestor document and reused for every fragment.
+                const offsets = this.includeTargetOffsetCache.get(ancUri, () => {
+                    const map = new Map<string, number>();
+                    for (const inc of AstUtils.streamAllContents(ancRoot).filter(isInclude).toArray()) {
+                        const targetUri = this.resolvePathToUri(inc.file, inc);
+                        if (targetUri && !map.has(targetUri.toString())) {
+                            map.set(targetUri.toString(), inc.$cstNode?.offset ?? 0);
+                        }
                     }
+                    return map;
+                });
+                const offset = offsets.get(fragmentUri);
+                if (offset !== undefined) {
+                    return this.styleAtOffset(ancDoc, offset);
                 }
             }
             return false;

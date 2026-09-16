@@ -4420,8 +4420,16 @@ class JsonGenerator {
     /** Applies collected overlay mods to a JSON element (shared with !elements). */
     private applyOverlayMods(jsonElement: any, mods: { tags?: string[]; url?: string; properties?: Record<string, string>; perspectives?: any[] }): void {
         if (mods.tags) {
-            const existing = Array.isArray(jsonElement.tags) ? jsonElement.tags.slice() : [];
-            jsonElement.tags = Array.from(new Set(existing.concat(mods.tags)));
+            // `tags` is a comma-separated string in the emitted JSON (extractTags
+            // joins with ','), and every consumer splits it: the renderer calls
+            // element.tags.split(',') and the MCP model does the same. Joining here
+            // keeps the overlay path (!element / !elements) byte-identical to the
+            // extractTags path; assigning an array would make .split() throw.
+            const existing = typeof jsonElement.tags === 'string'
+                ? jsonElement.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+                : [];
+            const merged = Array.from(new Set(existing.concat(mods.tags)));
+            jsonElement.tags = merged.length > 0 ? merged.join(',') : undefined;
         }
         if (mods.url !== undefined) jsonElement.url = mods.url;
         if (mods.properties) {

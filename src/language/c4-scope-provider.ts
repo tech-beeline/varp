@@ -507,13 +507,28 @@ export class C4ScopeProvider extends DefaultScopeProvider {
 
                 const globalScope = this.getGlobalScope(referenceType, context);
 
+                // Descriptions in the local/extends packages are cached per scope root
+                // and therefore cover EVERY named element of that root, regardless of
+                // which reference is being resolved. A reference declared with a
+                // concrete type (`softwareSystem=[SoftwareSystem]`) must only see
+                // descriptions that are subtypes of that type; otherwise a name shared
+                // with another element kind resolves to the wrong node - e.g.
+                // `!element ENSEMBLE` shadowing the real `softwareSystem ENSEMBLE`,
+                // which emitted a dangling `elementextension_*` id that no model
+                // element carries. Filtering happens here, per call, because the cached
+                // package is type-agnostic and shared by every reference type.
+                const isAssignable = (desc: AstNodeDescription): boolean =>
+                    this.reflection.isSubtype(desc.type, referenceType);
+
                 // 4. Build chained MapScope: from nearest enclosing NamedElement to root.
-                let scope: Scope = new MapScope(globalDescriptions, globalScope);
+                let scope: Scope = new MapScope(globalDescriptions.filter(isAssignable), globalScope);
 
                 // Keys of suffixAliasesByScope are only ever NamedElement nodes
                 // (exportElementDescriptions writes via collectHierarchicalAncestors,
                 // which filters isNamedElement), so the `has` lookup already implies
-                // the type.
+                // the type. The alias descriptions themselves still need filtering:
+                // an alias pointing at a nested element must not satisfy a reference
+                // to an unrelated type.
                 const enclosingChain: AstNode[] = [];
                 let enclosing: AstNode | undefined = context.container;
                 while (enclosing) {
@@ -525,14 +540,17 @@ export class C4ScopeProvider extends DefaultScopeProvider {
 
                 for (let i = enclosingChain.length - 1; i >= 0; i--) {
                     const aliases = pkg.suffixAliasesByScope.get(enclosingChain[i])!;
-                    scope = new MapScope(aliases, scope);
+                    const assignableAliases = aliases.filter(isAssignable);
+                    if (assignableAliases.length > 0) {
+                        scope = new MapScope(assignableAliases, scope);
+                    }
                 }
 
                 // 5. Case-insensitive fallback for IDENTIFIERS only.
                 const tagged: AstNodeDescription[] = [];
                 const collectTagged = (descs: Iterable<AstNodeDescription>) => {
                     for (const d of descs) {
-                        if ((d as any)[IDENTIFIER_DESCRIPTION_TAG]) tagged.push(d);
+                        if ((d as any)[IDENTIFIER_DESCRIPTION_TAG] && isAssignable(d)) tagged.push(d);
                     }
                 };
                 collectTagged(globalDescriptions);

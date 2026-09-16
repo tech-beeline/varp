@@ -1,0 +1,46 @@
+{
+    "name": "Name",
+    "description": "Description",
+    "model": {
+        "properties": {},
+        "softwareSystems": [
+            {
+                "id": "softwaresystem_72c73fae",
+                "name": "A",
+                "tags": "Element,Software System,ExtraOne,ExtraTwo",
+                "containers": [
+                    {
+                        "id": "container_5b1283cd",
+                        "name": "S",
+                        "tags": "Element,Container"
+                    }
+                ]
+            }
+        ]
+    },
+    "views": {
+        "systemContextViews": [
+            {
+                "softwareSystemId": "softwaresystem_72c73fae",
+                "key": "A-SystemContext-faa107f5",
+                "elements": [
+                    {
+                        "id": "softwaresystem_72c73fae",
+                        "x": 400,
+                        "y": 400,
+                        "width": 450,
+                        "height": 300
+                    }
+                ],
+                "enterpriseBoundaryVisible": true,
+                "dimensions": {
+                    "width": 1250,
+                    "height": 1100
+                }
+            }
+        ],
+        "configuration": {
+            "properties": {}
+        }
+    }
+}

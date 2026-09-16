@@ -1208,8 +1208,13 @@ PropertyItem:
 PropertyKey returns string:
     UNQUOTED_STRING | ASSIGNMENT | DOT_SUFFIX | STRING | AnyKeyword;
 
+// A property value runs to the end of the line and may contain any
+// non-whitespace character, so punctuation is listed as part of the value.
 PropertyValue returns string:
-    (UNQUOTED_STRING | PATH_TOKEN | ASSIGNMENT | DOT_SUFFIX | HYPHEN_SUFFIX | SLASH_SUFFIX | INT | STRING | AnyKeyword | '=' | ';' | '.' | '/' | '-' | '(' | ')' | '[' | ']' )+;
+    (UNQUOTED_STRING | PATH_TOKEN | ASSIGNMENT | DOT_SUFFIX | HYPHEN_SUFFIX | SLASH_SUFFIX | INT | STRING | AnyKeyword
+        | '=' | ';' | '.' | '/' | '-' | '(' | ')' | '[' | ']'
+        | ',' | ':' | '$' | '@' | '!' | '+' | '*' | '>' | '<' | '?' | '~' | '|' | '^'
+        | ARROW | NO_ARROW)+;
 
 NameProperty:
     NAME_KW value=STRING;

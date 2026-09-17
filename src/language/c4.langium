@@ -1095,7 +1095,7 @@ ElementEqAfferentEfferentExpression returns ViewExpression:
 
 // Expression value — used in element.tag==<value>, element.technology==<value>, etc.
 ExpressionValue returns string:
-    UNQUOTED_STRING | INT | AnyKeyword;
+    UNQUOTED_STRING | INT | AnyKeyword | STRING;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // ANIMATION
@@ -1235,8 +1235,10 @@ UrlProperty:
 // All element types that can be referenced by name/ID
 type NamedElement = Person | SoftwareSystem | Container | Component | DeploymentNode | InfrastructureNode | SoftwareSystemInstance | ContainerInstance | GenericInstance | Relationship | ElementExtension | ArchetypeInstance | ArchetypeDefinition | CustomElement | Group | DeploymentGroup | DeploymentEnvironment;
 
-// Element types that can be a source or target of a relationship
-type RelationshipMember = Person | SoftwareSystem | Container | Component | DeploymentNode | InfrastructureNode | SoftwareSystemInstance| ContainerInstance | CustomElement;
+// Element types that can be a source or target of a relationship.
+// ArchetypeInstance is included: an instance materialises as an element of its
+// archetype's base type, so it is a valid endpoint.
+type RelationshipMember = Person | SoftwareSystem | Container | Component | DeploymentNode | InfrastructureNode | SoftwareSystemInstance| ContainerInstance | CustomElement | ArchetypeInstance;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // TAG PROPERTY
@@ -2070,12 +2072,10 @@ terminal INSTANCE_RANGE: /[0-9]+\.\.([0-9]+|N|\*)?/;
 
 // ─── Base tokens ───────────────────────────────────────────────────────────
 
-// Note: the negative lookahead (?![a-zA-Z_]) prevents INT from eating a leading
-// digit prefix of an alphanumeric identifier (e.g. 1CRETAIL). Otherwise the
-// tokenizer would split it into INT "1" + UNQUOTED_STRING "CRETAIL" (INT is
-// declared before UNQUOTED_STRING and wins on overlap), which breaks references
-// like `ENSEMBLE.Waltz -> 1CRETAIL` because Identifier has no INT alternative.
-terminal INT returns string: /[0-9]+(?![a-zA-Z_])/;
+// INT: a digit run not followed by a word character, digit, non-ASCII character,
+// '.', '/' or ':'. The lookahead prevents INT from consuming a leading digit prefix
+// of an alphanumeric identifier (Identifier has no INT alternative).
+terminal INT returns string: /[0-9]+(?![\w\u00A0-\uFFFF.\/:])/;
 
 terminal UNQUOTED_STRING: /[a-zA-Z0-9_\u00A0-\uFFFF]([\w\u00A0-\uFFFF.\/:]|-(?![>\/]))*/;
 

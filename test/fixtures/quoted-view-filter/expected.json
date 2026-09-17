@@ -1,0 +1,57 @@
+{
+    "name": "Name",
+    "description": "Description",
+    "model": {
+        "properties": {},
+        "softwareSystems": [
+            {
+                "id": "softwaresystem_4e066da5",
+                "name": "S",
+                "tags": "Element,Software System",
+                "containers": [
+                    {
+                        "id": "container_5b129027",
+                        "name": "C0",
+                        "tags": "Element,Container,tag1"
+                    },
+                    {
+                        "id": "container_5b128f30",
+                        "name": "C1",
+                        "tags": "Element,Container,tag A"
+                    }
+                ]
+            }
+        ]
+    },
+    "views": {
+        "containerViews": [
+            {
+                "softwareSystemId": "softwaresystem_4e066da5",
+                "key": "S-Container-3afb9a6a",
+                "elements": [
+                    {
+                        "id": "container_5b129027",
+                        "x": 450,
+                        "y": 449,
+                        "width": 450,
+                        "height": 300
+                    },
+                    {
+                        "id": "container_5b128f30",
+                        "x": 1200,
+                        "y": 449,
+                        "width": 450,
+                        "height": 300
+                    }
+                ],
+                "dimensions": {
+                    "width": 2100,
+                    "height": 1279
+                }
+            }
+        ],
+        "configuration": {
+            "properties": {}
+        }
+    }
+}

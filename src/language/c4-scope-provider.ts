@@ -21,6 +21,7 @@ import {
 import { isModelBlock, isWorkspace, isNamedElement, Workspace, NamedElement, isArchetypeDefinition, isDeploymentEnvironment, isInclude, Include, isC4Document, isGroup, isIdentifiersProperty, isElementExtension } from '../generated/ast';
 import { URI } from 'vscode-uri';
 import * as includeResolver from './c4-include-resolver';
+import { archetypeInstanceTypeByRefText } from './c4-utils';
 
 /**
  * Custom scope provider for C4 DSL that implements:
@@ -507,6 +508,36 @@ export class C4ScopeProvider extends DefaultScopeProvider {
 
                 const globalScope = this.getGlobalScope(referenceType, context);
 
+                // Name -> ArchetypeDefinition node, built from the descriptions
+                // collected for this scope root. Lookups go through `$refText`, not
+                // `.ref`, so resolving an `archetype` reference does not re-enter the
+                // linker.
+                const archetypesByName = new Map<string, AstNode>();
+                for (const desc of globalDescriptions) {
+                    const node = (desc as any).node as AstNode | undefined;
+                    // Accepts ArchetypeDefinition and its ArchetypeNamed subtype.
+                    if (!node || !isArchetypeDefinition(node)) {
+                        continue;
+                    }
+                    // Flat mode indexes the bare name; hierarchical mode prefixes it with
+                    // the ancestor path, so the trailing suffix is accepted as well.
+                    const keys = [desc.name, desc.name.toLowerCase()];
+                    const dot = desc.name.lastIndexOf('.');
+                    if (dot >= 0) {
+                        const suffix = desc.name.slice(dot + 1);
+                        keys.push(suffix, suffix.toLowerCase());
+                    }
+                    for (const key of keys) {
+                        if (!archetypesByName.has(key)) {
+                            archetypesByName.set(key, node);
+                        }
+                    }
+                }
+                const lookupArchetype = (name: string | undefined): AstNode | undefined =>
+                    name === undefined
+                        ? undefined
+                        : archetypesByName.get(name) ?? archetypesByName.get(name.toLowerCase());
+
                 // Descriptions in the local/extends packages are cached per scope root
                 // and therefore cover EVERY named element of that root, regardless of
                 // which reference is being resolved. A reference declared with a
@@ -517,8 +548,16 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 // which emitted a dangling `elementextension_*` id that no model
                 // element carries. Filtering happens here, per call, because the cached
                 // package is type-agnostic and shared by every reference type.
-                const isAssignable = (desc: AstNodeDescription): boolean =>
-                    this.reflection.isSubtype(desc.type, referenceType);
+                const isAssignable = (desc: AstNodeDescription): boolean => {
+                    if (this.reflection.isSubtype(desc.type, referenceType)) {
+                        return true;
+                    }
+                    // An ArchetypeInstance is assignable through the base type of its
+                    // archetype (e.g. `b = externalSoftwareSystem "B"` behaves as a
+                    // SoftwareSystem), resolved via $refText.
+                    const effective = archetypeInstanceTypeByRefText((desc as any).node, lookupArchetype);
+                    return !!effective && this.reflection.isSubtype(effective, referenceType);
+                };
 
                 // 4. Build chained MapScope: from nearest enclosing NamedElement to root.
                 let scope: Scope = new MapScope(globalDescriptions.filter(isAssignable), globalScope);

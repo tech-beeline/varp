@@ -16,6 +16,7 @@
 
 import { AstUtils } from 'langium';
 import {
+    isArchetypeInstance,
     isComponent,
     isContainer,
     isContainerInstance,
@@ -151,6 +152,109 @@ export function flatId(element: any, rootDocUri: string, resolvers?: FlatIdResol
         prefix = element.$type.toLowerCase();
     }
     return `${prefix}_${hash}`;
+}
+
+/**
+ * Maps an archetype base keyword to the element type it creates.
+ */
+const ARCHETYPE_BASE_TYPES: Record<string, string> = {
+    person: 'Person',
+    softwaresystem: 'SoftwareSystem',
+    container: 'Container',
+    component: 'Component',
+    deploymentnode: 'DeploymentNode',
+    infrastructurenode: 'InfrastructureNode',
+    softwaresysteminstance: 'SoftwareSystemInstance',
+    containerinstance: 'ContainerInstance',
+    custom: 'CustomElement',
+    element: 'CustomElement',
+    group: 'Group',
+};
+
+/**
+ * Walks the archetype inheritance chain of a node, from the archetype it names
+ * to the most distant base, cutting cycles.
+ *
+ * @param node an ArchetypeInstance / RelationshipArrow node, or anything else
+ * @returns the archetypes in inheritance order (empty when none apply)
+ */
+export function archetypeChain(node: any): any[] {
+    const chain: any[] = [];
+    const ref = node?.archetype?.ref;
+    if (!ref) {
+        return chain;
+    }
+    const seen = new Set<any>();
+    let arch: any = ref;
+    while (arch && !seen.has(arch)) {
+        seen.add(arch);
+        chain.push(arch);
+        arch = arch.baseArchetype?.ref;
+    }
+    return chain;
+}
+
+/**
+ * Resolves the element type an archetype instance behaves as: the first concrete
+ * `baseType` (or relationship arrow) along the archetype chain.
+ *
+ * @param node an ArchetypeInstance node, or anything else
+ * @returns the effective element type name (e.g. 'SoftwareSystem'), or undefined
+ */
+export function archetypeInstanceType(node: any): string | undefined {
+    for (const arch of archetypeChain(node)) {
+        if (typeof arch.baseType === 'string' && arch.baseType) {
+            return ARCHETYPE_BASE_TYPES[arch.baseType.toLowerCase()];
+        }
+        if (arch.baseArrow) {
+            return 'Relationship';
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Same walk as archetypeChain(), resolving every name through `lookup` from the
+ * node's `$refText` instead of reading `.ref`.
+ *
+ * @param node an ArchetypeInstance / RelationshipArrow node, or anything else
+ * @param lookup resolves a `$refText` name to its ArchetypeDefinition node
+ * @returns the archetypes in inheritance order (empty when none apply)
+ */
+export function archetypeChainByRefText(node: any, lookup: (name: string | undefined) => any | undefined): any[] {
+    const chain: any[] = [];
+    const seen = new Set<any>();
+    let refText: string | undefined = node?.archetype?.$refText;
+    while (refText) {
+        const arch = lookup(refText);
+        if (!arch || seen.has(arch)) {
+            break;
+        }
+        seen.add(arch);
+        chain.push(arch);
+        refText = arch.baseArchetype?.$refText;
+    }
+    return chain;
+}
+
+/**
+ * Resolves the element type an archetype instance behaves as, using `$refText`
+ * lookups instead of `.ref` access.
+ *
+ * @param node an ArchetypeInstance node, or anything else
+ * @param lookup resolves a `$refText` name to its ArchetypeDefinition node
+ * @returns the effective element type name (e.g. 'SoftwareSystem'), or undefined
+ */
+export function archetypeInstanceTypeByRefText(node: any, lookup: (name: string | undefined) => any | undefined): string | undefined {
+    for (const arch of archetypeChainByRefText(node, lookup)) {
+        if (typeof arch.baseType === 'string' && arch.baseType) {
+            return ARCHETYPE_BASE_TYPES[arch.baseType.toLowerCase()];
+        }
+        if (arch.baseArrow) {
+            return 'Relationship';
+        }
+    }
+    return undefined;
 }
 
 /** Fallback source/target resolver: climbs the AST $container chain for C4 elements. */

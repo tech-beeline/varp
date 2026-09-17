@@ -1,0 +1,35 @@
+{
+    "name": "Name",
+    "description": "Description",
+    "model": {
+        "properties": {},
+        "customElements": [
+            {
+                "id": "customelement_2748dcde",
+                "name": "B",
+                "tags": "Element,Hardware System"
+            }
+        ],
+        "softwareSystems": [
+            {
+                "id": "softwaresystem_72c73795",
+                "name": "A",
+                "tags": "Element,Software System",
+                "relationships": [
+                    {
+                        "id": "relationship_a9b1b99",
+                        "sourceId": "softwaresystem_72c73795",
+                        "destinationId": "customelement_2748dcde",
+                        "description": "Gets data from",
+                        "tags": "Relationship"
+                    }
+                ]
+            }
+        ]
+    },
+    "views": {
+        "configuration": {
+            "properties": {}
+        }
+    }
+}

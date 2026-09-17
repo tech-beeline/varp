@@ -15,10 +15,11 @@
 */
 
 import { AstNode, AstUtils, type ValidationAcceptor, type ValidationChecks } from 'langium';
-import { ElementStyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type Workspace, PropertyItem, ModelBlock, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, HealthCheck, DeploymentNode } from '../generated/ast';
+import { ElementStyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, HealthCheck, DeploymentNode } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
 import * as includeResolver from './c4-include-resolver';
+import { C4Utils } from './c4-utils';
 
 /** Normalizes lowercase shape names to Structurizr PascalCase format (Box, RoundedBox, Cylinder, etc.) */
 export const SHAPE_NORMALIZE: Record<string, string> = {
@@ -94,8 +95,12 @@ export function registerValidationChecks(services: C4Services) {
     const checks: ValidationChecks<C4AstType> = {
         PropertyItem: (node, accept) => validator.checkPropertyItem(node, accept),
 
+        C4Document: [
+            (node, accept) => validator.checkUniqueElementsInDocument(node, accept),
+            (node, accept) => validator.checkUniqueViewKeys(node, accept),
+            (node, accept) => validator.checkOnlyOneDefaultView(node, accept)
+        ],
         ModelBlock: [
-            (node, accept) => validator.checkUniqueElementsInModel(node, accept),
             (node, accept) => validator.checkIncludeElements(node, accept, 'ModelBlock')
         ],
         SoftwareSystem: [
@@ -143,11 +148,9 @@ export function registerValidationChecks(services: C4Services) {
             (node, accept) => validator.checkIncludeElements(node, accept, 'SystemContextView')
         ],
         ContainerView: [
-            (node, accept) => validator.checkViewOrderAndUniqueness(node, accept),
             (node, accept) => validator.checkIncludeElements(node, accept, 'ContainerView')
         ],
         ComponentView: [
-            (node, accept) => validator.checkViewOrderAndUniqueness(node, accept),
             (node, accept) => validator.checkIncludeElements(node, accept, 'ComponentView')
         ],
         DeploymentView: [
@@ -305,12 +308,21 @@ export function registerValidationChecks(services: C4Services) {
         ],
         Workspace: [
             (node, accept) => validator.checkWorkspaceMetadata(node, accept),
-            (node, accept) => validator.checkUniqueViewKeys(node, accept),
-            (node, accept) => validator.checkOnlyOneDefaultView(node, accept),
             (node, accept) => validator.checkPathCharacters(node, accept, 'extendsUri')
         ]
     };
     registry.register(checks, validator);
+}
+
+/** A recorded name or identifier occurrence: its declaring document and the node to anchor a diagnostic to. */
+interface DuplicateOccurrence {
+    docUri?: string;
+    anchor: any;
+}
+
+/** A top-level element collected for uniqueness checks, together with its occurrence. */
+interface CollectedTopLevelElement extends DuplicateOccurrence {
+    element: any;
 }
 
 /**
@@ -551,31 +563,102 @@ export class C4Validator {
         }
     }
 
-    /** Validates uniqueness of element names and identifiers at the model level (people, systems, deployment environments) */
-    checkUniqueElementsInModel(model: ModelBlock, accept: ValidationAcceptor): void {
-        const allElements = [...(model.elements || [])];
-        const seenIdentifiers = new Set<string>();
-        const personNames = new Set<string>();
-        const softwareSystemNames = new Set<string>();
-        const deploymentEnvironmentNames = new Set<string>();
-        allElements.forEach((element) => {
-            if (element.name) {
-                if (isPerson(element)) {
-                    if (personNames.has(element.name)) accept('error', `A top-level element named '${element.name}' already exists.`, { node: element, property: 'name' });
-                    else personNames.add(element.name);
-                } else if (isSoftwareSystem(element)) {
-                    if (softwareSystemNames.has(element.name)) accept('error', `A top-level element named '${element.name}' already exists.`, { node: element, property: 'name' });
-                    else softwareSystemNames.add(element.name);
+    /**
+     * Validates name and identifier uniqueness of top-level elements across the whole
+     * document, covering root-level elements, elements nested in groups, every
+     * workspace's model block and !include fragments.
+     *
+     * Mirrors the model rules: people and software systems share one name namespace,
+     * custom elements and deployment environments have their own, and identifiers are
+     * unique across the model.
+     */
+    checkUniqueElementsInDocument(doc: C4Document, accept: ValidationAcceptor): void {
+        const rootUri = AstUtils.getDocument(doc)?.uri.toString();
+        const visitedDocuments = new Set<string>();
+        if (rootUri) visitedDocuments.add(rootUri);
+
+        const collected: CollectedTopLevelElement[] = [];
+        this.collectTopLevelElements(doc as any, collected, visitedDocuments, undefined);
+
+        const personOrSystemNames = new Map<string, DuplicateOccurrence>();
+        const customElementNames = new Map<string, DuplicateOccurrence>();
+        const deploymentEnvironmentNames = new Map<string, DuplicateOccurrence>();
+        const identifiers = new Map<string, DuplicateOccurrence>();
+
+        for (const { element, docUri, anchor } of collected) {
+            const current: DuplicateOccurrence = { docUri, anchor };
+            const name = C4Utils.stripQuotes(element.name);
+            if (name) {
+                if (isCustomElement(element)) {
+                    this.reportDuplicate(customElementNames, name, current, rootUri, accept, `A top-level element named '${name}' already exists.`, 'name');
                 } else if (isDeploymentEnvironment(element)) {
-                    if (deploymentEnvironmentNames.has(element.name)) accept('error', `A top-level element named '${element.name}' already exists.`, { node: element, property: 'name' });
-                    else deploymentEnvironmentNames.add(element.name);
+                    this.reportDuplicate(deploymentEnvironmentNames, name, current, rootUri, accept, `A deployment environment named '${name}' already exists.`, 'name');
+                } else if (isPerson(element) || isSoftwareSystem(element)) {
+                    this.reportDuplicate(personOrSystemNames, name, current, rootUri, accept, `A person or software system named '${name}' already exists.`, 'name');
                 }
             }
             if (element.id) {
-                if (seenIdentifiers.has(element.id)) accept('error', `The identifier '${element.id}' is already in use.`, { node: element, property: 'id' });
-                else seenIdentifiers.add(element.id);
+                this.reportDuplicate(identifiers, element.id, current, rootUri, accept, `The identifier '${element.id}' is already in use.`, 'id');
             }
-        });
+        }
+    }
+
+    /**
+     * Records a name or identifier occurrence and reports a duplicate once. The diagnostic is
+     * anchored to a node of the validated document, so collisions inside a single included
+     * fragment are left to that fragment's own validation, while collisions between two
+     * different included documents are reported by the document that pulls both in.
+     */
+    private reportDuplicate(
+        seen: Map<string, DuplicateOccurrence>, value: string, current: DuplicateOccurrence,
+        rootUri: string | undefined, accept: ValidationAcceptor, message: string, property: string
+    ): void {
+        const previous = seen.get(value);
+        if (!previous) {
+            seen.set(value, current);
+            return;
+        }
+        const involvesRoot = current.docUri === rootUri || previous.docUri === rootUri;
+        if (!involvesRoot && previous.docUri === current.docUri) return;
+        accept('error', message, { node: current.anchor, property });
+    }
+
+    /**
+     * Collects top-level elements reachable from a document, a model block, a group or an
+     * included fragment: direct elements, elements nested in groups, elements inside model
+     * blocks and workspaces, and content pulled in through !include directives. Containers
+     * and components are collected as well so their identifiers are checked, but they are
+     * skipped by the name checks because they are scoped to their software system or
+     * container. `anchor` is the node inside the validated document that a diagnostic for
+     * included content is attached to.
+     */
+    private collectTopLevelElements(
+        node: any, collected: CollectedTopLevelElement[], visitedDocuments: Set<string>, anchor: any
+    ): void {
+        if (!node || typeof node !== 'object') return;
+        for (const element of node.elements ?? []) {
+            if (isGroup(element)) this.collectTopLevelElements(element, collected, visitedDocuments, anchor);
+            else collected.push({ element, docUri: AstUtils.getDocument(element)?.uri.toString(), anchor: anchor ?? element });
+        }
+        for (const group of node.groups ?? []) {
+            this.collectTopLevelElements(group, collected, visitedDocuments, anchor);
+        }
+        for (const modelBlock of node.modelBlocks ?? []) {
+            this.collectTopLevelElements(modelBlock, collected, visitedDocuments, anchor);
+        }
+        for (const workspace of node.workspaces ?? []) {
+            this.collectTopLevelElements(workspace, collected, visitedDocuments, anchor);
+        }
+        for (const inc of node.includes ?? []) {
+            const includedRoot = this.resolveIncludedRoot(inc);
+            if (!includedRoot) continue;
+            const docUri = AstUtils.getDocument(includedRoot)?.uri.toString();
+            if (docUri) {
+                if (visitedDocuments.has(docUri)) continue;
+                visitedDocuments.add(docUri);
+            }
+            this.collectTopLevelElements(includedRoot as any, collected, visitedDocuments, anchor ?? inc);
+        }
     }
 
     /** Validates uniqueness of container names and identifiers within a SoftwareSystem */
@@ -584,11 +667,12 @@ export class C4Validator {
         const containerIds = new Set<string>();
         const containers = (softwareSystem as any).elements || [];
         for (const container of containers) {
-            if (container.name) {
-                if (containerNames.has(container.name)) {
-                    accept('error', `A container named '${container.name}' already exists in this software system.`, { node: container, property: 'name' });
+            const name = C4Utils.stripQuotes(container.name);
+            if (name) {
+                if (containerNames.has(name)) {
+                    accept('error', `A container named '${name}' already exists in this software system.`, { node: container, property: 'name' });
                 } else {
-                    containerNames.add(container.name);
+                    containerNames.add(name);
                 }
             }
             if (container.id) {
@@ -607,11 +691,12 @@ export class C4Validator {
         const componentIds = new Set<string>();
         const components = container.elements || [];
         for (const component of components) {
-            if (component.name) {
-                if (componentNames.has(component.name)) {
-                    accept('error', `A component named '${component.name}' already exists in this container.`, { node: component, property: 'name' });
+            const name = C4Utils.stripQuotes(component.name);
+            if (name) {
+                if (componentNames.has(name)) {
+                    accept('error', `A component named '${name}' already exists in this container.`, { node: component, property: 'name' });
                 } else {
-                    componentNames.add(component.name);
+                    componentNames.add(name);
                 }
             }
             if (component.id) {
@@ -677,34 +762,34 @@ export class C4Validator {
         }
     }
 
-    /** Validates that view properties (autoLayout, title, default, etc.) appear only once */
-    checkViewOrderAndUniqueness(view: any, accept: ValidationAcceptor): void {
-        const checkSingle = (props: any[], name: string) => {
-            if (props && props.length > 1) props.slice(1).forEach(p => accept('error', `Duplicate '${name}' property. Only one is allowed.`, { node: p }));
+    /**
+     * Collects every view declared by a document: views blocks that sit at the document
+     * root and views blocks nested inside workspaces.
+     */
+    private collectDocumentViews(doc: C4Document): any[] {
+        const views: any[] = [];
+        const collect = (node: any) => {
+            for (const viewsBlock of node?.viewsBlocks ?? []) {
+                views.push(...(viewsBlock.views ?? []));
+            }
         };
-        checkSingle(view.autoLayoutProps, 'autoLayout');
-        checkSingle(view.titleProps, 'title');
-        checkSingle(view.defaultViews, 'default');
-        checkSingle(view.descriptionProps, 'description');
-        checkSingle(view.propertiesBlocks, 'properties');
+        collect(doc);
+        for (const workspace of (doc as any).workspaces ?? []) {
+            collect(workspace);
+        }
+        return views;
     }
 
-    /** Validates that all view keys within a workspace are unique */
-    checkUniqueViewKeys(workspace: Workspace, accept: ValidationAcceptor): void {
-        const viewsBlock = workspace.viewsBlocks?.[0];
-        if (!viewsBlock?.views) return;
-        const seenKeys = new Map<string, any>();
-        for (const view of viewsBlock.views) {
+    /** Validates that all view keys within a document are unique; a repeated key is reported on the later view. */
+    checkUniqueViewKeys(doc: C4Document, accept: ValidationAcceptor): void {
+        const seenKeys = new Set<string>();
+        for (const view of this.collectDocumentViews(doc)) {
             const key = this.safeGetKey(view);
-            if (key) {
-                if (seenKeys.has(key)) {
-                    const previousView = seenKeys.get(key);
-                    const errorMessage = `Duplicate view key: "${key}"`;
-                    accept('error', errorMessage, { node: view, property: 'key' as any });
-                    accept('error', errorMessage, { node: previousView, property: 'key' as any });
-                } else {
-                    seenKeys.set(key, view);
-                }
+            if (!key) continue;
+            if (seenKeys.has(key)) {
+                accept('error', `A view with the key '${key}' already exists.`, { node: view, property: 'key' as any });
+            } else {
+                seenKeys.add(key);
             }
         }
     }
@@ -714,7 +799,8 @@ export class C4Validator {
         if (isSystemContextView(view) || isContainerView(view) || isComponentView(view) ||
             isSystemLandscapeView(view) || isDeploymentView(view) || isDynamicView(view) ||
             isFilteredView(view) || isCustomView(view) || isImageView(view)) {
-            return (view).key;
+            // Keys are compared without their surrounding quotes.
+            return C4Utils.stripQuotes((view).key) || undefined;
         }
         return undefined;
     }
@@ -909,22 +995,18 @@ export class C4Validator {
         return undefined;
     }
 
-    /** Validates that only one view across the entire workspace is marked as 'default' */
-    checkOnlyOneDefaultView(workspace: Workspace, accept: ValidationAcceptor): void {
-        const viewsBlock = workspace.viewsBlocks?.[0];
-        if (!viewsBlock?.views) return;
-        const detectedDefaultMarkers: Array<{ view: any, marker: any }> = [];
-        for (const view of viewsBlock.views) {
-            const v = view as any;
-            if (v.defaultViews && v.defaultViews.length > 0) {
-                for (const marker of v.defaultViews) {
-                    detectedDefaultMarkers.push({ view: v, marker: marker });
-                }
+    /** Validates that only one view across the entire document is marked as 'default' */
+    checkOnlyOneDefaultView(doc: C4Document, accept: ValidationAcceptor): void {
+        const detectedDefaultMarkers: any[] = [];
+        for (const view of this.collectDocumentViews(doc)) {
+            // Filtered views carry the marker as `defaultView`, every other view type as `defaultViews`.
+            for (const marker of [...((view as any).defaultViews ?? []), ...((view as any).defaultView ?? [])]) {
+                detectedDefaultMarkers.push(marker);
             }
         }
         if (detectedDefaultMarkers.length > 1) {
-            detectedDefaultMarkers.forEach(item => {
-                accept('error', "Only one view can be marked as 'default' across the entire workspace.", { node: item.marker, property: 'value' });
+            detectedDefaultMarkers.slice(1).forEach(marker => {
+                accept('error', "Only one view can be marked as 'default' across the entire workspace.", { node: marker, property: 'value' });
             });
         }
     }

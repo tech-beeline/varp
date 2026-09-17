@@ -32,10 +32,14 @@ export class DiagramPreview {
   // current currentDocUri. When updateWebView is called again for the same URI
   // with the SAME generation, the DSL did not change, so only a changeView is
   // needed (a different diagram of the same workspace), not a full rebuild.
-  // generation is the global counter stamped onto the JSON by the language
-  // server (C4GeneratorHandler) - it's the only thing we need to track here
-  // because currentDocUri already identifies the document.
+  // generation is the build counter reported by the language server
+  // (C4GeneratorHandler) - it's the only thing we need to track here because
+  // currentDocUri already identifies the document.
   private renderedGeneration: number | undefined;
+
+  // Theme contents fetched for the open preview. Kept so a rebuild (a new
+  // generation) re-applies them instead of leaving structurizr.ui.themes empty.
+  private currentThemes: { url: string; content: string }[] | undefined;
 
   // Webview readiness handshake: the webview signals it has finished loading
   // (all scripts parsed) before we send the JSON payload. Without this, the
@@ -90,6 +94,20 @@ export class DiagramPreview {
 
   public async updateWebView(json : any, viewKey : string, docUri? : string, themes : { url: string; content: string }[] | undefined = undefined, generation?: number) {
         console.log(`[C4 Gen] View Key: ${viewKey}`);
+        const themesProvided = themes !== undefined;
+        if (themesProvided) {
+          this.currentThemes = themes;
+        }
+        // Same document + same generation → the webview already built this exact
+        // workspace JSON, so only a view switch is needed (no full rebuild).
+        // Compared against the document bound by the previous call, before it is
+        // replaced below. Newly provided themes always force a rebuild.
+        const sameWorkspace = docUri !== undefined
+            && docUri === this.currentDocUri
+            && !themesProvided
+            && this.renderedGeneration !== undefined
+            && generation !== undefined
+            && generation === this.renderedGeneration;
         this.currentViewKey = viewKey;
         this.currentJson = json;
         if (docUri) {
@@ -97,22 +115,15 @@ export class DiagramPreview {
         }
         this.panel ??= this.createPanel();
         this.pendingJson = false;
-        // Same document + same generation → the webview already built this exact
-        // workspace JSON, so only a view switch is needed (no full rebuild).
-        const sameWorkspace = docUri !== undefined
-            && docUri === this.currentDocUri
-            && this.renderedGeneration !== undefined
-            && generation !== undefined
-            && generation === this.renderedGeneration;
         // Remember what we asked the webview to (re)build; on a full rebuild the
         // webview stores it back via the 'workspace-built' message (see below).
-        const message = { 'uri': docUri, 'json': json, 'viewKey': viewKey, 'themes': themes, 'generation': generation, 'rebuild': !sameWorkspace };
+        const message = { 'uri': docUri, 'json': json, 'viewKey': viewKey, 'themes': this.currentThemes, 'generation': generation, 'rebuild': !sameWorkspace };
         if (this.panelReady) {
           this.panel.webview.postMessage(message);
         } else {
           // The webview is still loading - hold on to the latest payload and
           // deliver it as soon as the webview signals it is ready.
-          this.pendingMessage = { uri: docUri, json, viewKey, themes, generation, rebuild: !sameWorkspace };
+          this.pendingMessage = { uri: docUri, json, viewKey, themes: this.currentThemes, generation, rebuild: !sameWorkspace };
         }
   }
 
@@ -128,6 +139,11 @@ export class DiagramPreview {
           this.currentDocUri = docUri;
         }
         this.pendingJson = true;
+        if (!this.panel) {
+          // A freshly created webview has built no workspace yet, so nothing is
+          // reusable for it.
+          this.renderedGeneration = undefined;
+        }
         this.panel ??= this.createPanel();
   }
 
@@ -316,11 +332,11 @@ export class DiagramPreview {
         // building a Workspace for - so a later updateWebView for the SAME pair
         // can skip the rebuild and just changeView. Called after each full build.
         function rememberBuiltWorkspace(message) {
-            if (message && message.json && message.json.generation !== undefined) {
+            if (message && message.generation !== undefined) {
                 vscode.postMessage({
                     command: 'workspace-built',
                     uri: message.uri,
-                    generation: message.json.generation
+                    generation: message.generation
                 });
             }
         }
@@ -426,10 +442,13 @@ export class DiagramPreview {
           panel.webview.postMessage({ 'uri': pending.uri, 'json': pending.json, 'viewKey': pending.viewKey, 'themes': pending.themes, 'generation': pending.generation, 'rebuild': pending.rebuild });
         }
       } else if (message && message.command === 'workspace-built') {
-        // The webview finished (re)building a Workspace for the current document.
-        // Subsequent updateWebView calls for the SAME document + generation then
-        // only need a changeView instead of a full rebuild.
-        this.renderedGeneration = message.generation;
+        // The webview finished (re)building a Workspace. Ignore a stale report for
+        // a document the preview is no longer bound to. Subsequent updateWebView
+        // calls for the SAME document + generation then only need a changeView
+        // instead of a full rebuild.
+        if (message.uri === undefined || message.uri === this.currentDocUri) {
+          this.renderedGeneration = message.generation;
+        }
       }
     });
 

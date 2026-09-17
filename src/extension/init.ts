@@ -267,7 +267,7 @@ export function init(context: ExtensionContext): void {
             try {
                 const response: any = await languageClient?.sendRequest('custom/getContentForUri', { uri });
                 if (response?.json) {
-                    await refreshDiagram(uri, response.json);
+                    await refreshDiagram(uri, response.json, response.generation);
                     return;
                 }
             } catch (err) {

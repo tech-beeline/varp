@@ -22,25 +22,25 @@ import * as includeResolver from './c4-include-resolver';
 import { C4JsonEnricher } from './c4-json-enricher';
 
 /**
- * A generated workspace JSON together with the generation at which it was last
- * delivered to the client. `generation` is a monotonically increasing counter,
- * incremented on EVERY json delivery (getContentForUri), so the client can tell
- * whether a payload is a NEW build (full Workspace rebuild needed) or the SAME
- * build it already rendered (only a changeView is needed). The pair is stored in
- * the cache, but the counter itself lives module-level, so the cached JSON object
- * is never mutated.
+ * A generated workspace JSON together with the generation of the build it was
+ * produced from. `generation` is a monotonically increasing counter, incremented
+ * once per generated JSON, so the client can tell whether a payload is a NEW
+ * build (full Workspace rebuild needed) or the SAME build it already rendered
+ * (only a changeView is needed). The pair is stored in the cache, but the counter
+ * itself lives module-level, so the cached JSON object is never mutated.
  */
 export interface GeneratedJson {
     /** The Structurizr-compatible workspace JSON (immutable for consumers). */
     json: any;
-    /** Generation at which this payload was last delivered. */
+    /** Generation of the build this payload was produced from. */
     generation: number;
 }
 
 /**
- * Global, monotonically increasing generation counter. Bumped on every json
- * delivery (getContentForUri) so the client can tell "same cached build, new
- * delivery" (just changeView) from "genuinely new build" (full rebuild).
+ * Global, monotonically increasing generation counter. Incremented once per
+ * generated workspace JSON, so a build keeps its generation across deliveries
+ * and the client can tell a new build (full rebuild) from the same build it has
+ * already rendered (changeView only).
  */
 let jsonGeneration = 0;
 
@@ -79,8 +79,8 @@ export class C4GeneratorHandler {
      * Optional callback invoked after a workspace's JSON has been successfully
      * generated and cached. Used by the language server entry points to notify
      * the client (e.g., custom/contentUpdated) so the diagram preview refreshes
-     * only once fresh JSON is actually available. The generation is the counter
-     * for this (uri, json) pair (not mutated into the json).
+     * only once fresh JSON is actually available. The generation identifies the
+     * build this (uri, json) pair came from (it is not mutated into the json).
      */
     public onJsonGenerated?: (uri: string, json: any, generation: number) => void;
 
@@ -210,13 +210,14 @@ export class C4GeneratorHandler {
         try {
             const generator = (this.services as any).generation.C4JsonGenerator;
             const json = await generator.generate(workspace);
-            // Cache the json WITHOUT mutating it. The generation is not stamped
-            // into the object - getContentForUri bumps the counter per delivery.
-            // Start at the current counter so the first delivery is distinguishable.
-            this.jsonCache.set(uri, { json, generation: jsonGeneration });
+            // Cache the json WITHOUT mutating it. The generation identifies this
+            // build and stays stable across every delivery of the same payload.
+            jsonGeneration += 1;
+            const generation = jsonGeneration;
+            this.jsonCache.set(uri, { json, generation });
             this.cachedUris.add(uri);
             // Notify the client only after the JSON was generated successfully.
-            this.onJsonGenerated?.(uri, json, jsonGeneration);
+            this.onJsonGenerated?.(uri, json, generation);
         } catch (err) {
             console.error(`[C4 Build] Generation failed for ${uri}:`, err);
         }
@@ -282,11 +283,10 @@ export class C4GeneratorHandler {
     /**
      * Public API: retrieves the cached (json, generation) PAIR for a document URI.
      * Finds the root workspace for the URI and returns its cached JSON content
-     * together with the current generation. Each call increments the generation
-     * (per delivery) and stores the new pair back, so the client can tell
-     * "same build, just a view switch" (same cached json) from a fresh/different
-     * payload (which requires a full Workspace rebuild). Returns null if no
-     * cached content is found.
+     * together with the generation of the build it came from. The pair is
+     * returned as cached, so repeated reads of the same build report the same
+     * generation and the client can tell a view switch from a rebuild. Returns
+     * null if no cached content is found.
      */
     public getContentForUri(uri: string): GeneratedJson | null {
         const rootUri = this.getRootUri(uri);
@@ -297,12 +297,7 @@ export class C4GeneratorHandler {
             return null;
         }
 
-        // Bump the generation on every delivery and cache the new pair so
-        // repeated deliveries of the SAME cached build keep increasing.
-        jsonGeneration += 1;
-        const current: GeneratedJson = { json: entry.json, generation: jsonGeneration };
-        this.jsonCache.set(rootUri, current);
-        return current;
+        return entry;
     }
 
     /**

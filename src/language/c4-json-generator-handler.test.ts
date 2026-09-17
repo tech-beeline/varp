@@ -92,3 +92,26 @@ describe('generation contract', () => {
         expect(handler.getContentForUri(uri)?.generation).toBe(built.generation);
     });
 });
+
+describe('generation coalescing', () => {
+    it('regenerates when a newer workspace arrives during an in-flight generation', async () => {
+        const services = newServices();
+        const handler: any = services.generation.C4GeneratorHandler;
+
+        const order: string[] = [];
+        let release!: () => void;
+        const gate = new Promise<void>(resolve => { release = resolve; });
+        handler.doGenerateAndCache = async (_uri: string, workspace: any) => {
+            order.push(workspace.name);
+            await gate;
+        };
+
+        const uri = 'file:///coalesce.dsl';
+        const first = handler.generateAndCache(uri, { name: 'first' });
+        const second = handler.generateAndCache(uri, { name: 'second' });
+        release();
+        await Promise.all([first, second]);
+
+        expect(order).toEqual(['first', 'second']);
+    });
+});

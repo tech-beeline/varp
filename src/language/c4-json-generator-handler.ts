@@ -74,6 +74,12 @@ export class C4GeneratorHandler {
      *  fragment document), so a root workspace is generated exactly once and its
      *  external themes are fetched once - not once per fragment. */
     private readonly pendingGenerate = new Map<string, Promise<void>>();
+    /**
+     * Newest workspace node that arrived for a URI whose generation was still in
+     * flight. The in-flight build may have started from an older AST, so this one
+     * is regenerated as soon as it finishes instead of being dropped.
+     */
+    private readonly queuedWorkspaces = new Map<string, any>();
 
     /**
      * Optional callback invoked after a workspace's JSON has been successfully
@@ -195,15 +201,38 @@ export class C4GeneratorHandler {
     private generateAndCache(uri: string, workspace: any): Promise<void> {
         const pending = this.pendingGenerate.get(uri);
         if (pending) {
+            // A generation is already running. Its result is based on the AST it
+            // started from, so queue the newest node and return the running
+            // promise: the drain loop below regenerates from it afterwards.
+            this.queuedWorkspaces.set(uri, workspace);
             return pending;
         }
-        const promise = this.doGenerateAndCache(uri, workspace);
+        const promise = this.drainGenerations(uri, workspace);
         this.pendingGenerate.set(uri, promise);
-        return promise.finally(() => {
-            if (this.pendingGenerate.get(uri) === promise) {
-                this.pendingGenerate.delete(uri);
+        return promise;
+    }
+
+    /**
+     * Generates JSON for a root URI, then keeps regenerating while newer workspace
+     * nodes were queued during a generation. Queued calls are only recorded while
+     * a generation is in flight, so this loop drains them without spinning.
+     */
+    private async drainGenerations(uri: string, workspace: any): Promise<void> {
+        let current = workspace;
+        try {
+            for (;;) {
+                await this.doGenerateAndCache(uri, current);
+                const next = this.queuedWorkspaces.get(uri);
+                if (next === undefined) {
+                    return;
+                }
+                this.queuedWorkspaces.delete(uri);
+                current = next;
             }
-        });
+        } finally {
+            this.queuedWorkspaces.delete(uri);
+            this.pendingGenerate.delete(uri);
+        }
     }
 
     private async doGenerateAndCache(uri: string, workspace: any): Promise<void> {

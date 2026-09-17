@@ -26,6 +26,12 @@ export class C4ValueConverter implements ValueConverter {
     convert(input: string, cstNode: CstNode): ValueType {
         const tokenName = (cstNode as any).tokenType?.name;
 
+        // Ordered dynamic step: `1:` carries its delimiter in the token; the order
+        // value itself is stored without it.
+        if (tokenName === 'STEP_ORDER') {
+            return input.replace(/[ \t]*:$/, '');
+        }
+
         if (tokenName === 'ASSIGNMENT') {
             let current: CstNode | undefined = cstNode.container;
             while (current) {

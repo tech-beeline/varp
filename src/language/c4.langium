@@ -597,22 +597,22 @@ JumpProperty:
     JUMP_KW value=(UNQUOTED_STRING | AnyKeyword);
 
 PositionProperty:
-    POSITION_KW value=INT;
+    POSITION_KW     value=UNQUOTED_STRING;
 
 ThicknessProperty:
-    THICKNESS_KW value=INT;
+    THICKNESS_KW     value=UNQUOTED_STRING;
 
 FontSizeProperty:
-    FONTSIZE_KW value=(INT | STRING);
+    FONTSIZE_KW     value=(UNQUOTED_STRING | STRING);
 
 WidthProperty:
-    WIDTH_KW value=(INT | STRING);
+    WIDTH_KW     value=(UNQUOTED_STRING | STRING);
 
 HeightProperty:
-    HEIGHT_KW value=(INT | STRING);
+    HEIGHT_KW     value=(UNQUOTED_STRING | STRING);
 
 OpacityProperty:
-    OPACITY_KW value=INT;
+    OPACITY_KW     value=UNQUOTED_STRING;
 
 ShapeProperty:
     SHAPE_KW value=(UNQUOTED_STRING | STRING | AnyKeyword);
@@ -621,7 +621,7 @@ BackgroundProperty:
     BACKGROUND_KW value=(COLOR_HEX | STRING | UNQUOTED_STRING | AnyKeyword);
 
 StrokeWidthProperty:
-    STROKE_WIDTH_KW value=(INT | STRING);
+    STROKE_WIDTH_KW     value=(UNQUOTED_STRING | STRING);
 
 StrokeProperty:
     STROKE_KW value=(COLOR_HEX | STRING | UNQUOTED_STRING | AnyKeyword);
@@ -688,11 +688,11 @@ View:
 
 // View key fragment — used for explicit view keys
 fragment Key:
-    key=(STRING | UNQUOTED_STRING | INT);
+    key=(STRING | UNQUOTED_STRING);
 
 // Base key fragment — used for FilteredView to reference a parent view
 fragment BaseKey:
-    baseKey=(STRING | UNQUOTED_STRING | INT);
+    baseKey=(STRING | UNQUOTED_STRING);
 
 // Custom view — user-defined view with include/exclude expressions
 CustomView:
@@ -830,7 +830,7 @@ ParallelStepBlock:
 
 // Single dynamic step: <order>: <source> -> <target> "description"
 DynamicStep:
-    (order=INT ':')? 
+    (order=STEP_ORDER)? 
     from=[NamedElement:QualifiedName]
     (
         ARROW target=[NamedElement:QualifiedName] (description=STRING (technology=STRING)?)?
@@ -909,7 +909,7 @@ DefaultViewProperty:
 
 // autolayout <direction> <rankSeparation> <nodeSeparation>
 AutoLayoutProperty:
-    AUTOLAYOUT_KW (direction=('lr'|'rl'|'tb'|'bt'))? (rankSeparation=INT)? (nodeSeparation=INT)?;
+    AUTOLAYOUT_KW (direction=('lr'|'rl'|'tb'|'bt'))? (rankSeparation=UNQUOTED_STRING)? (nodeSeparation=UNQUOTED_STRING)?;
 
 // include <expression> — includes elements matching the expression
 IncludeProperty:
@@ -1095,7 +1095,7 @@ ElementEqAfferentEfferentExpression returns ViewExpression:
 
 // Expression value — used in element.tag==<value>, element.technology==<value>, etc.
 ExpressionValue returns string:
-    UNQUOTED_STRING | INT | AnyKeyword | STRING;
+    UNQUOTED_STRING | AnyKeyword | STRING;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // ANIMATION
@@ -1211,7 +1211,7 @@ PropertyKey returns string:
 // A property value runs to the end of the line and may contain any
 // non-whitespace character, so punctuation is listed as part of the value.
 PropertyValue returns string:
-    (UNQUOTED_STRING | PATH_TOKEN | ASSIGNMENT | DOT_SUFFIX | HYPHEN_SUFFIX | SLASH_SUFFIX | INT | STRING | AnyKeyword
+    (UNQUOTED_STRING | PATH_TOKEN | ASSIGNMENT | DOT_SUFFIX | HYPHEN_SUFFIX | SLASH_SUFFIX | STRING | AnyKeyword
         | '=' | ';' | '.' | '/' | '-' | '(' | ')' | '[' | ']'
         | ',' | ':' | '$' | '@' | '!' | '+' | '*' | '>' | '<' | '?' | '~' | '|' | '^'
         | ARROW | NO_ARROW)+;
@@ -1245,7 +1245,7 @@ type RelationshipMember = Person | SoftwareSystem | Container | Component | Depl
 // ═════════════════════════════════════════════════════════════════════════════
 
 TagProperty:
-    (TAG_KW | TAGS_KW) values+=(STRING | UNQUOTED_STRING | INT) (','? values+=(STRING | UNQUOTED_STRING | INT))*;
+    (TAG_KW | TAGS_KW) values+=(STRING | UNQUOTED_STRING) (','? values+=(STRING | UNQUOTED_STRING))*;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // DIRECTIVES — !include, !docs, !adrs, !script, !plugin, !identifiers, etc.
@@ -1299,7 +1299,6 @@ IgnoredScriptBody returns string:
         | UNQUOTED_STRING
         | PATH_TOKEN
         | RELATIONSHIP_SOURCE
-        | INT 
         | NL 
         | ASSIGNMENT 
         | DOT_SUFFIX 
@@ -1538,7 +1537,7 @@ DeploymentEnvironment:
     )?;
 
 InstancesProperty:
-    INSTANCES_KW value=(INSTANCE_RANGE | INT);
+    INSTANCES_KW value=(INSTANCE_RANGE | UNQUOTED_STRING);
 
 // DeploymentGroup: deploymentGroup <name>
 DeploymentGroup:
@@ -1548,23 +1547,23 @@ DeploymentGroup:
 // Parses description, technology, tags (quoted/unquoted), and instances count
 fragment DeploymentNodeMeta:
     (
-        (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))* QuotedTag instances=INT)
+        (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* QuotedTag instances=UNQUOTED_STRING)
         |
-        (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))* UnquotedTag instances=INT)
+        (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* UnquotedTag instances=UNQUOTED_STRING)
         |
-        (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))* QuotedTag)
+        (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* QuotedTag)
         |
-        (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))* UnquotedTag)
+        (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* UnquotedTag)
         |
-        (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))*)
+        (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))*)
         |
-        (description=STRING UnquotedTag instances=INT)
+        (description=STRING UnquotedTag instances=UNQUOTED_STRING)
         |
         (description=STRING UnquotedTag)
         |
         (description=STRING)
         |
-        (instances=INT)
+        (instances=UNQUOTED_STRING)
     )?;
 
 // DeploymentNode: deploymentNode <name> [description] [technology] [tags] [instances] { ... }
@@ -1606,18 +1605,18 @@ fragment QuotedTag:
 
 // Unquoted tag: tag1 tag2 (unquoted strings or integers)
 fragment UnquotedTag:
-    tags+=(UNQUOTED_STRING | INT);
+    tags+=UNQUOTED_STRING;
 
 // Element name: quoted or unquoted string, or integer
 fragment Name:
-    name=(STRING | UNQUOTED_STRING | INT);
+    name=(STRING | UNQUOTED_STRING);
 
 // Meta fragment: description [technology] [quoted|unquoted tags]
 // Shared by SoftwareSystem, Container, Component, CustomElement, InfrastructureNode
 fragment Meta:
-    (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))* QuotedTag)
-    | (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))* UnquotedTag)
-    | (description=STRING technology=(STRING | UNQUOTED_STRING | INT) (',' technologyParts+=(STRING | UNQUOTED_STRING | INT))*)
+    (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* QuotedTag)
+    | (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* UnquotedTag)
+    | (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))*)
     | (description=STRING UnquotedTag)
     | (description=STRING);
 
@@ -1643,7 +1642,7 @@ fragment DeploymentGroups:
 
 // Single ambiguous value after instance reference — resolved post-parse
 fragment DeploymentGroupOrTag:
-    value=(STRING | UNQUOTED_STRING | INT);
+    value=(STRING | UNQUOTED_STRING);
 
 // SoftwareSystemInstance: softwareSystemInstance <softwareSystem> [groups/tag] { ... }
 SoftwareSystemInstance:
@@ -1652,10 +1651,10 @@ SoftwareSystemInstance:
     softwareSystem=[SoftwareSystem:QualifiedName]
     (
         // 2+ comma-separated deployment groups (requires at least one comma)
-        (DeploymentGroups (',' DeploymentGroups)+ (tags+=STRING | tags+=UNQUOTED_STRING | tags+=INT)?)
+        (DeploymentGroups (',' DeploymentGroups)+ (tags+=STRING | tags+=UNQUOTED_STRING)?)
         |
         // Single deployment group followed by one or more space-separated tags
-        (DeploymentGroups (tags+=STRING | tags+=UNQUOTED_STRING | tags+=INT)+)
+        (DeploymentGroups (tags+=STRING | tags+=UNQUOTED_STRING)+)
         |
         // Single ambiguous value: resolved post-parse (deployment group or tag)
         DeploymentGroupOrTag
@@ -1679,10 +1678,10 @@ ContainerInstance:
     container=[Container:Identifier]
     (
         // 2+ comma-separated deployment groups (requires at least one comma)
-        (DeploymentGroups (',' DeploymentGroups)+ (tags+=STRING | tags+=UNQUOTED_STRING | tags+=INT)?)
+        (DeploymentGroups (',' DeploymentGroups)+ (tags+=STRING | tags+=UNQUOTED_STRING)?)
         |
         // Single deployment group followed by one or more space-separated tags
-        (DeploymentGroups (tags+=STRING | tags+=UNQUOTED_STRING | tags+=INT)+)
+        (DeploymentGroups (tags+=STRING | tags+=UNQUOTED_STRING)+)
         |
         // Single ambiguous value: resolved post-parse (deployment group or tag)
         DeploymentGroupOrTag
@@ -1706,10 +1705,10 @@ GenericInstance:
     element=[NamedElement:Identifier]
     (
         // 2+ comma-separated deployment groups (requires at least one comma)
-        (DeploymentGroups (',' DeploymentGroups)+ (tags+=STRING | tags+=UNQUOTED_STRING | tags+=INT)?)
+        (DeploymentGroups (',' DeploymentGroups)+ (tags+=STRING | tags+=UNQUOTED_STRING)?)
         |
         // Single deployment group followed by one or more space-separated tags
-        (DeploymentGroups (tags+=STRING | tags+=UNQUOTED_STRING | tags+=INT)+)
+        (DeploymentGroups (tags+=STRING | tags+=UNQUOTED_STRING)+)
         |
         // Single ambiguous value: resolved post-parse (deployment group or tag)
         DeploymentGroupOrTag
@@ -1732,7 +1731,7 @@ GenericInstance:
 
 // healthCheck <name> <url> [interval] [timeout]
 HealthCheck:
-    HEALTHCHECK_KW Name url=STRING (interval=INT)? (timeout=INT)?;
+    HEALTHCHECK_KW Name url=STRING (interval=UNQUOTED_STRING)? (timeout=UNQUOTED_STRING)?;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -1743,7 +1742,7 @@ Constant:
     (_CONSTANT_KW | _CONST_KW | _VAR_KW) name=(STRING | ComplexIdentifier) value=ConstantValue;
 
 ConstantValue returns string:
-    STRING | ComplexIdentifier | INT | TEXT_BLOCK;
+    STRING | ComplexIdentifier | TEXT_BLOCK;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // LEXER RULES (tokenizers)
@@ -1813,7 +1812,7 @@ Identifier returns string:
 
 // ComplexIdentifier: supports dot, slash, and hyphen suffixes for hierarchical paths
 ComplexIdentifier returns string:
-    ( (IdentifierStart | INT) (DOT_SUFFIX | SLASH_SUFFIX | HYPHEN_SUFFIX)* ) 
+    ( IdentifierStart (DOT_SUFFIX | SLASH_SUFFIX | HYPHEN_SUFFIX)* ) 
     | (DOT_SUFFIX | SLASH_SUFFIX | HYPHEN_SUFFIX)+;
 
 IdentifierStart returns string:
@@ -2070,13 +2069,16 @@ terminal HEALTHCHECK_KW: /healthcheck\b/i;
 
 terminal INSTANCE_RANGE: /[0-9]+\.\.([0-9]+|N|\*)?/;
 
+// ─── Ordered dynamic step prefix ───────────────────────────────────────────
+// `1:` / `1.0:` carry the colon inside the token, so the lexer does not split
+// the order from its delimiter. The lookahead keeps the token from swallowing
+// identifiers that merely contain a colon (`1:2`).
+terminal STEP_ORDER: /[0-9]+(\.[0-9]+)*[ \t]*:(?![^\s])/;
+
 // ─── Base tokens ───────────────────────────────────────────────────────────
 
-// INT: a digit run not followed by a word character, digit, non-ASCII character,
-// '.', '/' or ':'. The lookahead prevents INT from consuming a leading digit prefix
-// of an alphanumeric identifier (Identifier has no INT alternative).
-terminal INT returns string: /[0-9]+(?![\w\u00A0-\uFFFF.\/:])/;
-
+// Numeric values (positions, sizes, counts, ranges) are UNQUOTED_STRING tokens;
+// their format is validated in the TypeScript validator.
 terminal UNQUOTED_STRING: /[a-zA-Z0-9_\u00A0-\uFFFF]([\w\u00A0-\uFFFF.\/:]|-(?![>\/]))*/;
 
 hidden terminal WS: /[ \t]+/;

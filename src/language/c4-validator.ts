@@ -15,7 +15,7 @@
 */
 
 import { AstNode, AstUtils, type ValidationAcceptor, type ValidationChecks } from 'langium';
-import { ElementStyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, RelationshipStyle, ViewsBlock, type C4AstType, type Workspace, PropertyItem, ModelBlock, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective } from '../generated/ast';
+import { ElementStyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type Workspace, PropertyItem, ModelBlock, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, HealthCheck, DeploymentNode } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
 import * as includeResolver from './c4-include-resolver';
@@ -113,7 +113,8 @@ export function registerValidationChecks(services: C4Services) {
             (node, accept) => validator.checkIncludeElements(node, accept, 'DeploymentEnvironment')
         ],
         DeploymentNode: [
-            (node, accept) => validator.checkIncludeElements(node, accept, 'DeploymentNode')
+            (node, accept) => validator.checkIncludeElements(node, accept, 'DeploymentNode'),
+            (node, accept) => validator.checkDeploymentInstances(node, accept)
         ],
         InfrastructureNode: [
             (node, accept) => validator.checkIncludeElements(node, accept, 'InfrastructureNode')
@@ -128,7 +129,8 @@ export function registerValidationChecks(services: C4Services) {
             (node, accept) => validator.checkIncludeElements(node, accept, 'ContainerInstance')
         ],
         ViewsBlock: [
-            (node, accept) => validator.checkIncludeElements(node, accept, 'ViewsBlock')
+            (node, accept) => validator.checkIncludeElements(node, accept, 'ViewsBlock'),
+            (node, accept) => validator.checkViewsBlock(node, accept)
         ],
         GenericInstance: [
             (node, accept) => validator.checkIncludeElements(node, accept, 'GenericInstance'),
@@ -222,6 +224,33 @@ export function registerValidationChecks(services: C4Services) {
         ],
         InstancesProperty: [
             (node, accept) => validator.checkInstancesValue(node, accept)
+        ],
+        PositionProperty: [
+            (node, accept) => validator.checkPositionProperty(node, accept)
+        ],
+        OpacityProperty: [
+            (node, accept) => validator.checkOpacityProperty(node, accept)
+        ],
+        ThicknessProperty: [
+            (node, accept) => validator.checkThicknessProperty(node, accept)
+        ],
+        FontSizeProperty: [
+            (node, accept) => validator.checkFontSizeProperty(node, accept)
+        ],
+        WidthProperty: [
+            (node, accept) => validator.checkWidthProperty(node, accept)
+        ],
+        HeightProperty: [
+            (node, accept) => validator.checkHeightProperty(node, accept)
+        ],
+        StrokeWidthProperty: [
+            (node, accept) => validator.checkStrokeWidthProperty(node, accept)
+        ],
+        AutoLayoutProperty: [
+            (node, accept) => validator.checkAutoLayout(node, accept)
+        ],
+        HealthCheck: [
+            (node, accept) => validator.checkHealthCheck(node, accept)
         ],
         TerminologyBlock: [
             (node, accept) => validator.checkIncludeElements(node, accept, 'TerminologyBlock')
@@ -515,23 +544,8 @@ export class C4Validator {
         return (element as any).id || (element as any).name || `Unnamed ${element.$type}`;
     }
 
-    /** Validates relationship style position (0-100) and opacity (0-100) values */
-    checkRelationshipStyle(style: RelationshipStyle, accept: ValidationAcceptor): void {
-        style.positionProps.forEach(p => {
-            const val = Number(p.value);
-            if (val < 0 || val > 100) accept('error', "Position must be an integer between 0 and 100.", { node: p, property: 'value' });
-        });
-        style.opacityProps.forEach(p => {
-            const val = Number(p.value);
-            if (val < 0 || val > 100) accept('error', "Opacity must be an integer between 0 and 100.", { node: p, property: 'value' });
-        });
-    }
-
-    /** Validates that views block has no duplicate properties and warns about theme/themes coexistence */
+    /** Warns when a views block declares both theme and themes */
     checkViewsBlock(viewsBlock: ViewsBlock, accept: ValidationAcceptor): void {
-        if (viewsBlock.properties.length > 1) {
-            viewsBlock.properties.slice(1).forEach(pb => accept('error', "Duplicate 'properties' block in views.", { node: pb }));
-        }
         if (viewsBlock.themeProps.length > 0 && viewsBlock.themesProps.length > 0) {
             accept('warning', "It's recommended to use either 'theme' or 'themes', but not both.", { node: viewsBlock, keyword: 'views' });
         }
@@ -718,17 +732,6 @@ export class C4Validator {
         }
     }
 
-    /** Validates that element has no duplicate property definitions (description, technology, url, instances, properties) */
-    checkElementUniqueness(node: any, accept: ValidationAcceptor): void {
-        const singleProps = ['descriptionProps', 'techProps', 'urlProps', 'instancesProps', 'propertiesBlocks'];
-        singleProps.forEach(propName => {
-            const arr = node[propName];
-            if (arr && arr.length > 1) {
-                arr.slice(1).forEach((item: any) => accept('error', `Duplicate property definition.`, { node: item }));
-            }
-        });
-    }
-
     /** Validates that border style is one of: solid, dashed, dotted */
     checkBorderStyle(prop: any, accept: ValidationAcceptor): void {
         const val = prop.value;
@@ -785,14 +788,125 @@ export class C4Validator {
         accept('error', `Invalid color '${trimmed}'. Expected a hex code (e.g. #ffff00) or a CSS named color (e.g. yellow).`, { node: prop, property: 'value' });
     }
 
-    /** Validates that instances value is a positive integer or a range (e.g. 1..5, 1..*) */
+    /** Strips surrounding quotes from a raw token value. */
+    private unquote(value: string | undefined): string {
+        return (value ?? '').replace(/^["']|["']$/g, '');
+    }
+
+    /**
+     * Validates that a token value is an integer, mirroring the Integer.parseInt
+     * checks of the Structurizr DSL parsers. Quoted values are skipped when the
+     * grammar allows STRING at that position.
+     */
+    private checkIntegerToken(
+        node: AstNode,
+        raw: string | undefined,
+        accept: ValidationAcceptor,
+        property: string,
+        message: string,
+        options: { min?: number; max?: number; allowQuoted?: boolean } = {}
+    ): void {
+        const trimmed = (raw ?? '').trim();
+        if (!trimmed) return;
+        if (/^["']/.test(trimmed) && /["']$/.test(trimmed)) {
+            if (options.allowQuoted) return;
+            accept('error', message, { node, property });
+            return;
+        }
+        const value = this.unquote(trimmed);
+        if (!/^[+-]?\d+$/.test(value)) {
+            accept('error', message, { node, property });
+            return;
+        }
+        const numeric = Number(value);
+        if ((options.min !== undefined && numeric < options.min) ||
+            (options.max !== undefined && numeric > options.max)) {
+            accept('error', message, { node, property });
+        }
+    }
+
+    /** Validates relationship position (0-100). */
+    checkPositionProperty(prop: PositionProperty, accept: ValidationAcceptor): void {
+        this.checkIntegerToken(prop, prop.value, accept, 'value', 'Position must be an integer between 0 and 100.');
+    }
+
+    /** Validates opacity (0-100). */
+    checkOpacityProperty(prop: OpacityProperty, accept: ValidationAcceptor): void {
+        this.checkIntegerToken(prop, prop.value, accept, 'value', 'Opacity must be an integer between 0 and 100.');
+    }
+
+    /** Validates relationship line thickness. */
+    checkThicknessProperty(prop: ThicknessProperty, accept: ValidationAcceptor): void {
+        this.checkIntegerToken(prop, prop.value, accept, 'value', 'Thickness must be a positive integer.');
+    }
+
+    /** Validates font size (integer, or a quoted value where the grammar allows one). */
+    checkFontSizeProperty(prop: FontSizeProperty, accept: ValidationAcceptor): void {
+        this.checkIntegerToken(prop, prop.value, accept, 'value', 'Font size must be a positive integer.', { allowQuoted: true });
+    }
+
+    /** Validates element/relationship width (integer, or a quoted value where the grammar allows one). */
+    checkWidthProperty(prop: WidthProperty, accept: ValidationAcceptor): void {
+        this.checkIntegerToken(prop, prop.value, accept, 'value', 'Width must be a positive integer.', { allowQuoted: true });
+    }
+
+    /** Validates element height (integer, or a quoted value where the grammar allows one). */
+    checkHeightProperty(prop: HeightProperty, accept: ValidationAcceptor): void {
+        this.checkIntegerToken(prop, prop.value, accept, 'value', 'Height must be a positive integer.', { allowQuoted: true });
+    }
+
+    /** Validates element stroke width (integer, or a quoted value where the grammar allows one). */
+    checkStrokeWidthProperty(prop: StrokeWidthProperty, accept: ValidationAcceptor): void {
+        this.checkIntegerToken(prop, prop.value, accept, 'value', 'Stroke width must be an integer between 1 and 10.', { allowQuoted: true });
+    }
+
+    /** Validates autolayout separations (positive integers in pixels). */
+    checkAutoLayout(node: AutoLayoutProperty, accept: ValidationAcceptor): void {
+        this.checkIntegerToken(node, node.rankSeparation, accept, 'rankSeparation', 'Rank separation must be a positive integer in pixels.');
+        this.checkIntegerToken(node, node.nodeSeparation, accept, 'nodeSeparation', 'Node separation must be a positive integer in pixels.');
+    }
+
+    /** Validates health check interval (positive) and timeout (zero or positive). */
+    checkHealthCheck(node: HealthCheck, accept: ValidationAcceptor): void {
+        this.checkIntegerToken(node, node.interval, accept, 'interval', 'The interval must be a positive integer (number of seconds).', { min: 1 });
+        this.checkIntegerToken(node, node.timeout, accept, 'timeout', 'The timeout must be zero or a positive integer (number of milliseconds).', { min: 0 });
+    }
+
+    /** Validates that instances value is a positive integer or a range (e.g. 1..5, 1..N, 1..*) */
     checkInstancesValue(prop: InstancesProperty, accept: ValidationAcceptor): void {
-        const val = prop.value;
-        if (!val) return;
-        const trimmed = val.replace(/^["']|["']$/g, '');
-        if (/^\d+$/.test(trimmed)) return;
-        if (/^\d+\.\.(\d+|\*)?$/.test(trimmed)) return;
-        accept('error', 'Number of instances must be a positive integer or a range.', { node: prop, property: 'value' });
+        const error = this.instancesValueError(prop.value);
+        if (error) {
+            accept('error', error, { node: prop, property: 'value' });
+        }
+    }
+
+    /** Validates the positional instances token of a deployment node. */
+    checkDeploymentInstances(node: DeploymentNode, accept: ValidationAcceptor): void {
+        const error = this.instancesValueError(node.instances);
+        if (error) {
+            accept('error', error, { node, property: 'instances' });
+        }
+    }
+
+    /**
+     * Mirrors DeploymentNode.setInstances: a positive integer, or a range with an
+     * upper bound that is not below the lower bound.
+     */
+    private instancesValueError(raw: string | undefined): string | undefined {
+        const value = this.unquote((raw ?? '').trim());
+        if (!value) return undefined;
+        if (/^\d+$/.test(value)) {
+            return Number(value) >= 1 ? undefined : 'Number of instances must be a positive integer or a range.';
+        }
+        const range = /^(\d*)\.\.(\d*|N|\*)$/.exec(value);
+        if (!range) {
+            return 'Number of instances must be a positive integer or a range.';
+        }
+        const [, lower, upper] = range;
+        if (lower && upper && /^\d+$/.test(upper) && Number(lower) > Number(upper)) {
+            return 'Range upper bound must be greater than the lower bound.';
+        }
+        return undefined;
     }
 
     /** Validates that only one view across the entire workspace is marked as 'default' */

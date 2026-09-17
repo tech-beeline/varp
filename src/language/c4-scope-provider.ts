@@ -173,7 +173,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     // it walks the ancestor chain + the parent AST to find the matching !include
     // directive, so the result is memoized per fragment URI (cleared on any
     // workspace change via WorkspaceCache).
-    private readonly fragmentStyleCache: WorkspaceCache<string, boolean>;
+    private readonly fragmentStyleCache: WorkspaceCache<string, boolean | undefined>;
     // Per-ancestor-document index: included-target URI -> CST offset of the !include
     // directive. Built once per ancestor document and reused by inheritedIncludeStyle
     // for every fragment.
@@ -190,7 +190,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
         // Initialize caches. Automatically cleared on ANY project change via WorkspaceCache.
         this.styleRegionsCache = new WorkspaceCache<string, StyleRegions>(services.shared);
         this.extendedElementsCache = new WorkspaceCache<string, AstNodeDescription[]>(services.shared);
-        this.fragmentStyleCache = new WorkspaceCache<string, boolean>(services.shared);
+        this.fragmentStyleCache = new WorkspaceCache<string, boolean | undefined>(services.shared);
         this.includeTargetOffsetCache = new WorkspaceCache<string, Map<string, number>>(services.shared);
         this.localScopeCache = new WorkspaceCache<string, LocalScopePackage>(services.shared);
     }
@@ -627,7 +627,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
         AstUtils.streamAllContents(root)
             .filter(isNamedElement)
             .forEach((element) => {
-                const isHierarchical = this.isHierarchicalMode(element, element.$cstNode?.offset);
+                const isHierarchical = this.isHierarchicalMode(element, element.$cstNode?.offset ?? 0);
                 const document = AstUtils.getDocument(element);
                 const elementDescriptions = this.exportElementDescriptions(
                     element, document, isHierarchical, suffixAliasesByScope
@@ -677,14 +677,16 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             if (!rootNode) continue;
 
             const hasOwnDirective = this.hasOwnIdentifiersDirective(langiumDoc);
-            const remoteHierarchical = hasOwnDirective
-                ? this.isHierarchicalMode(rootNode)
+            const inheritedHierarchical = hasOwnDirective
+                ? undefined
                 : this.inheritedIncludeStyle(uri.toString());
 
             AstUtils.streamAllContents(rootNode)
                 .filter(isNamedElement)
                 .forEach((element) => {
-                    this.exportElementDescriptions(element, langiumDoc, remoteHierarchical, suffixAliasesByScope);
+                    const hierarchical = inheritedHierarchical
+                        ?? this.isHierarchicalMode(element, element.$cstNode?.offset ?? 0);
+                    this.exportElementDescriptions(element, langiumDoc, hierarchical, suffixAliasesByScope);
                 });
 
             this.collectIncludeSuffixAliases(rootNode, suffixAliasesByScope, visitedUris);
@@ -744,12 +746,9 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 //  - otherwise the fragment uses the parent's style for the region at the
                 //    offset of the `!include` directive (closest ancestor that includes it).
                 const hasOwnDirective = this.hasOwnIdentifiersDirective(langiumDoc);
-                let remoteHierarchical: boolean;
-                if (hasOwnDirective) {
-                    remoteHierarchical = this.isHierarchicalMode(rootNode);
-                } else {
-                    remoteHierarchical = this.inheritedIncludeStyle(uriString);
-                }
+                const inheritedHierarchical = hasOwnDirective
+                    ? undefined
+                    : this.inheritedIncludeStyle(uriString);
 
                 // Traverse all named elements and register them. When `suffixAliasesByScope`
                 // is provided (from buildLocalScopePackage), fragment elements also get
@@ -758,8 +757,10 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 AstUtils.streamAllContents(rootNode)
                     .filter(isNamedElement)
                     .forEach((element) => {
+                        const hierarchical = inheritedHierarchical
+                            ?? this.isHierarchicalMode(element, element.$cstNode?.offset ?? 0);
                         descriptions.push(...this.exportElementDescriptions(
-                            element, langiumDoc, remoteHierarchical, suffixAliasesByScope
+                            element, langiumDoc, hierarchical, suffixAliasesByScope
                         ));
                     });
 
@@ -812,14 +813,13 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                     descriptions.push(...this.resolveExtendsRecursive(rootEx, visitedUris));
                 }
 
-                // External workspace uses its own identifier style
-                const remoteHierarchical = this.isHierarchicalMode(rootEx);
-
                 AstUtils.streamAllContents(rootEx)
                     .filter(isNamedElement)
                     .forEach((element) => {
-                         const document = AstUtils.getDocument(element);
-                         descriptions.push(...this.exportElementDescriptions(element, document, remoteHierarchical));
+                        const document = AstUtils.getDocument(element);
+                        // Each element uses the region its own !identifiers directive falls in.
+                        const hierarchical = this.isHierarchicalMode(element, element.$cstNode?.offset ?? 0);
+                        descriptions.push(...this.exportElementDescriptions(element, document, hierarchical));
                     });
 
                 // An extended workspace may itself pull in elements via !include
@@ -835,23 +835,13 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     }
 
     /**
-     * Determines whether the current scope uses hierarchical (!identifiers hierarchical)
-     * or flat (!identifiers flat) identifier style for the node at the given CST offset.
-     *
-     * Without an explicit offset (external file / whole-document lookup) the LAST
-     * region is used - the final !identifiers directive in the file, or the
-     * extendsUri-inherited style when the file has none.
+     * Returns the identifier style (hierarchical for !identifiers hierarchical,
+     * flat otherwise) that applies at the given CST offset.
      */
-    private isHierarchicalMode(node: AstNode, offset?: number): boolean {
-        const doc = AstUtils.getDocument(node);
-        return this.styleAtOffset(doc, offset ?? Number.MAX_SAFE_INTEGER);
+    private isHierarchicalMode(node: AstNode, offset: number): boolean {
+        return this.styleAtOffset(AstUtils.getDocument(node), offset);
     }
 
-    /**
-     * Returns the identifier-style regions of a document: a base region at offset -1
-     * (inherited from the extendsUri chain) plus one region per !identifiers directive,
-     * sorted by CST offset. Cached per document URI.
-     */
     /**
      * Returns true when the document declares at least one `!identifiers` directive
      * of its own. Derived from the cached style regions: a document without its
@@ -861,6 +851,11 @@ export class C4ScopeProvider extends DefaultScopeProvider {
         return this.getStyleRegions(doc).regions.length > 1;
     }
 
+    /**
+     * Returns the identifier-style regions of a document: a base region at offset -1
+     * (inherited from the extendsUri chain) plus one region per !identifiers directive,
+     * sorted by CST offset. Cached per document URI.
+     */
     private getStyleRegions(doc: LangiumDocument, visitedUris?: Set<string>): StyleRegions {
         return this.styleRegionsCache.get(doc.uri.toString(), () => {
             const visited = visitedUris ?? new Set<string>();
@@ -883,8 +878,8 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     }
 
     /** Binary-search lookup: the last region whose offset is <= the given offset. */
-    private styleAtOffset(doc: LangiumDocument, offset: number): boolean {
-        const regions = this.getStyleRegions(doc).regions;
+    private styleAtOffset(doc: LangiumDocument, offset: number, visitedUris?: Set<string>): boolean {
+        const regions = this.getStyleRegions(doc, visitedUris).regions;
         let lo = 0;
         let hi = regions.length - 1;
         let result = regions[0];
@@ -901,20 +896,20 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     }
 
     /**
-     * Computes the identifier style an `!include` fragment inherits from its parent.
+     * Returns the identifier style a document inherits from the `!include` parent
+     * at the position of the directive that pulls it in, or undefined when no
+     * loaded ancestor includes it.
      *
-     * In Structurizr, `!include` splices the fragment inline at the directive's
-     * position into the SAME IdentifiersRegister that the including file uses, so
-     * the fragment shares the identifier scope of the region where the `!include`
-     * sits. This finds the closest ancestor document that includes `fragmentUri`,
-     * locates the `!include` directive that references it, and returns that
-     * parent's style at the directive's CST offset. Falls back to false (flat)
-     * when no parent / matching directive can be found.
+     * `visitedUris` skips ancestors already walked, so cyclic include chains
+     * terminate. A guarded walk is not cached because its result depends on the
+     * visited set; the unguarded walk is cached per fragment URI.
      */
-    private inheritedIncludeStyle(fragmentUri: string): boolean {
-        return this.fragmentStyleCache.get(fragmentUri, () => {
+    private inheritedIncludeStyle(fragmentUri: string, visitedUris?: Set<string>): boolean | undefined {
+        const compute = (): boolean | undefined => {
             const chain = includeResolver.getAncestorChain(this.services.shared, fragmentUri);
             for (const ancUri of chain) {
+                if (visitedUris?.has(ancUri)) continue;
+
                 const ancDoc = this.services.shared.workspace.LangiumDocuments.getDocument(URI.parse(ancUri));
                 const ancRoot = ancDoc?.parseResult.value;
                 if (!ancRoot) continue;
@@ -933,19 +928,29 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 });
                 const offset = offsets.get(fragmentUri);
                 if (offset !== undefined) {
-                    return this.styleAtOffset(ancDoc, offset);
+                    return this.styleAtOffset(ancDoc, offset, visitedUris);
                 }
             }
-            return false;
-        });
+            return undefined;
+        };
+
+        return visitedUris
+            ? compute()
+            : this.fragmentStyleCache.get(fragmentUri, compute);
     }
 
     /**
-     * Computes the identifier style inherited from the extendsUri chain: the style of
-     * the parent workspace (its last region), recursively. Returns undefined when there
-     * is no parent or the chain is already visited (cycle prevention).
+     * Computes the identifier style of the region before a document's first
+     * !identifiers directive: the style of the include parent at the directive
+     * that pulls this document in, otherwise the last region of the extended
+     * workspace, otherwise undefined (flat).
      */
     private computeBaseStyle(doc: LangiumDocument, visitedUris: Set<string>): boolean | undefined {
+        const inherited = this.inheritedIncludeStyle(doc.uri.toString(), visitedUris);
+        if (inherited !== undefined) {
+            return inherited;
+        }
+
         const workspace = this.findWorkspaceNode(doc.parseResult.value);
         if (!workspace?.extendsUri) return undefined;
 

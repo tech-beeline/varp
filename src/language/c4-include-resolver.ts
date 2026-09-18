@@ -220,16 +220,26 @@ function getParentIndex(shared: LangiumSharedCoreServices): Map<string, Referenc
             }
         };
 
+        // Target URI the document builder loaded: the exact path, or its ".dsl" fallback
+        // when only that variant is present in the document index.
+        const loadedTargetUri = (rawPath: string, node: AstNode): string | undefined => {
+            const candidates = resolveTargetUris(rawPath, node, { withDslFallback: true, constants: constantsHook });
+            for (const uri of candidates) {
+                if (shared.workspace.LangiumDocuments.getDocument(uri)) return uri.toString();
+            }
+            return candidates[0]?.toString();
+        };
+
         for (const doc of shared.workspace.LangiumDocuments.all.toArray()) {
             const docUri = doc.uri.toString();
             const root = doc.parseResult.value;
             if (!root) continue;
             for (const inc of AstUtils.streamAllContents(root).filter(isInclude)) {
-                addEdge(resolveTargetUri(inc.file, inc, { constants: constantsHook })?.toString(), docUri, inc);
+                addEdge(loadedTargetUri(inc.file, inc), docUri, inc);
             }
             for (const ws of AstUtils.streamAllContents(root).filter(isWorkspace)) {
                 if (!ws.extendsUri) continue;
-                addEdge(resolveTargetUri(ws.extendsUri, ws, { constants: constantsHook })?.toString(), docUri);
+                addEdge(loadedTargetUri(ws.extendsUri, ws), docUri);
             }
         }
         return index;
@@ -315,11 +325,11 @@ export function getRootWorkspaceUri(shared: LangiumSharedCoreServices, docUri: s
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONSTANTS (!constant / !const / !var) - single shared implementation used by
+// CONSTANTS (!const / !var) - single shared implementation used by
 // the scope provider, the document-link provider, the validator and the builder.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Collects all !constant/!const/!var declarations from the given root AST node into a map. */
+/** Collects all !const/!var declarations from the given root AST node into a map. */
 export function collectConstantsFromRoot(root: AstNode, target: Map<string, string>): void {
     AstUtils.streamAllContents(root).filter(isConstant).forEach((c) => {
         const name = (c.name ?? '').toString().replace(/['"]/g, '');
@@ -335,7 +345,7 @@ export function collectConstantsFromRoot(root: AstNode, target: Map<string, stri
 const constantsCaches = new WeakMap<LangiumSharedCoreServices, WorkspaceCache<string, Map<string, string>>>();
 
 /**
- * Returns the constants (!constant/!const/!var) declared in the document with the
+ * Returns the constants (!const/!var) declared in the document with the
  * given URI. Cached per shared-services instance, so ${NAME} lookups do not
  * re-scan the AST on every call.
  */

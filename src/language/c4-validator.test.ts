@@ -178,7 +178,7 @@ views {
 });
 
 describe('default view uniqueness', () => {
-    it('reports only the extra default markers', async () => {
+    it('warns about the default markers the last one overrides', async () => {
         const doc = await build(`
 views {
     systemLandscape "one" {
@@ -193,8 +193,9 @@ views {
 `);
 
         expect(doc.parseResult.parserErrors).toHaveLength(0);
-        const errors = messages(doc, ERROR_SEVERITY).filter(m => m.includes("marked as 'default'"));
-        expect(errors).toHaveLength(1);
+        expect(messages(doc, ERROR_SEVERITY).filter(m => m.includes("marked as 'default'"))).toHaveLength(0);
+        const warnings = messages(doc, WARNING_SEVERITY).filter(m => m.includes("marked as 'default'"));
+        expect(warnings).toHaveLength(1);
     });
 
     it('accepts a single default marker', async () => {
@@ -209,6 +210,247 @@ views {
 
         expect(doc.parseResult.parserErrors).toHaveLength(0);
         expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+});
+
+describe('nested groups', () => {
+    it('requires a group separator for nested groups', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        group "Outer" {
+            group "Inner" {
+                person "User"
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toContain(
+            "To use nested groups, please define a model property named 'structurizr.groupSeparator'."
+        );
+    });
+
+    it('accepts nested groups when the model defines a separator', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        properties {
+            structurizr.groupSeparator "/"
+        }
+        group "Outer" {
+            group "Inner" {
+                person "User"
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+
+    it('accepts a group inside a deployment node that sits in a group', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        live = deploymentEnvironment "Live" {
+            group "Servers" {
+                deploymentNode "Server 1" {
+                    group "Service 1" {
+                    }
+                }
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+
+    it('accepts a single group without a separator', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        group "Outer" {
+            person "User"
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+
+    it('rejects a multi-character group separator', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        properties {
+            structurizr.groupSeparator "//"
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toContain('Group separator must be a single character');
+    });
+});
+
+describe('icon position', () => {
+    it('accepts the positions the model supports', async () => {
+        const doc = await build(`
+workspace {
+    views {
+        styles {
+            element "Element" {
+                iconPosition bottom
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+
+    it('rejects an unsupported position', async () => {
+        const doc = await build(`
+workspace {
+    views {
+        styles {
+            element "Element" {
+                iconPosition middle
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toContain('The icon position "middle" is not valid');
+    });
+});
+
+describe('boolean style properties', () => {
+    it('rejects a dashed value that is not true or false', async () => {
+        const doc = await build(`
+workspace {
+    views {
+        styles {
+            relationship "Uses" {
+                dashed "sometimes"
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toContain('Dashed must be true or false.');
+    });
+});
+
+describe('duplicate relationships', () => {
+    it('rejects a repeated relationship', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A"
+        b = softwareSystem "B"
+        a -> b "uses"
+        a -> b "uses"
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toContain(
+            'A relationship between "SoftwareSystem://A" and "SoftwareSystem://B" already exists'
+        );
+    });
+
+    it('rejects a relationship that repeats an implied one', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A"
+        b = softwareSystem "B" {
+            c = container "C"
+        }
+        c -> a
+        b -> a
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toContain(
+            'A relationship between "SoftwareSystem://B" and "SoftwareSystem://A" already exists'
+        );
+    });
+
+    it('accepts the same pair with a different description', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A"
+        b = softwareSystem "B"
+        a -> b "uses"
+        a -> b "creates"
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+
+    it('accepts an implied conflict when implied relationships are disabled', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        !impliedRelationships false
+        a = softwareSystem "A"
+        b = softwareSystem "B" {
+            c = container "C"
+        }
+        c -> a
+        b -> a
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+
+    it('rejects a repeated implicit relationship', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A" {
+            c = container "C" {
+                -> c "uses"
+                -> c "uses"
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toContain(
+            'A relationship between "Container://A.C" and "Container://A.C" already exists'
+        );
     });
 });
 
@@ -422,5 +664,51 @@ softwareSystem "Only"
 
         expect(a.parseResult.parserErrors).toHaveLength(0);
         expect(messages(a, ERROR_SEVERITY)).toHaveLength(0);
+    });
+});
+
+describe('workspace metadata', () => {
+    it('accepts a name and description given both in the header and as properties', async () => {
+        const doc = await build(`
+workspace "Name" "Description" {
+    name "Other name"
+    description "Other description"
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+});
+
+describe('relationship endpoints', () => {
+    it('accepts an instanceOf instance as an endpoint', async () => {
+        const doc = await build(`
+workspace {
+    !identifiers hierarchical
+    model {
+        ss = softwareSystem "System" {
+            ui = container "UI"
+            backend = container "Backend"
+        }
+        live = deploymentEnvironment "Live" {
+            computer = deploymentNode "Computer" {
+                browser = deploymentNode "Browser" {
+                    uiInstance = instanceOf ss.ui
+                }
+            }
+            datacenter = deploymentNode "Data Center" {
+                server = deploymentNode "Server" {
+                    backendInstance = instanceOf ss.backend
+                }
+            }
+            computer.browser.uiInstance -> datacenter.server.backendInstance "Calls"
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
     });
 });

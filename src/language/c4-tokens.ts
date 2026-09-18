@@ -74,7 +74,7 @@ export const typeToToken: Record<string, string> = {
     'PluginDirective': '!plugin',
     'IdentifiersProperty': '!identifiers',
     'ImpliedRelationshipsProperty': '!impliedRelationships',
-    'Constant': '!constant',
+    'Constant': '!const',
     'SystemLandscapeView': 'systemLandscape',
     'SystemContextView': 'systemContext',
     'ContainerView': 'container',
@@ -108,7 +108,7 @@ export const typeToToken: Record<string, string> = {
     'OpacityProperty': 'opacity',
     'MetadataProperty': 'metadata',
     'DashedProperty': 'dashed',
-    'ElementStyleDescriptionProperty': 'description',
+    'StyleDescriptionProperty': 'description',
     'ThicknessProperty': 'thickness',
     'RoutingProperty': 'routing',
     'JumpProperty': 'jump',
@@ -173,196 +173,197 @@ export const allowedTokensByBlock: Record<string, string[]> = {
     Workspace: [
         'name', 'description', 'properties', '!docs', '!decisions',
         '!identifiers', '!impliedRelationships', 'model', 'views', 'configuration',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ],
     ModelBlock: [
-        'person', 'softwaresystem', 'deploymentEnvironment', 'group', 'custom',
-        '->', 'archetypes', 'identifiers', 'element', '!docs', '!decisions', 'properties',
-        '!impliedRelationships', '!constant', '!include', '!elements', '!element', '!relationships',
+        'person', 'softwaresystem', 'deploymentEnvironment', 'group', 'element', 'archetype instance',
+        '->', 'archetypes', '!identifiers', 'properties',
+        '!impliedRelationships', '!const', '!include', '!elements', '!element', '!relationships',
         '!script', '!plugin'
     ],
     SoftwareSystem: [
         'group', 'container', 'description', 'tags', 'url', 'properties',
         'perspectives', '->', '!docs', '!decisions', '!impliedRelationships',
         'archetype instance', '!elements', '!element', '!relationship',
-        '!relationships', '!script', '!plugin', '!constant', '!include'
+        '!relationships', '!script', '!plugin', '!const', '!include'
     ],
     Container: [
         'group', 'component', 'description', 'technology', 'tags', 'url',
         'properties', 'perspectives', '->', '!docs', '!decisions', '!impliedRelationships',
         'archetype instance', '!elements', '!element', '!components',
-        '!relationships', '!script', '!plugin', '!constant', '!include'
+        '!relationships', '!script', '!plugin', '!const', '!include'
     ],
     Component: [
         'description', 'technology', 'tags', 'url', 'properties',
         'perspectives', 'group', '->', '!docs', '!decisions', '!impliedRelationships',
-        '!elements', '!relationships', '!script', '!plugin', '!constant', '!include'
+        '!elements', '!relationships', '!script', '!plugin', '!const', '!include'
     ],
     Person: [
         'description', 'tags', 'url', 'properties', 'perspectives',
         '->', '!impliedRelationships',
-        '!elements', '!relationships', '!docs', '!decisions',
-        '!script', '!plugin', '!constant', '!include'
+        '!elements', '!relationships',
+        '!script', '!plugin', '!const', '!include'
     ],
     DeploymentEnvironment: [
-        'group', 'deploymentGroup', 'deploymentNode', '->', '!impliedRelationships',
-        '!elements', '!relationships', '!docs', '!decisions',
-        '!script', '!plugin', '!constant', '!include'
+        'group', 'deploymentGroup', 'deploymentNode', '-/>', '->', '!impliedRelationships',
+        '!elements', '!relationships',
+        '!script', '!plugin', '!const', '!include'
     ],
     DeploymentNode: [
         'group', 'deploymentNode', 'infrastructureNode', 'containerInstance',
-        'softwareSystemInstance', '->', 'description', 'technology', 'instances',
+        'softwareSystemInstance', 'instanceof', '->', 'description', 'technology', 'instances',
         'tags', 'url', 'properties', 'perspectives', 'deploymentGroup',
-        '!docs', '!decisions',
-        '!elements', '!relationships', '!script', '!plugin', '!constant', '!include'
+        '!impliedRelationships',
+        '!elements', '!relationships', '!script', '!plugin', '!const', '!include'
     ],
     InfrastructureNode: [
         '->', 'description', 'technology', 'tags', 'url', 'properties', 'perspectives',
-        '!docs', '!decisions',
-        '!elements', '!relationships', '!script', '!plugin', '!constant', '!include'
+        '!impliedRelationships',
+        '!elements', '!relationships', '!script', '!plugin', '!const', '!include'
     ],
     CustomElement: [
         'description', 'tags', 'url', 'properties', 'perspectives', '->',
-        '!elements', '!relationships', '!docs', '!decisions',
-        '!script', '!plugin', '!constant', '!include'
+        '!elements', '!relationships',
+        '!script', '!plugin', '!const', '!include'
     ],
     ContainerInstance: [
         '->', 'description', 'tags', 'url', 'properties', 'perspectives',
-        'healthCheck', '!docs', '!decisions',
-        '!elements', '!relationships', '!script', '!plugin', '!constant', '!include'
+        'healthCheck', '!impliedRelationships',
+        '!elements', '!relationships', '!script', '!plugin', '!const', '!include'
     ],
     SoftwareSystemInstance: [
         '->', 'description', 'tags', 'url', 'properties', 'perspectives',
-        'healthCheck', '!docs', '!decisions',
-        '!elements', '!relationships', '!script', '!plugin', '!constant', '!include'
+        'healthCheck', '!impliedRelationships',
+        '!elements', '!relationships', '!script', '!plugin', '!const', '!include'
     ],
     GenericInstance: [
         '->', 'description', 'tags', 'url', 'properties', 'perspectives',
-        'healthCheck', '!docs', '!decisions',
-        '!elements', '!relationships', '!script', '!plugin', '!constant', '!include'
+        'healthCheck', '!impliedRelationships',
+        '!elements', '!relationships', '!script', '!plugin', '!const', '!include'
     ],
     Relationship: [
-        'tags', 'url', 'properties', 'perspectives', '!script', '!plugin', '!constant', '!include'
+        'tags', 'url', 'properties', 'perspectives', '!script', '!plugin', '!const', '!include'
     ],
     ImplicitRelationship: [
-        'tags', 'url', 'properties', 'perspectives', '!script', '!plugin', '!constant', '!include'
+        'tags', 'url', 'properties', 'perspectives', '!script', '!plugin', '!const', '!include'
     ],
     ViewsBlock: [
         'systemLandscape', 'systemContext', 'container', 'component', 'filtered',
         'dynamic', 'deployment', 'custom', 'image', 'styles', 'theme', 'themes', 'terminology',
-        'properties', '!script', '!plugin', '!constant', '!include'
+        'properties', '!script', '!plugin', '!const', '!include'
     ],
-    SystemLandscapeView: [...VIEW_TOKENS, '!script', '!plugin', '!constant'],
-    SystemContextView: [...VIEW_TOKENS, '!script', '!plugin', '!constant'],
-    ContainerView: [...VIEW_TOKENS, '!script', '!plugin', '!constant'],
-    ComponentView: [...VIEW_TOKENS, '!script', '!plugin', '!constant'],
-    DeploymentView: [...VIEW_TOKENS, '!script', '!plugin', '!constant'],
+    SystemLandscapeView: [...VIEW_TOKENS, '!script', '!plugin', '!const'],
+    SystemContextView: [...VIEW_TOKENS, '!script', '!plugin', '!const'],
+    ContainerView: [...VIEW_TOKENS, '!script', '!plugin', '!const'],
+    ComponentView: [...VIEW_TOKENS, '!script', '!plugin', '!const'],
+    DeploymentView: [...VIEW_TOKENS, '!script', '!plugin', '!const'],
     DynamicView: [
         'autoLayout', 'default', 'title', 'description', 'properties', '->',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ],
     FilteredView: [
         'default', 'title', 'description', 'properties',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ],
     CustomView: [
         'include', 'exclude', 'autoLayout', 'default', 'animation', 'title', 'description',
-        'properties', '!script', '!plugin', '!constant', '!include'
+        'properties', '!script', '!plugin', '!const', '!include'
     ],
     ImageView: [
-        'title', 'description', 'plantuml', 'mermaid', 'kroki', 'image',
-        '!script', '!plugin', '!constant', '!include'
+        'default', 'title', 'description', 'properties', 'plantuml', 'mermaid', 'kroki', 'image',
+        'light', 'dark',
+        '!script', '!plugin', '!const', '!include'
     ],
     ConfigurationBlock: [
-        'scope', 'visibility', 'users', 'properties', '!script', '!plugin', '!constant', '!include'
+        'scope', 'visibility', 'users', 'properties', '!script', '!plugin', '!const', '!include'
     ],
     PropertiesBlock: [
-        'property items', '!script', '!plugin', '!constant', '!include'
+        'property items', '!script', '!plugin', '!const', '!include'
     ],
     StylesBlock: [
-        'element', 'relationship', 'light', 'dark',
-        '!script', '!plugin', '!constant', '!include'
+        'element', 'relationship', 'light', 'dark', 'theme', 'themes',
+        '!script', '!plugin', '!const', '!include'
     ],
     LightStyleBlock: [
         'element', 'relationship',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ],
     DarkStyleBlock: [
         'element', 'relationship',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ],
     RelationshipStyle: [
         'thickness', 'color', 'colour', 'style', 'routing', 'fontSize',
         'width', 'height', 'position', 'opacity', 'properties', 'dashed',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ],
     ElementStyle: [
         'shape', 'icon', 'iconPosition', 'width', 'height', 'background',
         'color', 'colour', 'stroke', 'strokeWidth', 'fontSize', 'border',
         'opacity', 'metadata', 'description', 'properties',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ],
     TerminologyBlock: [
         'person', 'softwaresystem', 'container', 'component',
         'deploymentNode', 'infrastructureNode', 'relationship', 'metadata',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ],
     ArchetypesBlock: [
         'softwaresystem', 'person', 'container', 'component',
         'deploymentNode', 'infrastructureNode', 'element', 'group', '->',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ],
     ArchetypeDefinition: [
         'description', 'technology', 'tags', 'metadata', 'properties', 'perspectives',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ],
     ArchetypeInstance: [
         'description', 'technology', 'tags', 'url', 'properties', 'perspectives',
-        '->', 'component', 'container', 'group', '!docs',
-        '!script', '!plugin', '!constant', '!include'
+        '->', 'component', 'container', 'group', 'archetype instance', '!docs', '!impliedRelationships',
+        '!script', '!plugin', '!const', '!include'
     ],
     ElementsDirective: [
         'tags', 'url', 'properties', 'perspectives', '->',
         'technology',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ],
     ElementExtension: [
         'description', 'technology', 'tags', 'url', 'properties', '->',
         'deploymentNode', 'infrastructureNode', 'containerInstance',
-        'softwareSystemInstance', 'group', 'container', 'component',
-        '!docs', '!decisions',
-        '!script', '!plugin', '!constant', '!include'
+        'softwareSystemInstance', 'instanceof', 'group', 'container', 'component',
+        '!docs', '!decisions', '!impliedRelationships',
+        '!script', '!plugin', '!const', '!include'
     ],
     RelationshipExtension: [
         'tags', 'url', 'properties', 'perspectives', 'description', 'technology',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ],
     AnimationProperty: [
-        'animation steps', '!script', '!plugin', '!constant', '!include'
+        'animation steps', '!script', '!plugin', '!const', '!include'
     ],
     ParallelStepBlock: [
-        'dynamic step', 'parallel step', '!script', '!plugin', '!constant', '!include'
+        'dynamic step', 'parallel step', '!script', '!plugin', '!const', '!include'
     ],
     DynamicStep: [
         'description', 'technology', 'tags', 'url', 'properties',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ],
     PerspectivesBlock: [
-        'perspective', '!script', '!plugin', '!constant', '!include'
+        'perspective', '!script', '!plugin', '!const', '!include'
     ],
     Perspective: [
         'description', 'value', 'url',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ],
     Group: [
         'person', 'softwaresystem', 'container', 'component',
-        'deploymentNode', 'containerInstance', 'softwareSystemInstance', 'group', '->',
-        '!elements', '!relationships', '!docs', '!decisions',
-        '!script', '!plugin', '!constant', '!include'
+        'deploymentNode', 'containerInstance', 'softwareSystemInstance', 'instanceof', 'group', '->',
+        '!elements', '!relationships', '!docs', '!decisions', '!identifiers', '!impliedRelationships',
+        '!script', '!plugin', '!const', '!include'
     ],
     RelationshipsDirective: [
         'tags', 'url', 'properties', 'perspectives',
         'technology',
-        '!script', '!plugin', '!constant', '!include'
+        '!script', '!plugin', '!const', '!include'
     ]
 };

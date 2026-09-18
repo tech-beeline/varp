@@ -199,16 +199,24 @@ fragment ElementPropertyFeatures:
     | perspectivesBlocks+=PerspectivesBlock
 ;
 
-// Directives available in all model-level elements (ElementDslContext in Structurizr)
-// Provides !elements, !relationships, !docs, !decisions directives
-fragment ModelElementFeatures:
+// Directives available in all element contexts (ElementDslContext in Structurizr)
+// Provides !elements and !relationships directives
+fragment ElementDirectives:
+    elementsDirectives+=ElementsDirective
+    | relationshipsDirectives+=RelationshipsDirective
+;
+
+// Directives available in documentable element contexts
+// (SoftwareSystem/Container/Component in Structurizr)
+// Provides !elements, !relationships, !docs and !decisions directives
+fragment DocumentableElementDirectives:
     elementsDirectives+=ElementsDirective
     | relationshipsDirectives+=RelationshipsDirective
     | docs+=DocsDirective
     | adrs+=AdrsDirective
 ;
 
-// Directives for workspace/model level (WorkspaceDslContext / ModelDslContext in Structurizr)
+// Directives for workspace/model level (WorkspaceDslContext in Structurizr)
 // Provides !identifiers, !docs, !decisions directives
 fragment WorkspaceFeatures:
     identifiers+=IdentifiersProperty
@@ -217,7 +225,7 @@ fragment WorkspaceFeatures:
 ;
 
 // Context-free directives — valid in virtually any context
-// !include, !script, !plugin, !impliedRelationships, !constant, !const, !var
+// !include, !script, !plugin, !impliedRelationships, !const, !var
 fragment EverywhereFeatures:
     includes+=Include
     | scripts+=ScriptDirective
@@ -319,17 +327,14 @@ ConfigurationBlock:
         )*
     NL+ '}';
 
-UsersBlock:
+// users { <username> <read|write> ... }
+// Server-side access configuration that does not affect the generated diagram, so the
+// body is parsed as an opaque block. This keeps any username form (e.g. an email
+// address) valid, matching Structurizr, which accepts an arbitrary token as the username.
+UsersBlock returns string:
     USERS_KW '{'
-        (users+=UserConfig)*
+        (IgnoredScriptBody)*
     NL+ '}';
-
-// user=username role=read|write
-UserConfig:
-    username=STRING role=RoleValue;
-
-RoleValue returns string:
-    READ_KW | WRITE_KW;
 
 // visibility private|public
 VisibilityProperty:
@@ -347,7 +352,7 @@ ScopeProperty:
 ModelBlock:
     MODEL_KW '{'
         (
-            NL+ WorkspaceFeatures
+            NL+ identifiers+=IdentifiersProperty
             | NL+ EverywhereFeatures
             | NL+ archetypesBlocks+=ArchetypesBlock
             | NL+ elementExtensions+=ElementExtension
@@ -390,6 +395,8 @@ StylesBlock:
             | NL+ relationshipStyles+=RelationshipStyle 
             | NL+ lightBlocks+=LightStyleBlock
             | NL+ darkBlocks+=DarkStyleBlock
+            | NL+ themeProps+=ThemeProperty
+            | NL+ themesProps+=ThemesProperty
             | NL+ includes+=Include
         )*
     NL+ '}';
@@ -425,18 +432,20 @@ ElementStyle:
             | NL+ strokeProps+=StrokeProperty
             | NL+ strokeWidthProps+=StrokeWidthProperty
             | NL+ fontSizeProps+=FontSizeProperty
-            | NL+ borderProps+=LineStyleProperty 
+            | NL+ borderProps+=BorderProperty 
             | NL+ widthProps+=WidthProperty 
             | NL+ heightProps+=HeightProperty 
             | NL+ iconProps+=IconProperty 
+            | NL+ iconPositionProps+=IconPositionProperty
             | NL+ opacityProps+=OpacityProperty 
             | NL+ metadataProps+=MetadataProperty 
-            | NL+ descriptionProp+=ElementStyleDescriptionProperty
+            | NL+ properties+=PropertiesBlock
+            | NL+ descriptionProp+=StyleDescriptionProperty
         )*
     NL+ '}';
 
-// description true|false — enables/disables description display for element style
-ElementStyleDescriptionProperty:
+// description true|false — enables/disables description display in a style
+StyleDescriptionProperty:
     DESCRIPTION_KW value=(STRING | UNQUOTED_STRING | AnyKeyword);
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -449,12 +458,12 @@ TerminologyBlock:
     TERMINOLOGY_KW '{'
         (
             NL+ PERSON_KW person+=(UNQUOTED_STRING | STRING)
-            | NL+ SOFTWARE_SYSTEM_KW softwareSystem+=UNQUOTED_STRING
-            | NL+ CONTAINER_KW container+=UNQUOTED_STRING
-            | NL+ COMPONENT_KW component+=UNQUOTED_STRING
-            | NL+ DEPLOYMENT_NODE_KW deploymentNode+=UNQUOTED_STRING
-            | NL+ INFRASTRUCTURE_NODE_KW infrastructureNode+=UNQUOTED_STRING
-            | NL+ RELATIONSHIP_KW relationship+=UNQUOTED_STRING
+            | NL+ SOFTWARE_SYSTEM_KW softwareSystem+=(UNQUOTED_STRING | STRING)
+            | NL+ CONTAINER_KW container+=(UNQUOTED_STRING | STRING)
+            | NL+ COMPONENT_KW component+=(UNQUOTED_STRING | STRING)
+            | NL+ DEPLOYMENT_NODE_KW deploymentNode+=(UNQUOTED_STRING | STRING)
+            | NL+ INFRASTRUCTURE_NODE_KW infrastructureNode+=(UNQUOTED_STRING | STRING)
+            | NL+ RELATIONSHIP_KW relationship+=(UNQUOTED_STRING | STRING)
             | NL+ METADATA_KW metadata+=('square' | 'round' | 'curly' | 'angle' | 'double-angle' | NONE_KW)
             | NL+ includes+=Include
         )*
@@ -552,7 +561,7 @@ ArchetypeInstance:
                 | NL+ containers+=Container
                 | NL+ groups+=Group
                 | NL+ docs+=DocsDirective
-                | NL+ includes+=Include
+                | NL+ EverywhereFeatures
             )*
         NL+ '}'
     )?;
@@ -574,6 +583,8 @@ RelationshipStyle:
             | NL+ widthProps+=WidthProperty 
             | NL+ positionProps+=PositionProperty 
             | NL+ opacityProps+=OpacityProperty 
+            | NL+ metadataProps+=MetadataProperty
+            | NL+ descriptionProp+=StyleDescriptionProperty
             | NL+ properties+=PropertiesBlock 
             | NL+ dashedProp+=DashedProperty  
             | NL+ includes+=Include          
@@ -587,6 +598,11 @@ RelationshipStyle:
 ColorProperty:
     (COLOR_KW | COLOUR_KW) value=(COLOR_HEX | STRING | UNQUOTED_STRING | AnyKeyword);
 
+// border solid|dashed|dotted
+BorderProperty:
+    BORDER_KW value=(UNQUOTED_STRING | AnyKeyword);
+
+// style solid|dashed|dotted — line style of a relationship
 LineStyleProperty:
     STYLE_KW value=(UNQUOTED_STRING | AnyKeyword);
 
@@ -632,6 +648,10 @@ MetadataProperty:
 IconProperty:
     ICON_KW value=Path;
 
+// iconPosition top|bottom|left
+IconPositionProperty:
+    ICON_POSITION_KW value=(UNQUOTED_STRING | STRING);
+
 DashedProperty:
     DASHED_KW value=(TRUE_KW | FALSE_KW | STRING);
 
@@ -669,7 +689,7 @@ PerspectiveInline:
     (value=PerspectiveValue)?;
 
 PerspectiveValue returns string:
-    STRING | UNQUOTED_STRING;
+    STRING | UNQUOTED_STRING | AnyKeyword;
 
 PerspectiveValueProperty:
     VALUE_KW value=PerspectiveValue;
@@ -733,21 +753,47 @@ FilteredView:
     )?;
 
 // Image view — embeds external diagram sources (PlantUML, Mermaid, Kroki, image)
+// Image view: image <element> [key] { plantuml|mermaid|kroki|image ... }
 ImageView:
     IMAGE_KW (element=[NamedElement:Identifier] | all='*') Key? '{'
         (
-            NL+ defaultViews+=DefaultViewProperty
-            | NL+ titleProps+=TitleProperty
-            | NL+ descriptionProps+=DescriptionProperty
-            | NL+ properties+=PropertiesBlock
-            | NL+ sources+=PlantUMLSource
-            | NL+ sources+=MermaidSource
-            | NL+ sources+=KrokiSource
-            | NL+ sources+=ImageSource
-            | NL+ scripts+=ScriptDirective
-            | NL+ includes+=Include
+            ImageViewFeatures
+            | NL+ lightBlocks+=LightImageViewBlock
+            | NL+ darkBlocks+=DarkImageViewBlock
             )*
     NL+ '}';
+
+// light { image ... } / dark { image ... } — color scheme variants of an image view
+LightImageViewBlock:
+    LIGHT_KW '{'
+        (
+            ImageViewFeatures
+            | NL+ lightBlocks+=LightImageViewBlock
+            | NL+ darkBlocks+=DarkImageViewBlock
+        )*
+    NL+ '}';
+
+DarkImageViewBlock:
+    DARK_KW '{'
+        (
+            ImageViewFeatures
+            | NL+ lightBlocks+=LightImageViewBlock
+            | NL+ darkBlocks+=DarkImageViewBlock
+        )*
+    NL+ '}';
+
+fragment ImageViewFeatures:
+    NL+ defaultViews+=DefaultViewProperty
+    | NL+ titleProps+=TitleProperty
+    | NL+ descriptionProps+=DescriptionProperty
+    | NL+ properties+=PropertiesBlock
+    | NL+ sources+=PlantUMLSource
+    | NL+ sources+=MermaidSource
+    | NL+ sources+=KrokiSource
+    | NL+ sources+=ImageSource
+    | NL+ scripts+=ScriptDirective
+    | NL+ includes+=Include
+;
 
 PlantUMLSource:
     PLANTUML_KW value=(Path | TEXT_BLOCK);
@@ -1173,7 +1219,7 @@ fragment ElementExtensionBody:
         | NL+ relationships+=ImplicitRelationship
         | NL+ docs+=DocsDirective
         | NL+ adrs+=AdrsDirective
-        | NL+ includes+=Include;
+        | NL+ EverywhereFeatures;
 
 // !relationship <target> { tags, url, properties, ... }
 // Applies overlay modifications to a specific relationship
@@ -1200,7 +1246,7 @@ PropertiesBlock:
             NL+ items+=PropertyItem
             | NL+ includes+=Include
          )*
-    NL '}';
+    NL+ '}';
 
 PropertyItem:
     name=PropertyKey value=PropertyValue;
@@ -1237,8 +1283,10 @@ type NamedElement = Person | SoftwareSystem | Container | Component | Deployment
 
 // Element types that can be a source or target of a relationship.
 // ArchetypeInstance is included: an instance materialises as an element of its
-// archetype's base type, so it is a valid endpoint.
-type RelationshipMember = Person | SoftwareSystem | Container | Component | DeploymentNode | InfrastructureNode | SoftwareSystemInstance| ContainerInstance | CustomElement | ArchetypeInstance;
+// archetype's base type, so it is a valid endpoint. GenericInstance is the
+// `instanceOf` form of an instance, which the model creates as a container or
+// software system instance, so it is a valid endpoint too.
+type RelationshipMember = Person | SoftwareSystem | Container | Component | DeploymentNode | InfrastructureNode | SoftwareSystemInstance| ContainerInstance | GenericInstance | CustomElement | ArchetypeInstance;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // TAG PROPERTY
@@ -1347,11 +1395,14 @@ GroupProperty:
     GROUP_KW value=STRING;
 
 // group <name> { person ..., softwareSystem ..., relationship ..., etc. }
+// A group inherits the directives of the context it appears in, which the grammar
+// cannot express statically, so it accepts the documentable set plus !identifiers.
 Group:
     Id? GROUP_KW Name
     '{'
         (
-            NL+ ModelElementFeatures
+            NL+ DocumentableElementDirectives
+            | NL+ identifiers+=IdentifiersProperty
             | NL+ EverywhereFeatures
             | NL+ elements+=(Person | SoftwareSystem | Container | Component | DeploymentNode | ContainerInstance | SoftwareSystemInstance | GenericInstance | Group)
             | NL+ relationships+=(Relationship | ImplicitRelationship)
@@ -1367,16 +1418,19 @@ RelationshipArrow:
     (arrow=ARROW | ('--' archetype=[ArchetypeDefinition:Identifier] ARROW));
 
 // NoRelationship: -/> — explicitly marks no relationship between two elements
+// The body is mandatory, as in Structurizr, where the directive is only recognised
+// together with the context start token, and it may nest further -/> directives.
 NoRelationship:
     (source=[NamedElement:QualifiedName] | sourceThis?=THIS_KW)
     NO_ARROW
     (target=[NamedElement:QualifiedName] | targetThis?=THIS_KW)
     (description=STRING)?
-    (
-        '{'
-            (NL+ relationships+=(Relationship | ImplicitRelationship))*
-        NL+ '}'
-    )?;
+    '{'
+        (
+            NL+ relationships+=(Relationship | ImplicitRelationship)
+            | NL+ noRelationships+=NoRelationship
+        )*
+    NL+ '}';
 
 // Explicit relationship: source -> target "description" { tags, url, ... }
 Relationship:
@@ -1438,7 +1492,7 @@ Person:
     (
         '{'
             (
-                NL+ ModelElementFeatures
+                NL+ ElementDirectives
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ relationships+=(Relationship | ImplicitRelationship)
@@ -1452,7 +1506,7 @@ SoftwareSystem:
     (
         '{'
             (
-                NL+ ModelElementFeatures
+                NL+ DocumentableElementDirectives
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ archetypeInstances+=ArchetypeInstance
@@ -1471,7 +1525,7 @@ Container:
     (
         '{'
             (
-                NL+ ModelElementFeatures
+                NL+ DocumentableElementDirectives
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ archetypeInstances+=ArchetypeInstance
@@ -1491,7 +1545,7 @@ Component:
     (
         '{'
             (
-                NL+ ModelElementFeatures
+                NL+ DocumentableElementDirectives
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ groupProps+=GroupProperty
@@ -1507,7 +1561,7 @@ CustomElement:
     (
         '{'
             (
-                NL+ ModelElementFeatures
+                NL+ ElementDirectives
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ relationships+=ImplicitRelationship
@@ -1525,7 +1579,7 @@ DeploymentEnvironment:
     (
         '{'
             (
-                NL+ ModelElementFeatures
+                NL+ ElementDirectives
                 | NL+ EverywhereFeatures
                 | NL+ deploymentGroups+=DeploymentGroup
                 | NL+ groups+=Group
@@ -1572,7 +1626,7 @@ DeploymentNode:
     (
         '{'
             (
-                NL+ ModelElementFeatures
+                NL+ ElementDirectives
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ children+=DeploymentNode
@@ -1582,7 +1636,6 @@ DeploymentNode:
                 | NL+ groups+=Group
                 | NL+ infrastructureNodes+=InfrastructureNode
                 | NL+ instancesProps+=InstancesProperty
-                | NL+ noRelationships+=NoRelationship
                 | NL+ relationships+=(Relationship | ImplicitRelationship)
                 | NL+ softwareSystemInstances+=SoftwareSystemInstance
                 | NL+ techProps+=TechnologyProperty
@@ -1626,7 +1679,7 @@ InfrastructureNode:
     (
         '{'
             (
-                NL+ ModelElementFeatures
+                NL+ ElementDirectives
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ relationships+=(Relationship | ImplicitRelationship)
@@ -1662,7 +1715,7 @@ SoftwareSystemInstance:
     (
         '{'
             (
-                NL+ ModelElementFeatures
+                NL+ ElementDirectives
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ healthChecks+=HealthCheck
@@ -1689,7 +1742,7 @@ ContainerInstance:
     (
         '{'
             (
-                NL+ ModelElementFeatures
+                NL+ ElementDirectives
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ healthChecks+=HealthCheck
@@ -1716,7 +1769,7 @@ GenericInstance:
     (
         '{'
             (
-                NL+ ModelElementFeatures
+                NL+ ElementDirectives
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ healthChecks+=HealthCheck
@@ -1737,9 +1790,10 @@ HealthCheck:
 // CONSTANTS
 // ═════════════════════════════════════════════════════════════════════════════
 
-// !constant name = value, !const name = value, !var name = value
+// !const name = value, !var name = value
+// !const / !var declare a constant or variable; !constant was removed from the DSL
 Constant:
-    (_CONSTANT_KW | _CONST_KW | _VAR_KW) name=(STRING | ComplexIdentifier) value=ConstantValue;
+    (_CONST_KW | _VAR_KW) name=(STRING | ComplexIdentifier) value=ConstantValue;
 
 ConstantValue returns string:
     STRING | ComplexIdentifier | TEXT_BLOCK;
@@ -1915,7 +1969,6 @@ IdentifierKeyword returns string:
 // AnyKeyword: matches any keyword token — used to accept reserved words as values
 AnyKeyword returns string:
     IdentifierKeyword 
-    | _CONSTANT_KW
     | _CONST_KW
     | _VAR_KW
     | _ELEMENTS_KW
@@ -2016,6 +2069,8 @@ terminal METADATA_KW: /metadata\b/i;
 terminal FONTSIZE_KW: /fontsize\b/i;
 terminal FILTERED_KW: /filtered\b/i;
 terminal ICON_KW: /icon\b/i;
+terminal ICON_POSITION_KW: /iconPosition\b/i;
+terminal BORDER_KW: /border\b/i;
 terminal DASHED_KW: /dashed\b/i;
 terminal COLOR_KW: /color\b/i;
 terminal COLOUR_KW: /colour\b/i;

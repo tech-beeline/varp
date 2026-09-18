@@ -110,4 +110,19 @@ describe('C4LangiumDocumentFactory (UTF-8 BOM handling)', () => {
         expect(modelDoc?.parseResult.lexerErrors).toHaveLength(0);
         expect(modelDoc?.parseResult.parserErrors).toHaveLength(0);
     });
+
+    it('resolves references through an extension-less !include', async () => {
+        const { services } = await createProject({
+            'main.dsl': 'workspace {\n    !include "model"\n    views {\n        systemContext sys "ctx" {\n            include *\n        }\n    }\n}\n',
+            'model.dsl': 'model {\n    sys = softwareSystem "System"\n}\n',
+        });
+        const doc = services.shared.workspace.LangiumDocuments.getDocument(
+            Utils.resolvePath(PROJECT, 'main.dsl'),
+        );
+        expect(doc?.parseResult.parserErrors).toHaveLength(0);
+        const messages = (doc?.diagnostics ?? []).map(d =>
+            typeof d.message === 'string' ? d.message : d.message.value
+        );
+        expect(messages.filter(m => m.includes('Could not resolve reference'))).toEqual([]);
+    });
 });

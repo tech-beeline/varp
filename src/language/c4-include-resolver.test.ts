@@ -26,6 +26,7 @@ import {
     getConstantsForDocument,
     substituteConstants,
     findParentDocument,
+    findIncludeDirective,
     getAncestorChain,
     getRootWorkspaceUri,
 } from './c4-include-resolver';
@@ -108,9 +109,9 @@ describe('resolveTargetUris', () => {
 });
 
 describe('constants', () => {
-    it('collects !constant declarations and strips quotes', async () => {
+    it('collects !const declarations and strips quotes', async () => {
         const { services } = await createProject({
-            'constants.dsl': '!constant BASE "shared/model"\n!constant OTHER unquoted\n',
+            'constants.dsl': '!const BASE "shared/model"\n!const OTHER unquoted\n',
         });
         const constants = getConstantsForDocument(
             services.shared,
@@ -125,8 +126,8 @@ describe('constants', () => {
         // constants are visible from main.dsl. A constant from an unrelated document
         // is intentionally NOT visible (see the constant-scoping tests below).
         const { services } = await createProject({
-            'main.dsl': '!constant MODE "local"\n!include "other.dsl"\nworkspace {\n}\n',
-            'other.dsl': '!constant MODE "remote"\n!constant GLOBAL "42"\n',
+            'main.dsl': '!const MODE "local"\n!include "other.dsl"\nworkspace {\n}\n',
+            'other.dsl': '!const MODE "remote"\n!const GLOBAL "42"\n',
         });
         const mainRoot = rootOf(services, 'main.dsl');
         expect(mainRoot).toBeDefined();
@@ -184,9 +185,23 @@ describe('workspace graph & constant scoping', () => {
         expect(getRootWorkspaceUri(shared, mainUri)).toBe(mainUri);
     });
 
+    it('follows an extension-less !include to the ".dsl" document', async () => {
+        const { services } = await createProject({
+            'main.dsl': '!include "frag"\nworkspace {\n}\n',
+            'frag.dsl': 'person "User"\n',
+        });
+        const shared = services.shared;
+        const fragUri = Utils.resolvePath(PROJECT, 'frag.dsl').toString();
+        const mainUri = Utils.resolvePath(PROJECT, 'main.dsl').toString();
+
+        expect(findIncludeDirective(shared, fragUri)).toBeDefined();
+        expect(findParentDocument(shared, fragUri)?.uri.toString()).toBe(mainUri);
+        expect(getAncestorChain(shared, fragUri)).toEqual([mainUri]);
+    });
+
     it('resolves a constant declared in the parent file (reported instability scenario)', async () => {
         const { services } = await createProject({
-            'main.dsl': '!constant PEOPLE_INCLUDE "people.dsl"\n!include "${PEOPLE_INCLUDE}"\nworkspace {\n}\n',
+            'main.dsl': '!const PEOPLE_INCLUDE "people.dsl"\n!include "${PEOPLE_INCLUDE}"\nworkspace {\n}\n',
             'people.dsl': 'person "User"\n',
         });
         const peopleRoot = rootOf(services, 'people.dsl');
@@ -198,9 +213,9 @@ describe('workspace graph & constant scoping', () => {
 
     it('does not leak constants from unrelated workspaces', async () => {
         const { services } = await createProject({
-            'main.dsl': '!constant MAIN_ONLY "m"\n!include "frag.dsl"\nworkspace {\n}\n',
+            'main.dsl': '!const MAIN_ONLY "m"\n!include "frag.dsl"\nworkspace {\n}\n',
             'frag.dsl': 'person "User"\n',
-            'other.dsl': '!constant SECRET "x"\nworkspace {\n}\n',
+            'other.dsl': '!const SECRET "x"\nworkspace {\n}\n',
         });
         const fragRoot = rootOf(services, 'frag.dsl');
         const otherRoot = rootOf(services, 'other.dsl');
@@ -214,9 +229,9 @@ describe('workspace graph & constant scoping', () => {
 
     it('resolves duplicate constants deterministically to the owning workspace, not a random sibling', async () => {
         const { services } = await createProject({
-            'main.dsl': '!constant MODE "local"\n!include "frag.dsl"\nworkspace {\n}\n',
+            'main.dsl': '!const MODE "local"\n!include "frag.dsl"\nworkspace {\n}\n',
             'frag.dsl': 'person "User"\n',
-            'other.dsl': '!constant MODE "remote"\nworkspace {\n}\n',
+            'other.dsl': '!const MODE "remote"\nworkspace {\n}\n',
         });
         const fragRoot = rootOf(services, 'frag.dsl');
         const otherRoot = rootOf(services, 'other.dsl');

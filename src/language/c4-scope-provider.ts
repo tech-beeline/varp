@@ -998,13 +998,21 @@ export class C4ScopeProvider extends DefaultScopeProvider {
      * URLs are parsed as-is, so remote !include / extendsUri targets resolve
      * to the same URI the document builder loads them under (see
      * C4DocumentBuilder.resolveTargetUri).
+     *
+     * A path without an extension matches the loaded ".dsl" document the document
+     * builder falls back to; the exact path is used when neither candidate is loaded.
      */
     private resolveTargetUri(rawPath: string, contextNode: AstNode): URI | undefined {
         // Single shared resolution pipeline (quotes, ${CONST}, http(s), relative
         // paths) - matches the document builder, validator and JSON generator.
-        return includeResolver.resolveTargetUri(rawPath, contextNode, {
+        const candidates = includeResolver.resolveTargetUris(rawPath, contextNode, {
+            withDslFallback: true,
             constants: (path, node) => includeResolver.substituteConstants(this.services.shared, path, node),
         });
+        for (const uri of candidates) {
+            if (this.services.shared.workspace.LangiumDocuments.getDocument(uri)) return uri;
+        }
+        return candidates[0];
     }
 
 

@@ -15,11 +15,12 @@
 */
 
 import { AstNode, AstUtils, type ValidationAcceptor, type ValidationChecks } from 'langium';
-import { ElementStyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, HealthCheck, DeploymentNode } from '../generated/ast';
+import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
 import * as includeResolver from './c4-include-resolver';
 import { C4Utils } from './c4-utils';
+import { canonicalElementName, findDuplicateRelationships, type DeclaredRelationship } from './c4-implied-relationships';
 
 /** Normalizes lowercase shape names to Structurizr PascalCase format (Box, RoundedBox, Cylinder, etc.) */
 export const SHAPE_NORMALIZE: Record<string, string> = {
@@ -46,6 +47,17 @@ export const SHAPE_NORMALIZE: Record<string, string> = {
 
 const VALID_SHAPES = new Set(Object.keys(SHAPE_NORMALIZE));
 
+/** Root-level document properties that stay valid next to a workspace. */
+const ROOT_ALLOWED_KEYS = new Set([
+    'workspaces', 'includes', 'constants', 'scripts', 'plugins', 'impliedRelationships'
+]);
+
+/** AST types a relationship can be declared against; groups and documents are containers only. */
+const RELATIONSHIP_MEMBER_TYPES = new Set<string>([
+    'Person', 'SoftwareSystem', 'Container', 'Component', 'DeploymentNode', 'InfrastructureNode',
+    'SoftwareSystemInstance', 'ContainerInstance', 'CustomElement', 'ArchetypeInstance', 'GenericInstance'
+]);
+
 /** Normalizes lowercase border style names to PascalCase (Solid, Dashed, Dotted) */
 export const BORDER_NORMALIZE: Record<string, string> = {
     'solid': 'Solid',
@@ -54,6 +66,29 @@ export const BORDER_NORMALIZE: Record<string, string> = {
 };
 
 const VALID_BORDER_STYLES = new Set(Object.keys(BORDER_NORMALIZE));
+
+/** Icon position values, normalized to the PascalCase the model serializes them as. */
+export const ICON_POSITION_NORMALIZE: Record<string, string> = {
+    top: 'Top',
+    bottom: 'Bottom',
+    left: 'Left'
+};
+
+// Positions an element style icon can be placed at, as the model supports them
+const VALID_ICON_POSITIONS = new Set(Object.keys(ICON_POSITION_NORMALIZE));
+
+/**
+ * Whether implied relationships are enabled at the given offset. The directives apply from
+ * their position onwards, and are enabled unless a directive turns them off.
+ */
+function impliedRelationshipsEnabledAt(flags: Array<{ offset: number, enabled: boolean }>, offset: number): boolean {
+    let enabled = true;
+    for (const flag of flags) {
+        if (flag.offset > offset) break;
+        enabled = flag.enabled;
+    }
+    return enabled;
+}
 
 /** Normalizes lowercase routing names to PascalCase (Direct, Orthogonal, Curved) */
 export const ROUTING_NORMALIZE: Record<string, string> = {
@@ -93,12 +128,21 @@ export function registerValidationChecks(services: C4Services) {
     validator.sharedServices = services.shared;
 
     const checks: ValidationChecks<C4AstType> = {
-        PropertyItem: (node, accept) => validator.checkPropertyItem(node, accept),
+        IconPositionProperty: [
+            (node, accept) => validator.checkIconPosition(node, accept)
+        ],
+        PropertyItem: [
+            (node, accept) => validator.checkPropertyItem(node, accept),
+            (node, accept) => validator.checkGroupSeparatorProperty(node, accept)
+        ],
 
         C4Document: [
             (node, accept) => validator.checkUniqueElementsInDocument(node, accept),
             (node, accept) => validator.checkUniqueViewKeys(node, accept),
-            (node, accept) => validator.checkOnlyOneDefaultView(node, accept)
+            (node, accept) => validator.checkOnlyOneDefaultView(node, accept),
+            (node, accept) => validator.checkSingleWorkspace(node, accept),
+            (node, accept) => validator.checkRootContentOutsideWorkspace(node, accept),
+            (node, accept) => validator.checkDuplicateRelationships(node, accept)
         ],
         ModelBlock: [
             (node, accept) => validator.checkIncludeElements(node, accept, 'ModelBlock')
@@ -198,8 +242,8 @@ export function registerValidationChecks(services: C4Services) {
         DarkStyleBlock: [
             (node, accept) => validator.checkIncludeElements(node, accept, 'DarkStyleBlock')
         ],
-        ElementStyleDescriptionProperty: [
-            (node, accept) => validator.checkElementStyleDescription(node, accept)
+        StyleDescriptionProperty: [
+            (node, accept) => validator.checkStyleDescription(node, accept)
         ],
         MetadataProperty: [
             (node, accept) => validator.checkMetadataProperty(node, accept)
@@ -221,6 +265,9 @@ export function registerValidationChecks(services: C4Services) {
         ],
         JumpProperty: [
             (node, accept) => validator.checkJumpValue(node, accept)
+        ],
+        DashedProperty: [
+            (node, accept) => validator.checkDashedValue(node, accept)
         ],
         RoutingProperty: [
             (node, accept) => validator.checkRoutingValue(node, accept)
@@ -289,7 +336,8 @@ export function registerValidationChecks(services: C4Services) {
             (node, accept) => validator.checkIncludeElements(node, accept, 'RelationshipExtension')
         ],
         Group: [
-            (node, accept) => validator.checkGroupIncludeElements(node, accept)
+            (node, accept) => validator.checkGroupIncludeElements(node, accept),
+            (node, accept) => validator.checkNestedGroup(node, accept)
         ],
         Include: [
             (node, accept) => validator.checkPathCharacters(node, accept, 'file')
@@ -661,6 +709,61 @@ export class C4Validator {
         }
     }
 
+    /**
+     * Validates the icon position of an element style against the positions the model
+     * supports.
+     */
+    checkIconPosition(node: IconPositionProperty, accept: ValidationAcceptor): void {
+        const value = C4Utils.stripQuotes(node.value);
+        if (!VALID_ICON_POSITIONS.has(value.toLowerCase())) {
+            accept('error', `The icon position "${value}" is not valid`, { node, property: 'value' });
+        }
+    }
+
+    /**
+     * Validates the model's 'structurizr.groupSeparator' property: the separator is a
+     * single character, and the property only carries that meaning on the model.
+     */
+    checkGroupSeparatorProperty(item: PropertyItem, accept: ValidationAcceptor): void {
+        const properties = item.$container as any;
+        if (!isPropertiesBlock(properties) || !isModelBlock(properties.$container)) return;
+        if (C4Utils.stripQuotes(item.name).toLowerCase() !== 'structurizr.groupseparator') return;
+        if (C4Utils.stripQuotes(item.value).length !== 1) {
+            accept('error', 'Group separator must be a single character', { node: item, property: 'value' });
+        }
+    }
+
+    /**
+     * Validates that a group nested inside another group can be composed into a path,
+     * which the enclosing model provides through a 'structurizr.groupSeparator' property.
+     */
+    checkNestedGroup(node: Group, accept: ValidationAcceptor): void {
+        // A group only nests when declared directly inside another group: an element body
+        // (softwareSystem, container, deploymentNode, ...) starts a group-less context, so
+        // groups inside it are independent of the group the element itself belongs to.
+        if (!isGroup(node.$container)) return;
+        if (this.hasGroupSeparator(node)) return;
+        accept('error', "To use nested groups, please define a model property named 'structurizr.groupSeparator'.", { node, property: 'name' });
+    }
+
+    /** Returns true when a model block of the document declares a 'structurizr.groupSeparator' property. */
+    private hasGroupSeparator(node: AstNode): boolean {
+        const root = AstUtils.getDocument(node)?.parseResult.value as any;
+        if (!root) return false;
+        const modelBlocks = [
+            ...(root.modelBlocks ?? []),
+            ...(root.workspaces ?? []).flatMap((workspace: any) => workspace.modelBlocks ?? [])
+        ];
+        for (const modelBlock of modelBlocks) {
+            for (const properties of modelBlock.properties ?? []) {
+                for (const item of properties.items ?? []) {
+                    if (C4Utils.stripQuotes(item.name) === 'structurizr.groupSeparator') return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /** Validates uniqueness of container names and identifiers within a SoftwareSystem */
     checkUniqueContainersInSystem(softwareSystem: SoftwareSystem, accept: ValidationAcceptor): void {
         const containerNames = new Set<string>();
@@ -709,24 +812,12 @@ export class C4Validator {
         }
     }
 
-    /** Validates workspace metadata consistency: name/description cannot be defined both in header and body */
+    /**
+     * Validates workspace metadata: a repeated name/description - whether from the header or
+     * from a body property - overwrites the previous value, so only the counts that break the
+     * document structure are rejected.
+     */
     checkWorkspaceMetadata(workspace: Workspace, accept: ValidationAcceptor): void {
-        const hasHeaderName = !!workspace.name;
-        const hasBodyName = workspace.nameProp.length > 0;
-        if (hasHeaderName && hasBodyName) {
-            const errorMsg = "The workspace name must be defined either in the header or as a 'name' property, but not both.";
-            accept('error', errorMsg, { node: workspace, property: 'name' });
-            accept('error', errorMsg, { node: workspace.nameProp[0], property: 'value' });
-        }
-        const hasHeaderDesc = !!workspace.description;
-        const hasBodyDesc = workspace.descriptionProp.length > 0;
-        if (hasHeaderDesc && hasBodyDesc) {
-            const errorMsg = "The workspace description must be defined either in the header or as a 'description' property, but not both.";
-            accept('error', errorMsg, { node: workspace, property: 'description' });
-            accept('error', errorMsg, { node: workspace.descriptionProp[0], property: 'value' });
-        }
-        if (workspace.nameProp.length > 1) workspace.nameProp.slice(1).forEach(prop => accept('error', "Duplicate 'name' property inside block.", { node: prop, property: 'value' }));
-        if (workspace.descriptionProp.length > 1) workspace.descriptionProp.slice(1).forEach(prop => accept('error', "Duplicate 'description' property inside block.", { node: prop, property: 'value' }));
         if (workspace.modelBlocks.length > 1) {
             for (let index = 1; index < workspace.modelBlocks.length; index++) {
                 accept('error', "Multiple models are not permitted in a DSL definition.", { node: workspace, property: 'modelBlocks', index });
@@ -759,6 +850,92 @@ export class C4Validator {
             accept('error',
                 `Invalid character '${bad}' in ${property === 'file' ? 'include path' : property === 'extendsUri' ? 'extends path' : 'path'}. Only legal filesystem/URL characters are allowed.`,
                 { node, property });
+        }
+    }
+
+    /**
+     * Validates that a relationship does not repeat one that already exists between the same
+     * elements with the same description, counting the implied relationships the model creates
+     * between enclosing elements.
+     */
+    checkDuplicateRelationships(doc: C4Document, accept: ValidationAcceptor): void {
+        const flags = AstUtils.streamAllContents(doc)
+            .filter(isImpliedRelationshipsProperty)
+            .map(property => ({
+                offset: property.$cstNode?.offset ?? 0,
+                enabled: C4Utils.stripQuotes((property as any).value ?? '').toLowerCase() === 'true'
+            }))
+            .toArray()
+            .sort((a, b) => a.offset - b.offset);
+
+        const declared: DeclaredRelationship[] = [];
+        for (const node of AstUtils.streamAllContents(doc)) {
+            if (!isRelationship(node) && !isImplicitRelationship(node)) continue;
+            const source = this.relationshipEndpoint(node, 'source');
+            const destination = this.relationshipEndpoint(node, 'target');
+            if (!source || !destination) continue;
+            declared.push({
+                node,
+                source,
+                destination,
+                impliedEnabled: impliedRelationshipsEnabledAt(flags, node.$cstNode?.offset ?? 0)
+            });
+        }
+
+        for (const duplicate of findDuplicateRelationships(declared)) {
+            const message = `A relationship between "${canonicalElementName(duplicate.source)}" and "${canonicalElementName(duplicate.destination)}" already exists`;
+            accept('error', message, { node: duplicate.node, property: 'target' });
+        }
+    }
+
+    /** Resolves one end of a relationship declaration, resolving 'this' to the enclosing element. */
+    private relationshipEndpoint(node: any, end: 'source' | 'target'): NamedElement | undefined {
+        if (end === 'source' && isImplicitRelationship(node)) {
+            return this.enclosingRelationshipMember(node);
+        }
+        const refersToThis = end === 'source' ? node.sourceThis === true : node.targetThis === true;
+        if (refersToThis) {
+            return this.enclosingRelationshipMember(node);
+        }
+        return node[end]?.ref as NamedElement | undefined;
+    }
+
+    /** Nearest enclosing element that a relationship can be declared against, skipping groups and documents. */
+    private enclosingRelationshipMember(node: any): NamedElement | undefined {
+        let current: any = node.$container;
+        while (current) {
+            if (RELATIONSHIP_MEMBER_TYPES.has(current.$type)) return current as NamedElement;
+            current = current.$container;
+        }
+        return undefined;
+    }
+
+    /**
+     * Rejects model content declared at the document root next to a workspace. The root
+     * accepts loose content so that !include targets parse on their own, but a document that
+     * declares a workspace keeps its model content inside it.
+     */
+    checkRootContentOutsideWorkspace(doc: C4Document, accept: ValidationAcceptor): void {
+        if (((doc as any).workspaces ?? []).length === 0) return;
+        for (const key of Object.keys(doc as any)) {
+            if (ROOT_ALLOWED_KEYS.has(key) || key.startsWith('$')) continue;
+            const value = (doc as any)[key];
+            if (!Array.isArray(value)) continue;
+            for (const node of value) {
+                if (!node || typeof node !== 'object' || !node.$type) continue;
+                accept('error', 'Unexpected tokens outside the workspace block.', { node });
+            }
+        }
+    }
+
+    /**
+     * Validates that a document declares at most one workspace. Multiple models and view
+     * sets are rejected per workspace by checkWorkspaceMetadata.
+     */
+    checkSingleWorkspace(doc: C4Document, accept: ValidationAcceptor): void {
+        const workspaces: any[] = (doc as any).workspaces ?? [];
+        for (let index = 1; index < workspaces.length; index++) {
+            accept('error', 'Multiple workspaces are not permitted in a DSL definition.', { node: doc, property: 'workspaces', index });
         }
     }
 
@@ -808,8 +985,8 @@ export class C4Validator {
     /** Placeholder for workspace-level validation (currently unused) */
     checkWorkspace(workspace: Workspace, accept: ValidationAcceptor): void {}
 
-    /** Validates that ElementStyle description property is true or false */
-    checkElementStyleDescription(prop: ElementStyleDescriptionProperty, accept: ValidationAcceptor): void {
+    /** Validates that a style description property is true or false */
+    checkStyleDescription(prop: StyleDescriptionProperty, accept: ValidationAcceptor): void {
         const val = prop.value;
         if (!val) return;
         const trimmed = val.replace(/^["']|["']$/g, '').toLowerCase();
@@ -839,6 +1016,16 @@ export class C4Validator {
         const val = prop.value;
         if (val && val.toLowerCase() !== 'true' && val.toLowerCase() !== 'false') {
             accept('error', 'Jump must be true or false.', { node: prop, property: 'value' });
+        }
+    }
+
+    /** Validates that dashed value is true or false */
+    checkDashedValue(prop: any, accept: ValidationAcceptor): void {
+        const val = prop.value;
+        if (!val) return;
+        const trimmed = val.replace(/^["']|["']$/g, '').toLowerCase();
+        if (trimmed !== 'true' && trimmed !== 'false') {
+            accept('error', 'Dashed must be true or false.', { node: prop, property: 'value' });
         }
     }
 
@@ -1005,8 +1192,9 @@ export class C4Validator {
             }
         }
         if (detectedDefaultMarkers.length > 1) {
-            detectedDefaultMarkers.slice(1).forEach(marker => {
-                accept('error', "Only one view can be marked as 'default' across the entire workspace.", { node: marker, property: 'value' });
+            // The last marker wins; the earlier ones are the ones that never take effect.
+            detectedDefaultMarkers.slice(0, -1).forEach(marker => {
+                accept('warning', "Only one view can be marked as 'default' across the entire workspace.", { node: marker, property: 'value' });
             });
         }
     }

@@ -74,7 +74,7 @@ import {
     isStringLiteralExpression} from '../generated/ast';
 import { C4Services } from './c4-module';
 import * as includeResolver from './c4-include-resolver';
-import { SHAPE_NORMALIZE, BORDER_NORMALIZE, ROUTING_NORMALIZE } from './c4-validator';
+import { SHAPE_NORMALIZE, BORDER_NORMALIZE, ROUTING_NORMALIZE, ICON_POSITION_NORMALIZE } from './c4-validator';
 
 // Constants from the original Structurizr Java library
 const DEFAULT_THEME_URL = "https://static.structurizr.com/themes/default/theme.json";
@@ -500,13 +500,13 @@ class JsonGenerator {
     }
 
     /**
-     * Unified method for collecting constants (!constant directives) across documents and includes.
+     * Unified method for collecting constants (!const directives) across documents and includes.
      */
     private collectConstants(node: AstNode | undefined, visited: Set<string> = new Set<string>()): void {
         if (!node) return;
 
         // Always start from the document root (C4Document) so constants declared
-        // OUTSIDE the workspace block (top-level !constant) are collected too.
+        // OUTSIDE the workspace block (top-level !const) are collected too.
         // Matches the scope provider's substituteConstants, which scans the
         // document's parse result rather than the workspace node.
         const root = AstUtils.getDocument(node)?.parseResult?.value ?? node;
@@ -641,6 +641,18 @@ class JsonGenerator {
     }
 
     /**
+     * Adds a boolean style property, reading the 'true'/'false' text the DSL stores and
+     * writing the JSON boolean the viewer expects.
+     */
+    private addBooleanIfDefined(target: any, key: string, prop: any[] | undefined) {
+        const val = prop?.at(0);
+        if (val === undefined || val === null) return;
+        const raw = (typeof val === 'object' && 'value' in val) ? val.value : val;
+        if (raw === undefined || raw === null) return;
+        target[key] = String(C4Utils.stripQuotes(String(raw))).toLowerCase() === 'true';
+    }
+
+    /**
      * Transforms an ElementStyle AST node into a plain JSON object.
      * Normalizes shape, border, and other style properties to PascalCase (Structurizr convention).
      */
@@ -658,6 +670,14 @@ class JsonGenerator {
             }
         }
         this.addIfDefined(result, 'icon', style.iconProps);
+        this.addIfDefined(result, 'iconPosition', style.iconPositionProps);
+        // Normalize icon position to PascalCase (Top, Bottom, Left)
+        if (result.iconPosition && typeof result.iconPosition === 'string') {
+            const normalized = ICON_POSITION_NORMALIZE[result.iconPosition.toLowerCase()];
+            if (normalized) {
+                result.iconPosition = normalized;
+            }
+        }
         this.addIfDefined(result, 'width', style.widthProps);
         this.addIfDefined(result, 'height', style.heightProps);
         this.addIfDefined(result, 'border', style.borderProps);
@@ -670,7 +690,8 @@ class JsonGenerator {
         }
         this.addIfDefined(result, 'opacity', style.opacityProps);
         this.addIfDefined(result, 'fontSize', style.fontSizeProps);
-        this.addIfDefined(result, 'metadata', style.metadataProps);
+        this.addBooleanIfDefined(result, 'metadata', style.metadataProps);
+        this.addBooleanIfDefined(result, 'description', style.descriptionProp);
 
         return result;
     }
@@ -687,7 +708,7 @@ class JsonGenerator {
         this.addIfDefined(result, 'color', style.colorProps);
         this.addIfDefined(result, 'fontSize', style.fontSizeProps);
         this.addIfDefined(result, 'width', style.widthProps);
-        this.addIfDefined(result, 'dashed', style.dashedProp);
+        this.addBooleanIfDefined(result, 'dashed', style.dashedProp);
         this.addIfDefined(result, 'routing', style.routingProps);
         // Normalize routing (Direct, Orthogonal, Curved)
         if (result.routing && typeof result.routing === 'string') {
@@ -696,13 +717,15 @@ class JsonGenerator {
         }
         this.addIfDefined(result, 'position', style.positionProps);
         this.addIfDefined(result, 'opacity', style.opacityProps);
-        this.addIfDefined(result, 'jump', style.jumpProps);
+        this.addBooleanIfDefined(result, 'jump', style.jumpProps);
         this.addIfDefined(result, 'style', style.styleProps);
         // Normalize style for relationship (Solid, Dashed, Dotted)
         if (result.style && typeof result.style === 'string') {
             const normalized = BORDER_NORMALIZE[result.style.toLowerCase()];
             if (normalized) result.style = normalized;
         }
+        this.addBooleanIfDefined(result, 'metadata', style.metadataProps);
+        this.addBooleanIfDefined(result, 'description', style.descriptionProp);
 
         return result;
     }

@@ -1993,7 +1993,6 @@ QualifiedName returns string:
 
 // ─── Directive keywords (start with !) ─────────────────────────────────────
 
-terminal _CONSTANT_KW: /!constant\b/;
 terminal _CONST_KW: /!const\b/;
 terminal _VAR_KW: /!var\b/;
 terminal _ELEMENTS_KW: /!elements\b/i;

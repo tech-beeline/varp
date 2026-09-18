@@ -7,6 +7,7 @@ langium-config.json
 .env.example
 .vscode/**
 .vscode-test/**
+.kilo/**
 *.vsix
 **/*.map
 test/**

@@ -45,11 +45,9 @@ interface LocalScopePackage {
 /**
  * Descriptions whose `name` is an identifier (left-hand side of `X = ...` or an
  * `!element` id), as opposed to an element's `name` (right-hand side). Identifier
- * lookup is case-insensitive (matches Structurizr DSL: IdentifiersRegister uses
- * equalsIgnoreCase), while name-based lookup stays case-sensitive (Structurizr
- * Model.getSoftwareSystemWithName uses equals). We tag the identifier descriptions
- * so a case-insensitive fallback can be applied to them without weakening name
- * lookups.
+ * lookup is case-insensitive, while name-based lookup stays case-sensitive. The tag
+ * lets a case-insensitive fallback apply to identifiers only, without weakening
+ * name lookups.
  */
 const IDENTIFIER_DESCRIPTION_TAG = Symbol('c4IdentifierDescription');
 
@@ -106,18 +104,15 @@ const ELEMENT_REFERENCE_TYPES = new Set([
 /**
  * Case-insensitive wrapper for a scope chain that targets identifiers only.
  *
- * Structurizr DSL resolves element/relationship identifiers case-insensitively
- * (IdentifiersRegister.getElement uses String.equalsIgnoreCase, and
- * DslContext.getElement lowercases the identifier before lookup), while
- * NAME-based references stay case-sensitive (Model.getSoftwareSystemWithName
- * uses String.equals). So a plain `caseInsensitive` MapScope/StreamScope would
- * be too aggressive - it would also weaken name lookups.
+ * Element and relationship identifiers are resolved case-insensitively, while
+ * name-based references stay case-sensitive, so a plain `caseInsensitive`
+ * MapScope/StreamScope would be too aggressive and would also weaken name lookups.
  *
- * This wrapper delegates to the wrapped scope chain and only when the exact
- * lookup misses does it do a case-insensitive fallback, restricted to
- * descriptions that represent identifiers (tagged with
- * IDENTIFIER_DESCRIPTION_TAG). It honours the chain's priority order: a hit in
- * an inner scope shadows the same (case-variant) name in an outer scope.
+ * The wrapper delegates to the wrapped scope chain and only when the exact lookup
+ * misses does it apply a case-insensitive fallback, restricted to descriptions
+ * that represent identifiers (tagged with IDENTIFIER_DESCRIPTION_TAG). It honours
+ * the chain's priority order: a hit in an inner scope shadows the same
+ * (case-variant) name in an outer scope.
  */
 class CaseInsensitiveIdentifierScope implements Scope {
     private readonly wrapped: Scope;
@@ -275,8 +270,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 const parts = this.calculateHierarchicalParts(element, elementId);
                 const fqn = parts.join('.');
                 const fqnDesc = this.services.workspace.AstNodeDescriptionProvider.createDescription(element, fqn, document);
-                // Tag as identifier: FQN lookup is case-insensitive (Structurizr's
-                // IdentifiersRegister.getElement uses equalsIgnoreCase).
+                // Tag as identifier: FQN lookup is case-insensitive.
                 (fqnDesc as any)[IDENTIFIER_DESCRIPTION_TAG] = true;
                 descriptions.push(fqnDesc);
 
@@ -321,8 +315,10 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             }
         }
 
-        // 2. Register by Name (for string-based references like environment="Live")
-        if (elementName && elementName !== elementId) {
+        // 2. Register by Name for deployment environments: a deployment view's
+        //    environment can be referenced by name as well as by identifier. Every
+        //    other element reference resolves by identifier only.
+        if (elementName && isDeploymentEnvironment(element)) {
             descriptions.push(this.services.workspace.AstNodeDescriptionProvider.createDescription(element, elementName, document));
         }
 
@@ -636,11 +632,11 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             });
 
         // Elements contributed via `!include` fragments are ALSO registered with the
-        // SAME suffix-alias map. In Structurizr a fragment is spliced inline into the
-        // including file, so `a -> b` inside a `softwareSystem` defined in a fragment
-        // must resolve `a`/`b` against the fragment's own enclosing scope (see the
-        // sibling-relationship scenario). Without this, include elements only get FQN
-        // descriptions (`s.a`, `s.b`) and short names are invisible.
+        // SAME suffix-alias map: a fragment is spliced into the including file, so
+        // `a -> b` inside a `softwareSystem` defined in a fragment must resolve
+        // `a`/`b` against the fragment's own enclosing scope. Without this, include
+        // elements only get FQN descriptions (`s.a`, `s.b`) and short names are
+        // invisible.
         const currentDoc = AstUtils.getDocument(root);
         const docUri = currentDoc?.uri.toString() ?? '';
         const includeDescriptions = this.resolveIncludesRecursive(root, new Set<string>([docUri]));
@@ -676,16 +672,10 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             const rootNode = langiumDoc.parseResult.value;
             if (!rootNode) continue;
 
-            const hasOwnDirective = this.hasOwnIdentifiersDirective(langiumDoc);
-            const inheritedHierarchical = hasOwnDirective
-                ? undefined
-                : this.inheritedIncludeStyle(uri.toString());
-
             AstUtils.streamAllContents(rootNode)
                 .filter(isNamedElement)
                 .forEach((element) => {
-                    const hierarchical = inheritedHierarchical
-                        ?? this.isHierarchicalMode(element, element.$cstNode?.offset ?? 0);
+                    const hierarchical = this.isHierarchicalMode(element, element.$cstNode?.offset ?? 0);
                     this.exportElementDescriptions(element, langiumDoc, hierarchical, suffixAliasesByScope);
                 });
 
@@ -709,9 +699,9 @@ export class C4ScopeProvider extends DefaultScopeProvider {
      * @param visitedUris Set of already-processed document URIs (cycle prevention)
      * @param suffixAliasesByScope Optional suffix-alias map, shared with the caller's
      *        local scope package so fragment elements create suffix aliases for their
-     *        ancestor scopes (matching Structurizr's inline-splice semantics - a
-     *        relationship from one child to a sibling within a fragment's element
-     *        resolves the short names). When omitted, elements are FQN-only.
+     *        ancestor scopes (a relationship from one child to a sibling within a
+     *        fragment's element resolves the short names). When omitted, elements are
+     *        FQN-only.
      * @returns Flat array of AstNodeDescription for all elements found in included files
      */
     private resolveIncludesRecursive(
@@ -736,29 +726,15 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             if (langiumDoc?.parseResult.value) {
                 const rootNode = langiumDoc.parseResult.value;
 
-                // Identifier style for included elements. In Structurizr, `!include` is an
-                // inline splice at the directive's position into the SAME IdentifiersRegister
-                // that the including file uses, so the fragment inherits the identifier style
-                // of the region where the !include directive sits in the parent:
-                //  - if the fragment has its OWN `!identifiers` directive (possibly several),
-                //    they build their own style regions exactly like a standalone document
-                //    (default flat until the first directive, then per-region shifts);
-                //  - otherwise the fragment uses the parent's style for the region at the
-                //    offset of the `!include` directive (closest ancestor that includes it).
-                const hasOwnDirective = this.hasOwnIdentifiersDirective(langiumDoc);
-                const inheritedHierarchical = hasOwnDirective
-                    ? undefined
-                    : this.inheritedIncludeStyle(uriString);
-
-                // Traverse all named elements and register them. When `suffixAliasesByScope`
-                // is provided (from buildLocalScopePackage), fragment elements also get
-                // suffix aliases in their ancestor scopes, so short sibling names are
-                // visible to relationships defined inside the fragment.
+                // Identifier style for included elements: the fragment starts from the
+                // style in effect at the include site (its base region, derived from the
+                // include parent), and its own `!identifiers` directives together with
+                // those of nested includes shift the style from that point on.
+                // `isHierarchicalMode` reads that per-offset timeline.
                 AstUtils.streamAllContents(rootNode)
                     .filter(isNamedElement)
                     .forEach((element) => {
-                        const hierarchical = inheritedHierarchical
-                            ?? this.isHierarchicalMode(element, element.$cstNode?.offset ?? 0);
+                        const hierarchical = this.isHierarchicalMode(element, element.$cstNode?.offset ?? 0);
                         descriptions.push(...this.exportElementDescriptions(
                             element, langiumDoc, hierarchical, suffixAliasesByScope
                         ));
@@ -843,18 +819,10 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     }
 
     /**
-     * Returns true when the document declares at least one `!identifiers` directive
-     * of its own. Derived from the cached style regions: a document without its
-     * own directive has only the single base region at offset -1.
-     */
-    private hasOwnIdentifiersDirective(doc: LangiumDocument): boolean {
-        return this.getStyleRegions(doc).regions.length > 1;
-    }
-
-    /**
      * Returns the identifier-style regions of a document: a base region at offset -1
-     * (inherited from the extendsUri chain) plus one region per !identifiers directive,
-     * sorted by CST offset. Cached per document URI.
+     * (inherited from the extendsUri chain), one region per `!identifiers` directive,
+     * and one region per `!include` that contributes a style change, sorted by CST
+     * offset. Cached per document URI.
      */
     private getStyleRegions(doc: LangiumDocument, visitedUris?: Set<string>): StyleRegions {
         return this.styleRegionsCache.get(doc.uri.toString(), () => {
@@ -871,21 +839,82 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                     .forEach((prop) => {
                         regions.push({ offset: prop.$cstNode?.offset ?? 0, hierarchical: prop.style === 'hierarchical' });
                     });
+                // An `!include` is spliced at the directive's position, so an
+                // `!identifiers` directive inside a fragment changes the style for
+                // parent content that follows the include. Each include is represented
+                // as an event at its offset carrying the fragment's final style
+                // (omitted when the fragment declares no directive).
+                AstUtils.streamAllContents(root)
+                    .filter(isInclude)
+                    .forEach((inc) => {
+                        const uri = this.resolvePathToUri(inc.file, inc);
+                        if (!uri) return;
+                        const fragDoc = this.services.shared.workspace.LangiumDocuments.getDocument(uri);
+                        if (!fragDoc?.parseResult.value) return;
+                        const fragStyle = this.finalDirectiveStyle(fragDoc, new Set<string>());
+                        if (fragStyle !== undefined) {
+                            regions.push({ offset: inc.$cstNode?.offset ?? 0, hierarchical: fragStyle });
+                        }
+                    });
             }
             regions.sort((a, b) => a.offset - b.offset);
             return { regions };
         });
     }
 
-    /** Binary-search lookup: the last region whose offset is <= the given offset. */
-    private styleAtOffset(doc: LangiumDocument, offset: number, visitedUris?: Set<string>): boolean {
+    /**
+     * Returns the identifier style set by the last `!identifiers` directive in the
+     * inline-expanded stream of `doc`: its own directives plus those contributed by
+     * nested `!include` fragments at their include positions.
+     *
+     * Returns undefined when neither the document nor its fragments declare a
+     * directive. Reads only the directives' absolute values, so it does not touch
+     * the region cache.
+     */
+    private finalDirectiveStyle(doc: LangiumDocument, visited: Set<string>): boolean | undefined {
+        const root = doc.parseResult.value;
+        if (!root) return undefined;
+
+        const events: { offset: number; hierarchical: boolean }[] = [];
+        AstUtils.streamAllContents(root)
+            .filter(isIdentifiersProperty)
+            .forEach((prop) => {
+                events.push({ offset: prop.$cstNode?.offset ?? 0, hierarchical: prop.style === 'hierarchical' });
+            });
+
+        for (const inc of AstUtils.streamAllContents(root).filter(isInclude).toArray()) {
+            const uri = this.resolvePathToUri(inc.file, inc);
+            if (!uri || visited.has(uri.toString())) continue;
+            const fragDoc = this.services.shared.workspace.LangiumDocuments.getDocument(uri);
+            if (!fragDoc?.parseResult.value) continue;
+            visited.add(uri.toString());
+            const fragStyle = this.finalDirectiveStyle(fragDoc, visited);
+            if (fragStyle !== undefined) {
+                events.push({ offset: inc.$cstNode?.offset ?? 0, hierarchical: fragStyle });
+            }
+        }
+
+        if (events.length === 0) return undefined;
+        events.sort((a, b) => a.offset - b.offset);
+        return events[events.length - 1].hierarchical;
+    }
+
+    /**
+     * Binary-search lookup for the region in effect at `offset`.
+     *
+     * With `strict` the region exactly at `offset` is excluded: used to find the
+     * style *before* an `!include` directive, so a fragment's own contributed
+     * event at that offset does not leak into the fragment's base style.
+     */
+    private styleAtOffset(doc: LangiumDocument, offset: number, visitedUris?: Set<string>, strict = false): boolean {
         const regions = this.getStyleRegions(doc, visitedUris).regions;
         let lo = 0;
         let hi = regions.length - 1;
         let result = regions[0];
         while (lo <= hi) {
             const mid = (lo + hi) >> 1;
-            if (regions[mid].offset <= offset) {
+            const applies = strict ? regions[mid].offset < offset : regions[mid].offset <= offset;
+            if (applies) {
                 result = regions[mid];
                 lo = mid + 1;
             } else {
@@ -928,7 +957,9 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 });
                 const offset = offsets.get(fragmentUri);
                 if (offset !== undefined) {
-                    return this.styleAtOffset(ancDoc, offset, visitedUris);
+                    // Strictly before the include directive: the fragment's own
+                    // contributed event (at this offset) must not become its base.
+                    return this.styleAtOffset(ancDoc, offset, visitedUris, true);
                 }
             }
             return undefined;

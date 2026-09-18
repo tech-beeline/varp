@@ -198,6 +198,81 @@ B -> A "uses"
     });
 });
 
+describe('!identifiers in an included fragment affects following parent content', () => {
+    it('switches the parent to hierarchical after the include', async () => {
+        const docs = await buildProject({
+            'main.dsl': `workspace {
+    model {
+        !include "frag.dsl"
+        sys = softwareSystem "Sys" {
+            comp = container "Comp"
+        }
+        sys.comp -> sys "uses"
+    }
+}
+`,
+            'frag.dsl': `!identifiers hierarchical
+`,
+        });
+        const main = docs.get('main.dsl')!;
+
+        expect(main.parseResult.parserErrors).toHaveLength(0);
+        // The fragment's directive is spliced at the include position, so the
+        // parent elements that follow are registered with the FQN.
+        expect(resolveEndpoint(main, 'sys.comp')?.$type).toBe('Container');
+    });
+
+    it('switches the parent to flat after the include', async () => {
+        const docs = await buildProject({
+            'main.dsl': `!identifiers hierarchical
+workspace {
+    model {
+        !include "frag.dsl"
+        sys = softwareSystem "Sys" {
+            comp = container "Comp"
+        }
+        other = softwareSystem "Other"
+        comp -> sys "uses"
+        sys.comp -> other "fqn"
+    }
+}
+`,
+            'frag.dsl': `!identifiers flat
+`,
+        });
+        const main = docs.get('main.dsl')!;
+
+        expect(main.parseResult.parserErrors).toHaveLength(0);
+        // The fragment's flat directive applies to the parent content after it:
+        // the bare id resolves, while the hierarchical FQN no longer does.
+        expect(resolveEndpoint(main, 'comp')?.$type).toBe('Container');
+        expect(resolveEndpoint(main, 'sys.comp')).toBeUndefined();
+    });
+
+    it('propagates a directive from a nested include to the parent', async () => {
+        const docs = await buildProject({
+            'main.dsl': `workspace {
+    model {
+        !include "mid.dsl"
+        sys = softwareSystem "Sys" {
+            comp = container "Comp"
+        }
+        sys.comp -> sys "uses"
+    }
+}
+`,
+            'mid.dsl': `!include "leaf.dsl"
+`,
+            'leaf.dsl': `!identifiers hierarchical
+`,
+        });
+        const main = docs.get('main.dsl')!;
+
+        expect(main.parseResult.parserErrors).toHaveLength(0);
+        expect(resolveEndpoint(main, 'sys.comp')?.$type).toBe('Container');
+    });
+});
+
 describe('!identifiers regions in extended workspaces', () => {
     it('applies the style of each element region in the parent workspace', async () => {
         const docs = await buildProject({ 'parent.dsl': PARENT, 'child.dsl': CHILD });

@@ -336,6 +336,7 @@ export function registerValidationChecks(services: C4Services) {
             (node, accept) => validator.checkIncludeElements(node, accept, 'RelationshipExtension')
         ],
         Group: [
+            (node, accept) => validator.checkGroupElements(node, accept),
             (node, accept) => validator.checkGroupIncludeElements(node, accept),
             (node, accept) => validator.checkNestedGroup(node, accept)
         ],
@@ -436,6 +437,31 @@ export class C4Validator {
     checkRelationshipBlockIncludeElements(rel: any, accept: ValidationAcceptor): void {
         const blockType = (rel as any).$type === 'ImplicitRelationship' ? 'ImplicitRelationship' : 'Relationship';
         this.checkIncludeElements(rel, accept, blockType);
+    }
+
+    /**
+     * Validates that a group's direct children are allowed in the block that
+     * encloses the group. The grammar accepts the union of all element kinds and
+     * directives inside a group, so the enclosing context is enforced here.
+     */
+    checkGroupElements(group: any, accept: ValidationAcceptor): void {
+        const parentBlockType = this.getParentBlockType(group);
+        if (!parentBlockType) return;
+
+        const childCollections = [
+            group.elements, group.relationships, group.identifiers, group.includes,
+            group.scripts, group.plugins, group.constants, group.impliedRelationships,
+            group.docs, group.adrs, group.elementsDirectives, group.relationshipsDirectives
+        ];
+        for (const collection of childCollections) {
+            if (!Array.isArray(collection)) continue;
+            for (const item of collection) {
+                if (!item || typeof item !== 'object' || !item.$type) continue;
+                if (!isTypeAllowedInBlock(item.$type, parentBlockType)) {
+                    accept('error', this.formatIncludeError(parentBlockType, item), { node: item });
+                }
+            }
+        }
     }
 
     /**

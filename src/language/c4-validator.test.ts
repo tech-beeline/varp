@@ -712,3 +712,98 @@ workspace {
         expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
     });
 });
+
+describe('group content context', () => {
+    it('rejects a container in a group inside the model', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        group "G" {
+            c = container "C"
+        }
+    }
+}
+`);
+
+        expect(messages(doc, ERROR_SEVERITY).some(m => m.includes('Unexpected tokens'))).toBe(true);
+    });
+
+    it('rejects a deployment node in a group inside the model', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        group "G" {
+            dn = deploymentNode "DN"
+        }
+    }
+}
+`);
+
+        expect(messages(doc, ERROR_SEVERITY).some(m => m.includes('Unexpected tokens'))).toBe(true);
+    });
+
+    it('accepts a person and a software system in a group inside the model', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        group "G" {
+            u = person "User"
+            s = softwareSystem "System"
+        }
+    }
+}
+`);
+
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+
+    it('accepts a container in a group inside a software system', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        s = softwareSystem "System" {
+            group "G" {
+                c = container "C"
+            }
+        }
+    }
+}
+`);
+
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+
+    it('accepts a component in a group inside a container', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        s = softwareSystem "System" {
+            c = container "Container" {
+                group "G" {
+                    comp = component "Component"
+                }
+            }
+        }
+    }
+}
+`);
+
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+
+    it('accepts a deployment node in a group inside a deployment environment', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        deploymentEnvironment "Live" {
+            group "G" {
+                dn = deploymentNode "DN"
+            }
+        }
+    }
+}
+`);
+
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+});

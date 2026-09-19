@@ -171,6 +171,18 @@ class JsonGenerator {
 
     /** Terminology overrides for diagram rendering (person, softwareSystem, container, etc.), populated from workspace terminology blocks */
     private terminology: Record<string, string> = {};
+    /** Metadata symbol style (MetadataSymbols enum name), defaulting to SquareBrackets as the reference exporter does. */
+    private metadataSymbols = 'SquareBrackets';
+
+    /** Maps the `metadata` directive keyword to its MetadataSymbols enum name. */
+    private static readonly METADATA_SYMBOLS: Record<string, string> = {
+        'square': 'SquareBrackets',
+        'round': 'RoundBrackets',
+        'curly': 'CurlyBrackets',
+        'angle': 'AngleBrackets',
+        'double-angle': 'DoubleAngleBrackets',
+        'none': 'None'
+    };
     /** Element styles loaded from external themes (!theme), mirroring structurizr.ui.themes. */
     private readonly themeStyles: any[] = [];
     /** Relationship styles loaded from external themes (!theme), mirroring structurizr.ui.themes[].relationships. */
@@ -253,7 +265,8 @@ class JsonGenerator {
                     properties: this.propertiesViews,
                     themes: themesArray.length > 0 ? themesArray : undefined,
                     styles: this.styles.elements.length > 0 || this.styles.relationships.length > 0 ? this.styles : undefined,
-                    terminology: Object.keys(this.terminology).length > 0 ? this.terminology : undefined
+                    terminology: this.terminology,
+                    metadataSymbols: this.metadataSymbols
                 }
             }
         };
@@ -281,18 +294,26 @@ class JsonGenerator {
 
         const anyNode = node as any;
 
-        // Direct TerminologyBlock on workspace
-        if (anyNode.terminology) {
-            this.extractTerminologyBlock(anyNode.terminology);
+        // Terminology blocks live inside `views` and `configuration` blocks, so
+        // inspect the node itself plus any wrapped workspaces.
+        const containers: any[] = [anyNode];
+        if (Array.isArray(anyNode.workspaces)) {
+            containers.push(...anyNode.workspaces);
         }
-
-        // Terminology via workspaces array (C4Document wrapper)
-        if (anyNode.workspaces) {
-            for (const ws of anyNode.workspaces) {
-                if (ws.terminology) {
-                    this.extractTerminologyBlock(ws.terminology);
-                }
+        for (const container of containers) {
+            if (container.terminology) {
+                this.extractTerminologyBlock(container.terminology);
             }
+            container.viewsBlocks?.forEach((views: any) => {
+                if (views.terminology) {
+                    this.extractTerminologyBlock(views.terminology);
+                }
+            });
+            container.configurationBlocks?.forEach((configuration: any) => {
+                if (configuration.terminology) {
+                    this.extractTerminologyBlock(configuration.terminology);
+                }
+            });
         }
 
         // Recurse into includes
@@ -310,34 +331,39 @@ class JsonGenerator {
     /**
      * Extract terminology values from TerminologyBlock arrays.
      * Maps Structurizr keys: person, softwareSystem, container, component,
-     * deploymentNode, infrastructureNode, relationship, metadata.
+     * deploymentNode, infrastructureNode, relationship. The metadata symbol is
+     * not part of terminology: it maps to configuration.metadataSymbols.
      */
     private extractTerminologyBlock(blocks: any[]): void {
+        const term = (value: string) => C4Utils.stripQuotes(value);
         for (const block of blocks) {
             const termBlock = block as any;
             if (termBlock.person?.length > 0) {
-                this.terminology['person'] = termBlock.person[0];
+                this.terminology['person'] = term(termBlock.person[0]);
             }
             if (termBlock.softwareSystem?.length > 0) {
-                this.terminology['softwareSystem'] = termBlock.softwareSystem[0];
+                this.terminology['softwareSystem'] = term(termBlock.softwareSystem[0]);
             }
             if (termBlock.container?.length > 0) {
-                this.terminology['container'] = termBlock.container[0];
+                this.terminology['container'] = term(termBlock.container[0]);
             }
             if (termBlock.component?.length > 0) {
-                this.terminology['component'] = termBlock.component[0];
+                this.terminology['component'] = term(termBlock.component[0]);
             }
             if (termBlock.deploymentNode?.length > 0) {
-                this.terminology['deploymentNode'] = termBlock.deploymentNode[0];
+                this.terminology['deploymentNode'] = term(termBlock.deploymentNode[0]);
             }
             if (termBlock.infrastructureNode?.length > 0) {
-                this.terminology['infrastructureNode'] = termBlock.infrastructureNode[0];
+                this.terminology['infrastructureNode'] = term(termBlock.infrastructureNode[0]);
             }
             if (termBlock.relationship?.length > 0) {
-                this.terminology['relationship'] = termBlock.relationship[0];
+                this.terminology['relationship'] = term(termBlock.relationship[0]);
             }
             if (termBlock.metadata?.length > 0) {
-                this.terminology['metadata'] = termBlock.metadata[0];
+                const mapped = JsonGenerator.METADATA_SYMBOLS[String(termBlock.metadata[0]).toLowerCase()];
+                if (mapped) {
+                    this.metadataSymbols = mapped;
+                }
             }
         }
     }

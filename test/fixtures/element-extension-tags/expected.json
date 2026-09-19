@@ -1,46 +1,53 @@
 {
-    "name": "Name",
-    "description": "Description",
-    "model": {
-        "properties": {},
-        "softwareSystems": [
-            {
-                "id": "softwaresystem_72c73fae",
-                "name": "A",
-                "tags": "Element,Software System,ExtraOne,ExtraTwo",
-                "containers": [
-                    {
-                        "id": "container_5b1283cd",
-                        "name": "S",
-                        "tags": "Element,Container"
-                    }
-                ]
-            }
-        ]
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "2",
+        "name" : "S",
+        "properties" : {
+          "structurizr.dsl.identifier" : "a.s"
+        },
+        "tags" : "Element,Container"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "A",
+      "properties" : {
+        "structurizr.dsl.identifier" : "a"
+      },
+      "tags" : "Element,Software System,ExtraOne,ExtraTwo"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "11",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCiAgICAhaWRlbnRpZmllcnMgaGllcmFyY2hpY2FsDQoNCiAgICBtb2RlbCB7DQogICAgICAgIC8vIFRoZSBgIWVsZW1lbnRgIGJvZHkgYmVsb3cgYWRkcyB0YWdzIHRvIHRoZSBleGlzdGluZyBzeXN0ZW0uIE92ZXJsYXkNCiAgICAgICAgLy8gdGFncyBtdXN0IGJlIGVtaXR0ZWQgYXMgYSBjb21tYS1zZXBhcmF0ZWQgc3RyaW5nLCBleGFjdGx5IGxpa2UgdGhlDQogICAgICAgIC8vIHRhZ3MgcHJvZHVjZWQgYnkgZXh0cmFjdFRhZ3MgZm9yIHJlZ3VsYXIgZWxlbWVudHM6IHRoZSByZW5kZXJlciBjYWxscw0KICAgICAgICAvLyBlbGVtZW50LnRhZ3Muc3BsaXQoJywnKSBhbmQgdGhlIE1DUCBtb2RlbCBkb2VzIHRoZSBzYW1lLiBBbiBhcnJheQ0KICAgICAgICAvLyBoZXJlIHdvdWxkIHRocm93ICJlbGVtZW50LnRhZ3Muc3BsaXQgaXMgbm90IGEgZnVuY3Rpb24iLg0KICAgICAgICBhID0gc29mdHdhcmVTeXN0ZW0gIkEiIHsNCiAgICAgICAgICAgIHMgPSBjb250YWluZXIgIlMiDQogICAgICAgIH0NCg0KICAgICAgICAhZWxlbWVudCBhIHsNCiAgICAgICAgICAgIHRhZ3MgIkV4dHJhT25lLEV4dHJhVHdvIg0KICAgICAgICB9DQogICAgfQ0KDQogICAgdmlld3Mgew0KICAgICAgICBzeXN0ZW1Db250ZXh0IGEgew0KICAgICAgICAgICAgaW5jbHVkZSAqDQogICAgICAgIH0NCiAgICB9DQp9",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
     },
-    "views": {
-        "systemContextViews": [
-            {
-                "softwareSystemId": "softwaresystem_72c73fae",
-                "key": "A-SystemContext-faa107f5",
-                "elements": [
-                    {
-                        "id": "softwaresystem_72c73fae",
-                        "x": 400,
-                        "y": 400,
-                        "width": 450,
-                        "height": 300
-                    }
-                ],
-                "enterpriseBoundaryVisible": true,
-                "dimensions": {
-                    "width": 1250,
-                    "height": 1100
-                }
-            }
-        ],
-        "configuration": {
-            "properties": {}
-        }
-    }
+    "systemContextViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemContext-001",
+      "name" : "System Context View: A",
+      "order" : 1,
+      "softwareSystemId" : "1"
+    } ]
+  }
 }

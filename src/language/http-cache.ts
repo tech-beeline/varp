@@ -203,42 +203,37 @@ export const defaultFetcher: Fetcher = async (url: string) => {
  *
  * A theme is considered valid when:
  *  - it parses as a JSON object (not null/array/primitive);
- *  - it has `elements` and `relationships` keys, each an array
- *    (their absence would crash the renderer's style/preload loops);
  *  - every `icon`/`logo` it references is downloadable over the network
  *    (relative icon paths are resolved against the theme's base URL first).
+ *
+ * `elements`/`relationships` are optional: the renderer defaults them to empty
+ * arrays when absent.
  *
  * Throws an Error with a human-readable reason on any failure; the caller
  * treats that as "theme must not be applied".
  */
 export async function validateTheme(
- url: string,
- text: string,
- fetcher: Fetcher = defaultFetcher
+	url: string,
+	text: string,
+	fetcher: Fetcher = defaultFetcher
 ): Promise<void> {
- let theme: any;
- try {
- 	theme = JSON.parse(text);
- } catch {
- 	throw new Error(`Theme is not valid JSON: ${url}`);
- }
+	let theme: any;
+	try {
+		theme = JSON.parse(text);
+	} catch {
+		throw new Error(`Theme is not valid JSON: ${url}`);
+	}
 
- if (theme === null || typeof theme !== 'object' || Array.isArray(theme)) {
- 	throw new Error(`Theme is not a JSON object: ${url}`);
- }
+	if (theme === null || typeof theme !== 'object' || Array.isArray(theme)) {
+		throw new Error(`Theme is not a JSON object: ${url}`);
+	}
 
- if (!Array.isArray(theme.elements)) {
- 	throw new Error(`Theme is missing required field "elements" (array): ${url}`);
- }
- if (!Array.isArray(theme.relationships)) {
- 	throw new Error(`Theme is missing required field "relationships" (array): ${url}`);
- }
+	const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
 
- const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+	const iconUrls: string[] = [];
 
- const iconUrls: string[] = [];
-
- for (const style of theme.elements) {
+	const elements = Array.isArray(theme.elements) ? theme.elements : [];
+	for (const style of elements) {
  	if (style && typeof style === 'object' && typeof style.icon === 'string' && style.icon.length > 0) {
  		// data URIs need no network check
  		if (style.icon.startsWith('data:image')) {

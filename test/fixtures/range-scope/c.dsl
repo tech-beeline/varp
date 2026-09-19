@@ -5,8 +5,8 @@
  * included by B.
  */
 workspace {
-    !include d.dsl
     model {
+        !include d.dsl
         C = softwareSystem "Workspace C System"
     }
 }

@@ -81,6 +81,9 @@ const IGNORED_KEYS = new Set([
     // Structurizr emits this on landscape/context views (we do too) but not on
     // container/component views — skip to avoid mismatch noise
     'enterpriseBoundaryVisible',
+    // Boundary visibility flags are not used by the renderer, so we don't emit them
+    'externalContainerBoundariesVisible',
+    'externalSoftwareSystemBoundariesVisible',
     // Our actual adds fields that Structurizr doesn't
     'type',
     'automaticLayout',
@@ -123,8 +126,12 @@ function compareObjects(actual: any, expected: any, path: string, diffs: Compare
         // Special handling for named elements (model)
         if (key === 'people' || key === 'softwareSystems' || key === 'deploymentNodes' || key === 'customElements') {
             compareNamedArrays(actualVal, expectedVal, childPath, 'name', diffs);
-        } else if (key === 'containers' || key === 'components' || key === 'children' || key === 'infrastructureNodes' || key === 'softwareSystemInstances' || key === 'containerInstances') {
+        } else if (key === 'containers' || key === 'components' || key === 'children' || key === 'infrastructureNodes') {
             compareNamedArrays(actualVal, expectedVal, childPath, 'name', diffs);
+        } else if (key === 'softwareSystemInstances' || key === 'containerInstances') {
+            // Instances have no name and their element ids differ between generators,
+            // so compare them positionally (declaration order).
+            compareArrays(actualVal, expectedVal, childPath, diffs);
         } else if (key === 'relationships' && path.includes('model')) {
             compareRelationshipArrays(actualVal, expectedVal, childPath, diffs);
         } else if (key === 'elements' && (path.includes('view') || path.includes('views'))) {
@@ -234,32 +241,39 @@ function compareRelationshipArrays(actual: any[], expected: any[], path: string,
     // For each expected relationship, find a matching actual one by sourceId→destinationId
     // But since IDs may differ, we match by description as fallback
     const usedIndices = new Set<number>();
-    
+
+    const tagsEqual = (a: any, b: any) => (a?.tags ?? '') === (b?.tags ?? '');
+    const descEqual = (a: any, b: any) => (!a?.description && !b?.description) ||
+        (a?.description?.toLowerCase() === b?.description?.toLowerCase());
+
+    const compare = (expectedRel: any, index: number) => {
+        usedIndices.add(index);
+        // Compare relationship content (skip ID, sourceId, destinationId)
+        const nested = compareJson(
+            { ...actual[index], id: undefined, sourceId: undefined, destinationId: undefined, linkedRelationshipId: undefined },
+            { ...expectedRel, id: undefined, sourceId: undefined, destinationId: undefined, linkedRelationshipId: undefined },
+            `${path}[${expectedRel.description || index}]`
+        );
+        diffs.push(...nested);
+    };
+
     for (const expectedRel of expected) {
-        let found = false;
+        // Prefer a candidate with the same description and tags, so duplicate
+        // descriptions (multiple relationships between the same elements) pair up.
+        let matchIndex = -1;
         for (let i = 0; i < actual.length; i++) {
             if (usedIndices.has(i)) continue;
-            const actualRel = actual[i];
-            
-            // Match if descriptions are equal (ignoring case) or both undefined
-            const descMatch = (!expectedRel.description && !actualRel.description) ||
-                (expectedRel.description?.toLowerCase() === actualRel.description?.toLowerCase());
-            
-            if (descMatch) {
-                found = true;
-                usedIndices.add(i);
-                
-                // Compare relationship content (skip ID, sourceId, destinationId)
-                const nested = compareJson(
-                    { ...actualRel, id: undefined, sourceId: undefined, destinationId: undefined, linkedRelationshipId: undefined },
-                    { ...expectedRel, id: undefined, sourceId: undefined, destinationId: undefined, linkedRelationshipId: undefined },
-                    `${path}[${expectedRel.description || i}]`
-                );
-                diffs.push(...nested);
-                break;
+            if (descEqual(expectedRel, actual[i]) && tagsEqual(expectedRel, actual[i])) { matchIndex = i; break; }
+        }
+        if (matchIndex < 0) {
+            for (let i = 0; i < actual.length; i++) {
+                if (usedIndices.has(i)) continue;
+                if (descEqual(expectedRel, actual[i])) { matchIndex = i; break; }
             }
         }
-        if (!found) {
+        if (matchIndex >= 0) {
+            compare(expectedRel, matchIndex);
+        } else {
             diffs.push({ path: `${path}[${expectedRel.description || '?'}]`, message: 'Missing relationship', expected: expectedRel, actual: undefined });
         }
     }

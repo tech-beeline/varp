@@ -1,0 +1,102 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "documentation" : { },
+      "id" : "1",
+      "name" : "A",
+      "properties" : {
+        "structurizr.dsl.identifier" : "a"
+      },
+      "relationships" : [ {
+        "description" : "Sends data to",
+        "destinationId" : "2",
+        "id" : "3",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "documentation" : { },
+      "id" : "2",
+      "name" : "B",
+      "properties" : {
+        "structurizr.dsl.identifier" : "b"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "6",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgYSA9IHNvZnR3YXJlU3lzdGVtICJBIg0KICAgICAgICBiID0gc29mdHdhcmVTeXN0ZW0gIkIiDQoNCiAgICAgICAgYSAtPiBiICJTZW5kcyBkYXRhIHRvIg0KICAgIH0NCg0KICAgIHZpZXdzIHsNCiAgICAgICAgZHluYW1pYyAqIHsNCiAgICAgICAgICAgIC8vIHdpdGggdGhpcyBleGFtcGxlLCB0aGUgcmVsYXRpb25zaGlwIHVzZXMgdGhlIHNhbWUgZGVzY3JpcHRpb24gYXMgZGVmaW5lZCBpbiB0aGUgc3RhdGljIG1vZGVsDQogICAgICAgICAgICBhIC0+IGINCiAgICAgICAgICAgIGF1dG9MYXlvdXQNCiAgICAgICAgfQ0KDQogICAgICAgIGR5bmFtaWMgKiB7DQogICAgICAgICAgICAvLyB3aXRoIHRoaXMgZXhhbXBsZSwgdGhlIHJlbGF0aW9uc2hpcCBkZXNjcmlwdGlvbiBpcyBvdmVycmlkZW4gdG8gZGVzY3JpYmUgYSBwYXJ0aWN1bGFyIGZlYXR1cmUvdXNlIGNhc2UvZXRjDQogICAgICAgICAgICBhIC0+IGIgIlNlbmRzIGN1c3RvbWVyIGRhdGEgdG8iDQogICAgICAgICAgICBhdXRvTGF5b3V0DQogICAgICAgIH0NCiAgICB9DQoNCn0=",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "dynamicViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Dynamic-001",
+      "name" : "Dynamic View",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "3",
+        "order" : "1",
+        "response" : false
+      } ]
+    }, {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Dynamic-002",
+      "name" : "Dynamic View",
+      "order" : 2,
+      "relationships" : [ {
+        "description" : "Sends customer data to",
+        "id" : "3",
+        "order" : "1",
+        "response" : false
+      } ]
+    } ]
+  }
+}

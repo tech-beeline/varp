@@ -1,0 +1,326 @@
+{
+  "configuration" : { },
+  "description" : "An example of all shapes available in Structurizr.",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "people" : [ {
+      "id" : "18",
+      "name" : "Person",
+      "properties" : {
+        "structurizr.dsl.identifier" : "f245f681-862a-40fe-8b92-41b535b9aca1"
+      },
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "documentation" : { },
+      "id" : "1",
+      "name" : "Box",
+      "properties" : {
+        "structurizr.dsl.identifier" : "4b2022dc-5088-4251-9d32-2ec796a69e5c"
+      },
+      "tags" : "Element,Software System,Box"
+    }, {
+      "documentation" : { },
+      "id" : "2",
+      "name" : "Rounded Box",
+      "properties" : {
+        "structurizr.dsl.identifier" : "57fe9a2f-c3f9-45a3-a4b0-e51a06e8c26f"
+      },
+      "tags" : "Element,Software System,RoundedBox"
+    }, {
+      "documentation" : { },
+      "id" : "3",
+      "name" : "Circle",
+      "properties" : {
+        "structurizr.dsl.identifier" : "8a8aeef9-e8ab-4a5e-b2e1-92d3ceeaf743"
+      },
+      "tags" : "Element,Software System,Circle"
+    }, {
+      "documentation" : { },
+      "id" : "4",
+      "name" : "Ellipse",
+      "properties" : {
+        "structurizr.dsl.identifier" : "5a24657e-2f4e-42a0-900a-c0b5bcd1661a"
+      },
+      "tags" : "Element,Software System,Ellipse"
+    }, {
+      "documentation" : { },
+      "id" : "5",
+      "name" : "Hexagon",
+      "properties" : {
+        "structurizr.dsl.identifier" : "8ade1340-b25a-4e8a-af52-f21736fe96bd"
+      },
+      "tags" : "Element,Software System,Hexagon"
+    }, {
+      "documentation" : { },
+      "id" : "6",
+      "name" : "Diamond",
+      "properties" : {
+        "structurizr.dsl.identifier" : "d3ba65a7-0964-4936-bf08-114c8e31750f"
+      },
+      "tags" : "Element,Software System,Diamond"
+    }, {
+      "documentation" : { },
+      "id" : "7",
+      "name" : "Component",
+      "properties" : {
+        "structurizr.dsl.identifier" : "b9589fc9-d23b-4626-9b89-05eec1bcbe0f"
+      },
+      "tags" : "Element,Software System,Component"
+    }, {
+      "documentation" : { },
+      "id" : "8",
+      "name" : "Cylinder",
+      "properties" : {
+        "structurizr.dsl.identifier" : "f15fa4fb-1d5a-46de-9c7b-66505bd8e4a1"
+      },
+      "tags" : "Element,Software System,Cylinder"
+    }, {
+      "documentation" : { },
+      "id" : "9",
+      "name" : "Bucket",
+      "properties" : {
+        "structurizr.dsl.identifier" : "53b47767-7021-473e-a009-0daf84de1d95"
+      },
+      "tags" : "Element,Software System,Bucket"
+    }, {
+      "documentation" : { },
+      "id" : "10",
+      "name" : "Folder",
+      "properties" : {
+        "structurizr.dsl.identifier" : "ff57f7c7-c44e-410d-be71-3c8f788edaf4"
+      },
+      "tags" : "Element,Software System,Folder"
+    }, {
+      "documentation" : { },
+      "id" : "11",
+      "name" : "Pipe",
+      "properties" : {
+        "structurizr.dsl.identifier" : "418aeb2e-7dfd-49ba-a504-8c587375066e"
+      },
+      "tags" : "Element,Software System,Pipe"
+    }, {
+      "documentation" : { },
+      "id" : "12",
+      "name" : "Web Browser",
+      "properties" : {
+        "structurizr.dsl.identifier" : "5b1eec37-4afe-497d-8d4a-93dff3a0e23e"
+      },
+      "tags" : "Element,Software System,Web Browser"
+    }, {
+      "documentation" : { },
+      "id" : "13",
+      "name" : "Window",
+      "properties" : {
+        "structurizr.dsl.identifier" : "fc63c65b-2381-497e-bab7-d2b5f78f638a"
+      },
+      "tags" : "Element,Software System,Window"
+    }, {
+      "documentation" : { },
+      "id" : "14",
+      "name" : "Shell",
+      "properties" : {
+        "structurizr.dsl.identifier" : "a34c6cf8-4b08-47b6-ac2a-25bdcee7516c"
+      },
+      "tags" : "Element,Software System,Shell"
+    }, {
+      "documentation" : { },
+      "id" : "15",
+      "name" : "Terminal",
+      "properties" : {
+        "structurizr.dsl.identifier" : "9e75250e-8143-4d97-b868-32ac4e75add6"
+      },
+      "tags" : "Element,Software System,Terminal"
+    }, {
+      "documentation" : { },
+      "id" : "16",
+      "name" : "Mobile Device Portrait",
+      "properties" : {
+        "structurizr.dsl.identifier" : "22fff137-1ae9-47ca-a0d7-84edfdc8563f"
+      },
+      "tags" : "Element,Software System,Mobile Device Portrait"
+    }, {
+      "documentation" : { },
+      "id" : "17",
+      "name" : "Mobile Device Landscape",
+      "properties" : {
+        "structurizr.dsl.identifier" : "c4820902-1b7a-4761-9292-c089125f1ae5"
+      },
+      "tags" : "Element,Software System,Mobile Device Landscape"
+    }, {
+      "documentation" : { },
+      "id" : "19",
+      "name" : "Robot",
+      "properties" : {
+        "structurizr.dsl.identifier" : "88a135c4-adc6-431b-ac90-4add0c9c32c3"
+      },
+      "tags" : "Element,Software System,Robot"
+    } ]
+  },
+  "name" : "Shapes",
+  "properties" : {
+    "structurizr.inspection.error" : "40",
+    "structurizr.dsl" : "d29ya3NwYWNlICJTaGFwZXMiICJBbiBleGFtcGxlIG9mIGFsbCBzaGFwZXMgYXZhaWxhYmxlIGluIFN0cnVjdHVyaXpyLiIgew0KDQogICAgbW9kZWwgew0KICAgICAgICBzb2Z0d2FyZVN5c3RlbSAiQm94IiAiIiAiQm94IiANCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gIlJvdW5kZWQgQm94IiAiIiAiUm91bmRlZEJveCINCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gIkNpcmNsZSIgIiIgIkNpcmNsZSINCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gIkVsbGlwc2UiICIiICJFbGxpcHNlIg0KICAgICAgICBzb2Z0d2FyZVN5c3RlbSAiSGV4YWdvbiIgIiIgIkhleGFnb24iDQogICAgICAgIHNvZnR3YXJlU3lzdGVtICJEaWFtb25kIiAiIiAiRGlhbW9uZCINCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gIkNvbXBvbmVudCIgIiIgIkNvbXBvbmVudCINCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gIkN5bGluZGVyIiAiIiAiQ3lsaW5kZXIiDQogICAgICAgIHNvZnR3YXJlU3lzdGVtICJCdWNrZXQiICIiICJCdWNrZXQiDQogICAgICAgIHNvZnR3YXJlU3lzdGVtICJGb2xkZXIiICIiICJGb2xkZXIiDQogICAgICAgIHNvZnR3YXJlU3lzdGVtICJQaXBlIiAiIiAiUGlwZSINCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gIldlYiBCcm93c2VyIiAiIiAiV2ViIEJyb3dzZXIiDQogICAgICAgIHNvZnR3YXJlU3lzdGVtICJXaW5kb3ciICIiICJXaW5kb3ciDQogICAgICAgIHNvZnR3YXJlU3lzdGVtICJTaGVsbCIgIiIgIlNoZWxsIg0KICAgICAgICBzb2Z0d2FyZVN5c3RlbSAiVGVybWluYWwiICIiICJUZXJtaW5hbCINCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gIk1vYmlsZSBEZXZpY2UgUG9ydHJhaXQiICIiICJNb2JpbGUgRGV2aWNlIFBvcnRyYWl0Ig0KICAgICAgICBzb2Z0d2FyZVN5c3RlbSAiTW9iaWxlIERldmljZSBMYW5kc2NhcGUiICIiICJNb2JpbGUgRGV2aWNlIExhbmRzY2FwZSINCgkgICAgcGVyc29uICJQZXJzb24iDQogICAgICAgIHNvZnR3YXJlU3lzdGVtICJSb2JvdCIgIiIgIlJvYm90Ig0KICAgIH0NCg0KICAgIHZpZXdzIHsNCiAgICAgICAgc3lzdGVtTGFuZHNjYXBlICJzaGFwZXMiICJBbiBleGFtcGxlIG9mIGFsbCBzaGFwZXMgYXZhaWxhYmxlIGluIFN0cnVjdHVyaXpyLiIgew0KICAgICAgICAgICAgaW5jbHVkZSAqDQogICAgICAgIH0NCg0KICAgICAgICBzdHlsZXMgew0KICAgICAgICAgICAgZWxlbWVudCAiRWxlbWVudCIgew0KICAgICAgICAgICAgICAgIGNvbG9yICMwMDAwMDANCiAgICAgICAgICAgICAgICBzdHJva2UgIzAwMDAwMA0KICAgICAgICAgICAgICAgIHN0cm9rZVdpZHRoIDcNCiAgICAgICAgICAgICAgICBmb250c2l6ZSAzNQ0KICAgICAgICAgICAgICAgIGRlc2NyaXB0aW9uIGZhbHNlDQogICAgICAgICAgICAgICAgbWV0YWRhdGEgZmFsc2UNCiAgICAgICAgICAgIH0NCg0KICAgICAgICAgICAgZWxlbWVudCAiQm94IiB7DQogICAgICAgICAgICAgICAgc2hhcGUgIkJveCINCiAgICAgICAgICAgIH0NCiAgICAgICAgICAgIGVsZW1lbnQgIlJvdW5kZWRCb3giIHsNCiAgICAgICAgICAgICAgICBzaGFwZSAiUm91bmRlZEJveCINCiAgICAgICAgICAgIH0NCiAgICAgICAgICAgIGVsZW1lbnQgIkNpcmNsZSIgew0KICAgICAgICAgICAgICAgIHNoYXBlICJDaXJjbGUiDQogICAgICAgICAgICB9DQogICAgICAgICAgICBlbGVtZW50ICJFbGxpcHNlIiB7DQogICAgICAgICAgICAgICAgc2hhcGUgIkVsbGlwc2UiDQogICAgICAgICAgICB9DQogICAgICAgICAgICBlbGVtZW50ICJIZXhhZ29uIiB7DQogICAgICAgICAgICAgICAgc2hhcGUgIkhleGFnb24iDQogICAgICAgICAgICB9DQogICAgICAgICAgICBlbGVtZW50ICJEaWFtb25kIiB7DQogICAgICAgICAgICAgICAgc2hhcGUgIkRpYW1vbmQiDQogICAgICAgICAgICB9DQogICAgICAgICAgICBlbGVtZW50ICJDb21wb25lbnQiIHsNCiAgICAgICAgICAgICAgICBzaGFwZSAiQ29tcG9uZW50Ig0KICAgICAgICAgICAgfQ0KICAgICAgICAgICAgZWxlbWVudCAiQ3lsaW5kZXIiIHsNCiAgICAgICAgICAgICAgICBzaGFwZSAiQ3lsaW5kZXIiDQogICAgICAgICAgICB9DQogICAgICAgICAgICBlbGVtZW50ICJCdWNrZXQiIHsNCiAgICAgICAgICAgICAgICBzaGFwZSBidWNrZXQNCiAgICAgICAgICAgIH0NCiAgICAgICAgICAgIGVsZW1lbnQgIkZvbGRlciIgew0KICAgICAgICAgICAgICAgIHNoYXBlICJGb2xkZXIiDQogICAgICAgICAgICB9DQogICAgICAgICAgICBlbGVtZW50ICJQaXBlIiB7DQogICAgICAgICAgICAgICAgc2hhcGUgIlBpcGUiDQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgIGVsZW1lbnQgIldlYiBCcm93c2VyIiB7DQogICAgICAgICAgICAgICAgc2hhcGUgIldlYkJyb3dzZXIiDQogICAgICAgICAgICB9DQogICAgICAgICAgICBlbGVtZW50ICJXaW5kb3ciIHsNCiAgICAgICAgICAgICAgICBzaGFwZSAiV2luZG93Ig0KICAgICAgICAgICAgfQ0KICAgICAgICAgICAgZWxlbWVudCAiU2hlbGwiIHsNCiAgICAgICAgICAgICAgICBzaGFwZSBzaGVsbA0KICAgICAgICAgICAgfQ0KICAgICAgICAgICAgZWxlbWVudCAiVGVybWluYWwiIHsNCiAgICAgICAgICAgICAgICBzaGFwZSB0ZXJtaW5hbA0KICAgICAgICAgICAgfQ0KDQogICAgICAgICAgICBlbGVtZW50ICJNb2JpbGUgRGV2aWNlIFBvcnRyYWl0IiB7DQogICAgICAgICAgICAgICAgc2hhcGUgIk1vYmlsZURldmljZVBvcnRyYWl0Ig0KICAgICAgICAgICAgfQ0KICAgICAgICAgICAgZWxlbWVudCAiTW9iaWxlIERldmljZSBMYW5kc2NhcGUiIHsNCiAgICAgICAgICAgICAgICBzaGFwZSAiTW9iaWxlRGV2aWNlTGFuZHNjYXBlIg0KICAgICAgICAgICAgfQ0KDQogICAgICAgICAgICBlbGVtZW50ICJQZXJzb24iIHsNCiAgICAgICAgICAgICAgICBzaGFwZSAiUGVyc29uIg0KICAgICAgICAgICAgfQ0KICAgICAgICAgICAgZWxlbWVudCAiUm9ib3QiIHsNCiAgICAgICAgICAgICAgICBzaGFwZSAiUm9ib3QiDQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgIH0NCg0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : {
+        "elements" : [ {
+          "shape" : "Box",
+          "tag" : "Box"
+        }, {
+          "shape" : "Bucket",
+          "tag" : "Bucket"
+        }, {
+          "shape" : "Circle",
+          "tag" : "Circle"
+        }, {
+          "shape" : "Component",
+          "tag" : "Component"
+        }, {
+          "shape" : "Cylinder",
+          "tag" : "Cylinder"
+        }, {
+          "shape" : "Diamond",
+          "tag" : "Diamond"
+        }, {
+          "color" : "#000000",
+          "description" : false,
+          "fontSize" : 35,
+          "metadata" : false,
+          "stroke" : "#000000",
+          "strokeWidth" : 7,
+          "tag" : "Element"
+        }, {
+          "shape" : "Ellipse",
+          "tag" : "Ellipse"
+        }, {
+          "shape" : "Folder",
+          "tag" : "Folder"
+        }, {
+          "shape" : "Hexagon",
+          "tag" : "Hexagon"
+        }, {
+          "shape" : "MobileDeviceLandscape",
+          "tag" : "Mobile Device Landscape"
+        }, {
+          "shape" : "MobileDevicePortrait",
+          "tag" : "Mobile Device Portrait"
+        }, {
+          "shape" : "Person",
+          "tag" : "Person"
+        }, {
+          "shape" : "Pipe",
+          "tag" : "Pipe"
+        }, {
+          "shape" : "Robot",
+          "tag" : "Robot"
+        }, {
+          "shape" : "RoundedBox",
+          "tag" : "RoundedBox"
+        }, {
+          "shape" : "Shell",
+          "tag" : "Shell"
+        }, {
+          "shape" : "Terminal",
+          "tag" : "Terminal"
+        }, {
+          "shape" : "WebBrowser",
+          "tag" : "Web Browser"
+        }, {
+          "shape" : "Window",
+          "tag" : "Window"
+        } ]
+      },
+      "terminology" : { }
+    },
+    "systemLandscapeViews" : [ {
+      "description" : "An example of all shapes available in Structurizr.",
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "8",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "9",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "10",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "11",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "12",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "13",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "14",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "15",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "16",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "17",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "18",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "19",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "shapes",
+      "name" : "System Landscape View",
+      "order" : 1
+    } ]
+  }
+}

@@ -1,52 +1,86 @@
 {
-    "name": "Extension",
-    "description": "Description",
-    "model": {
-        "properties": {},
-        "softwareSystems": [
-            {
-                "id": "softwaresystem_4e066da2",
-                "name": "Software System",
-                "tags": "Element,Software System",
-                "containers": [
-                    {
-                        "id": "container_5b128fe5",
-                        "name": "Web Application",
-                        "tags": "Element,Container",
-                        "components": [
-                            {
-                                "id": "component_6a995cb3",
-                                "name": "UI",
-                                "tags": "Element,Component"
-                            }
-                        ]
-                    }
-                ]
-            }
-        ]
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "components" : [ {
+          "documentation" : { },
+          "id" : "3",
+          "name" : "UI",
+          "properties" : {
+            "structurizr.dsl.identifier" : "ui"
+          },
+          "tags" : "Element,Component"
+        }, {
+          "description" : "Backend component",
+          "documentation" : { },
+          "id" : "5",
+          "name" : "Backend",
+          "properties" : {
+            "structurizr.dsl.identifier" : "d74353a2-779c-4de7-966a-bf07c99b6032"
+          },
+          "tags" : "Element,Component",
+          "technology" : "Java"
+        } ],
+        "documentation" : { },
+        "id" : "2",
+        "name" : "Web Application",
+        "properties" : {
+          "structurizr.dsl.identifier" : "webapp"
+        },
+        "tags" : "Element,Container,ExtraTwik,ExtraOne"
+      }, {
+        "description" : "API container",
+        "documentation" : { },
+        "id" : "4",
+        "name" : "API",
+        "properties" : {
+          "structurizr.dsl.identifier" : "7f9663ce-4e45-46e4-8a02-e7f127be604a"
+        },
+        "tags" : "Element,Container",
+        "technology" : "REST"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "Software System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "softwareSystem"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Extension",
+  "properties" : {
+    "structurizr.inspection.error" : "18",
+    "structurizr.dsl" : "d29ya3NwYWNlICJFeHRlbnNpb24iICJEZXNjcmlwdGlvbiIgew0KDQogICAgbW9kZWwgew0KICAgICAgICBzb2Z0d2FyZVN5c3RlbSA9IHNvZnR3YXJlU3lzdGVtICJTb2Z0d2FyZSBTeXN0ZW0iIHsNCiAgICAgICAgICAgIHdlYmFwcCA9IGNvbnRhaW5lciAiV2ViIEFwcGxpY2F0aW9uIiB7DQogICAgICAgICAgICAgICAgdWkgPSBjb21wb25lbnQgIlVJIg0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQoNCiAgICAgICAgLy8gIWVsZW1lbnQg4oCUIGFkZCBhIGNvbnRhaW5lciB0byB0aGUgZXhpc3Rpbmcgc29mdHdhcmUgc3lzdGVtDQogICAgICAgICFlbGVtZW50IHNvZnR3YXJlU3lzdGVtIHsNCiAgICAgICAgICAgIGNvbnRhaW5lciAiQVBJIiAiQVBJIGNvbnRhaW5lciIgIlJFU1QiDQogICAgICAgIH0NCg0KICAgICAgICAvLyAhZWxlbWVudCDigJQgYWRkIGEgY29tcG9uZW50IHRvIHRoZSBleGlzdGluZyBjb250YWluZXINCiAgICAgICAgIWVsZW1lbnQgd2ViYXBwIHsNCiAgICAgICAgICAgIGNvbXBvbmVudCAiQmFja2VuZCIgIkJhY2tlbmQgY29tcG9uZW50IiAiSmF2YSINCiAgICAgICAgICAgIHRhZ3MgIkV4dHJhVHdpayxFeHRyYU9uZSINCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIHZpZXdzIHsNCiAgICAgICAgY29udGFpbmVyIHNvZnR3YXJlU3lzdGVtIHsNCiAgICAgICAgICAgIGluY2x1ZGUgKg0KICAgICAgICB9DQogICAgfQ0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
     },
-    "views": {
-        "containerViews": [
-            {
-                "softwareSystemId": "softwaresystem_4e066da2",
-                "key": "Software System-Container-b7e2c74b",
-                "elements": [
-                    {
-                        "id": "container_5b128fe5",
-                        "x": 450,
-                        "y": 449,
-                        "width": 450,
-                        "height": 300
-                    }
-                ],
-                "dimensions": {
-                    "width": 1350,
-                    "height": 1279
-                }
-            }
-        ],
-        "configuration": {
-            "properties": {}
-        }
-    }
+    "containerViews" : [ {
+      "elements" : [ {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Container-001",
+      "name" : "Container View: Software System",
+      "order" : 1,
+      "softwareSystemId" : "1"
+    } ]
+  }
 }

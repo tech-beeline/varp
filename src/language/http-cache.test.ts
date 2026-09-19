@@ -92,19 +92,14 @@ describe('validateTheme', () => {
 		await expect(validateTheme('https://x.example/theme.json', '[1,2,3]', fetcher)).rejects.toThrow(/not a JSON object/);
 	});
 
-	it('rejects a theme without the "elements" array', async () => {
+	it('accepts a theme without "elements" and "relationships"', async () => {
 		const fetcher = fetcherFor({});
-		await expect(validateTheme('https://x.example/theme.json', JSON.stringify({ relationships: [] }), fetcher)).rejects.toThrow('missing required field "elements"');
+		await expect(validateTheme('https://x.example/theme.json', JSON.stringify({ logo: '' }), fetcher)).resolves.toBeUndefined();
 	});
 
-	it('rejects a theme without the "relationships" array', async () => {
+	it('accepts a theme whose "elements" is not an array', async () => {
 		const fetcher = fetcherFor({});
-		await expect(validateTheme('https://x.example/theme.json', JSON.stringify({ elements: [] }), fetcher)).rejects.toThrow('missing required field "relationships"');
-	});
-
-	it('rejects a theme whose "elements" is not an array', async () => {
-		const fetcher = fetcherFor({});
-		await expect(validateTheme('https://x.example/theme.json', JSON.stringify({ elements: {}, relationships: [] }), fetcher)).rejects.toThrow(/missing required field "elements"/);
+		await expect(validateTheme('https://x.example/theme.json', JSON.stringify({ elements: {}, relationships: [] }), fetcher)).resolves.toBeUndefined();
 	});
 
 	it('rejects a theme with an unavailable icon', async () => {

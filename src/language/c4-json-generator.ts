@@ -177,6 +177,8 @@ class JsonGenerator {
      * text. The filter content is re-parsed on demand.
      */
     private readonly quotedFilterExpressions: Map<string, ViewExpression[]> = new Map();
+    /** References that belong to unlinked quoted-filter expressions; resolved by $refText, never by .ref. */
+    private readonly quotedFilterReferences = new WeakSet<object>();
 
     /** Terminology overrides for diagram rendering (person, softwareSystem, container, etc.), populated from workspace terminology blocks */
     private terminology: Record<string, string> = {};
@@ -854,6 +856,9 @@ class JsonGenerator {
                 // ("Cached document is invalid") or a network/TLS error. A full
                 // stack trace here is pure noise, repeated on every rebuild.
                 const reason = (err instanceof Error) ? err.message : String(err);
+                // No file system (e.g. Langium's EmptyFileSystem in unit tests):
+                // themes are simply not merged, so skip the warning entirely.
+                if (reason === 'No file system is available.') continue;
                 console.warn(`[C4 Graphviz] Could not load theme ${themeUrl}: ${reason}`);
             }
         }
@@ -1082,7 +1087,9 @@ class JsonGenerator {
             destinationId: this.getId(this.resolveTarget(relationship.relationship)),
             description: this.description(relationship.relationship),
             technology: overlay?.technology ?? this.technology(relationship.relationship),
-            tags: this.extractTags(relationship.relationship, 'Relationship'),
+            // Implied relationships carry no tags in the reference (getDefaultTags
+            // returns an empty set when linkedRelationshipId is set).
+            tags: relationship.linked ? undefined : this.extractTags(relationship.relationship, 'Relationship'),
             linkedRelationshipId: relationship.linked ? this.getId(relationship.linked) : undefined
         };
         // Apply overlay URL
@@ -1366,7 +1373,7 @@ class JsonGenerator {
      * its archetype chain. The nearest definition wins per field; non-instance
      * nodes yield empty defaults.
      */
-    private archetypeDefaults(node: any): { description?: string; technology?: string; tags: string[] } {
+    private archetypeDefaults(node: any): { description?: string; technology?: string; metadata?: string; tags: string[] } {
         const chain = archetypeChain(node);
         if (chain.length === 0) {
             return { tags: [] };
@@ -1374,6 +1381,7 @@ class JsonGenerator {
         const tags: string[] = [];
         let description: string | undefined;
         let technology: string | undefined;
+        let metadata: string | undefined;
         // Walk from the nearest archetype outward so the closest definition wins.
         for (const arch of chain) {
             if (description === undefined) {
@@ -1384,17 +1392,44 @@ class JsonGenerator {
                 const t = arch.technology ?? arch.techProps?.[0]?.value;
                 if (t !== undefined && t !== null && t !== '') technology = t;
             }
+            if (metadata === undefined) {
+                const m = arch.metadataProps?.[0]?.value;
+                if (m !== undefined && m !== null && m !== '') metadata = m;
+            }
             for (const tp of arch.tagsProps ?? []) {
                 for (const raw of tp.values ?? []) {
-                    const stripped = C4Utils.stripQuotes(String(raw));
-                    for (const sub of stripped.split(',')) {
-                        const trimmed = sub.trim();
-                        if (trimmed) tags.push(trimmed);
+                    for (const tag of this.parseDslTagValue(String(raw))) {
+                        tags.push(tag);
                     }
                 }
             }
         }
-        return { description, technology, tags };
+        return { description, technology, metadata, tags };
+    }
+
+    /** Returns the metadata text for an element, inherited from its archetype. */
+    private metadata(node: any): string | undefined {
+        const value = this.archetypeDefaults(node).metadata;
+        return this.substitute(value);
+    }
+
+    /** Converts `perspectives { ... }` blocks into plain JSON, dropping AST internals. */
+    private perspectivesToJson(blocks: any[] | undefined): any[] | undefined {
+        const perspectives: any[] = [];
+        for (const block of blocks ?? []) {
+            for (const item of block?.items ?? []) {
+                const perspective: any = {
+                    name: this.substitute(item.name),
+                    description: this.description(item)
+                };
+                const value = item.valueProps?.[0]?.value;
+                if (value !== undefined) perspective.value = this.substitute(value);
+                const url = item.urlProps?.[0]?.value;
+                if (url !== undefined) perspective.url = this.substitute(url);
+                perspectives.push(perspective);
+            }
+        }
+        return perspectives.length > 0 ? perspectives : undefined;
     }
 
     /** Returns the description text for a node, with constant substitution applied. */
@@ -1402,7 +1437,58 @@ class JsonGenerator {
         const overlay = this.elementOverlays.get(this.getId(node))?.description;
         const own = overlay ?? node?.description ?? node?.descriptionProps?.[0]?.value;
         const value = own ?? this.archetypeDefaults(node).description;
-        return this.substitute(value);
+        if (value === undefined || value === null || value === '') {
+            return undefined;
+        }
+        const substituted = this.substitute(value);
+        return substituted === '' ? undefined : substituted;
+    }
+
+    /**
+     * Auto-generated view name, mirroring the reference View.getName() implementations.
+     * Structurizr never stores a view name in the DSL: it is always derived from the
+     * view type and its scope (e.g. "System Context View: <software system>").
+     */
+    private viewName(view: any): string | undefined {
+        if (isSystemLandscapeView(view)) {
+            return 'System Landscape View';
+        }
+        if (isSystemContextView(view)) {
+            const scope = this.el(view.softwareSystem?.ref);
+            return scope ? `System Context View: ${this.substitute(scope.name)}` : undefined;
+        }
+        if (isContainerView(view)) {
+            const scope = this.el(view.softwareSystem?.ref);
+            return scope ? `Container View: ${this.substitute(scope.name)}` : undefined;
+        }
+        if (isComponentView(view)) {
+            const container = this.el(view.container?.ref);
+            const system = container ? this.el(container.$container) : undefined;
+            if (!container || !system) return undefined;
+            return `Component View: ${this.substitute((system as any).name)} - ${this.substitute(container.name)}`;
+        }
+        if (isDeploymentView(view)) {
+            const scope = this.el(view.softwareSystem?.ref);
+            const environment = view.environment?.ref
+                ? C4Utils.stripQuotes(view.environment.ref.name)
+                : '*';
+            return scope
+                ? `Deployment View: ${this.substitute(scope.name)} - ${environment}`
+                : `Deployment View: ${environment}`;
+        }
+        if (isDynamicView(view)) {
+            const scope = this.el(view.element?.ref);
+            if (scope && isContainer(scope)) {
+                const system = this.el(scope.$container);
+                if (system) return `Dynamic View: ${this.substitute((system as any).name)} - ${this.substitute(scope.name)}`;
+            }
+            if (scope) return `Dynamic View: ${this.substitute((scope as any).name)}`;
+            return 'Dynamic View';
+        }
+        if (isCustomView(view)) {
+            return `Custom View: ${this.substitute(view.titleProps?.[0]?.value) ?? ''}`;
+        }
+        return undefined;
     }
 
     /**
@@ -1654,7 +1740,32 @@ class JsonGenerator {
         if (this.isRelationshipSuppressed(this.getEnvironment(source), source, target, this.description(linked))) {
             return;
         }
+        if (this.instanceProjectionIsTooLate(source, linked)) {
+            return;
+        }
         list.push(this.createRelationshipEx(source, target, linked));
+    }
+
+    /**
+     * Reference instance relationships are replicated when the instance is created,
+     * so a static relationship declared after the instance does not appear on it.
+     * Only comparable within the same document.
+     */
+    private instanceProjectionIsTooLate(source: any, linked: any): boolean {
+        if (!isSoftwareSystemInstance(source) && !isContainerInstance(source)) {
+            return false;
+        }
+        const sourceDocument = AstUtils.getDocument(source)?.uri.toString();
+        const linkedDocument = AstUtils.getDocument(linked)?.uri.toString();
+        if (!sourceDocument || !linkedDocument || sourceDocument !== linkedDocument) {
+            return false;
+        }
+        const sourceOffset = source.$cstNode?.offset;
+        const linkedOffset = linked.$cstNode?.offset;
+        if (sourceOffset === undefined || linkedOffset === undefined) {
+            return false;
+        }
+        return linkedOffset > sourceOffset;
     }
 
     /**
@@ -1673,6 +1784,33 @@ class JsonGenerator {
             result.push(rel);
         }
         return result;
+    }
+
+    /**
+     * Mirrors AbstractImpliedRelationshipsStrategy.impliedRelationshipIsAllowed: an
+     * implied relationship is only created when neither element is an ancestor of the
+     * other. People have no parents, so they never appear as an ancestor.
+     */
+    private impliedRelationshipAllowed(source: any, target: any): boolean {
+        if (!source || !target || source === target) return false;
+        return !this.isAncestor(source, target) && !this.isAncestor(target, source);
+    }
+
+    /** True when `ancestor` is a logical parent (transitively) of `descendant`. */
+    private isAncestor(ancestor: any, descendant: any): boolean {
+        let current = this.logicalParent(descendant);
+        while (current) {
+            if (current === ancestor) return true;
+            current = this.logicalParent(current);
+        }
+        return false;
+    }
+
+    /** Logical model parent of a static structure element. */
+    private logicalParent(element: any): any {
+        if (isComponent(element)) return this.resolveComponentParent(element);
+        if (isContainer(element)) return this.resolveConatinerParent(element);
+        return undefined;
     }
 
     /**
@@ -1790,29 +1928,29 @@ class JsonGenerator {
 
                         // implied: source Container → target Container (same-level sibling)
                         // skip self-reference and exact duplicate of the explicit relationship
-                        if(targetContainer && sourceContainer !== targetContainer && targetContainer !== target) {
+                        if(targetContainer && targetContainer !== target && this.impliedRelationshipAllowed(sourceContainer, targetContainer)) {
                             rels.push(this.createRelationshipEx(sourceContainer, targetContainer, rel));
                         }
                         // implied: source Container → target SoftwareSystem (parent of target)
                         // skip relationship to own parent system and exact duplicate
-                        if(targetSoftwareSystem && targetSoftwareSystem !== sourceSoftwareSystem && targetSoftwareSystem !== target) { 
+                        if(targetSoftwareSystem && targetSoftwareSystem !== target && this.impliedRelationshipAllowed(sourceContainer, targetSoftwareSystem)) { 
                             rels.push(this.createRelationshipEx(sourceContainer, targetSoftwareSystem, rel));
                         }
 
                         if(sourceSoftwareSystem) {
                             // implied: source SoftwareSystem → target Component (child of another container)
                             // skip relationship to own child component
-                            if(targetComponent && sourceContainer !== targetContainer) {
+                            if(targetComponent && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetComponent)) {
                                 rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetComponent, rel));
                             }
                             // implied: source SoftwareSystem → target Container (under a different system)
                             // skip relationship to own child container
-                            if(targetContainer && sourceContainer !== targetContainer) {
+                            if(targetContainer && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetContainer)) {
                                 rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetContainer, rel));
                             }
                             // implied: source SoftwareSystem → target SoftwareSystem (cross-system)
                             // skip self-reference
-                            if(targetSoftwareSystem && sourceSoftwareSystem !== targetSoftwareSystem) {
+                            if(targetSoftwareSystem && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetSoftwareSystem)) {
                                 rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetSoftwareSystem, rel));                            
                             }
                         }
@@ -1880,46 +2018,46 @@ class JsonGenerator {
 
                         // implied: source Component → target Container (parent of target)
                         // skip self-referencing parent container and exact duplicate
-                        if(targetContainer && sourceContainer !== targetContainer && targetContainer !== target) { 
+                        if(targetContainer && targetContainer !== target && this.impliedRelationshipAllowed(sourceComponent, targetContainer)) { 
                             rels.push(this.createRelationshipEx(sourceComponent, targetContainer, rel));
                         }
                         // implied: source Component → target SoftwareSystem (grandparent of target)
                         // skip self-referencing parent system and exact duplicate
-                        if(targetSoftwareSystem && sourceSoftwareSystem !== targetSoftwareSystem && targetSoftwareSystem !== target) { 
+                        if(targetSoftwareSystem && targetSoftwareSystem !== target && this.impliedRelationshipAllowed(sourceComponent, targetSoftwareSystem)) { 
                             rels.push(this.createRelationshipEx(sourceComponent, targetSoftwareSystem, rel));
                         }
 
                         if(sourceContainer) {
                             // implied: source Container → target Component (sibling component in another container)
                             // skip self-reference
-                            if(targetComponent && sourceComponent !== targetComponent) {
+                            if(targetComponent && this.impliedRelationshipAllowed(sourceContainer, targetComponent)) {
                                 rels.push(this.createRelationshipEx(sourceContainer, targetComponent, rel));
                             }
                             // implied: source Container → target Container (sibling)
                             // skip self-reference
-                            if(targetContainer && sourceContainer !== targetContainer) {
+                            if(targetContainer && this.impliedRelationshipAllowed(sourceContainer, targetContainer)) {
                                 rels.push(this.createRelationshipEx(sourceContainer, targetContainer, rel));
                             }
                             // implied: source Container → target SoftwareSystem (parent of target)
                             // skip relationship to own parent system                        
-                            if(targetSoftwareSystem && sourceSoftwareSystem!== targetSoftwareSystem) {
+                            if(targetSoftwareSystem && this.impliedRelationshipAllowed(sourceContainer, targetSoftwareSystem)) {
                                 rels.push(this.createRelationshipEx(sourceContainer, targetSoftwareSystem, rel));
                             }
 
                             if(sourceSoftwareSystem) {
                                 // implied: source SoftwareSystem → target Component (grandparent → component)
                                 // skip relationship to own child component
-                                if(targetComponent && sourceComponent !== targetComponent) {
+                                if(targetComponent && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetComponent)) {
                                     rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetComponent, rel));
                                 }
                                 // implied: source SoftwareSystem → target Container (grandparent → sibling container)
                                 // skip relationship to own child container
-                                if(targetContainer && sourceContainer !== targetContainer) {
+                                if(targetContainer && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetContainer)) {
                                     rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetContainer, rel));
                                 }
                                 // implied: source SoftwareSystem → target SoftwareSystem (cross-system)
                                 // skip self-reference
-                                if(targetSoftwareSystem && sourceSoftwareSystem !== targetSoftwareSystem) {
+                                if(targetSoftwareSystem && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetSoftwareSystem)) {
                                     rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetSoftwareSystem, rel));                            
                                 }
                             }
@@ -1969,12 +2107,12 @@ class JsonGenerator {
 
                         // implied: source SoftwareSystem → target Container (under a different system)
                         // skip relationship to own child container
-                        if(targetContainer && sourceSoftwareSystem !== targetSoftwareSystem) {
+                        if(targetContainer && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetContainer)) {
                             rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetContainer, rel));
                         }
                         // implied: source SoftwareSystem → target SoftwareSystem (cross-system)
                         // skip self-reference
-                        if(targetSoftwareSystem && sourceSoftwareSystem !== targetSoftwareSystem) {
+                        if(targetSoftwareSystem && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetSoftwareSystem)) {
                             rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetSoftwareSystem, rel));
                         }
                     }
@@ -2419,6 +2557,18 @@ class JsonGenerator {
         return groups;
     }
 
+    /** Deployment groups declared directly on a deployment node via `deploymentGroup <ref>`. */
+    private deploymentGroupNames(node: any): string[] | undefined {
+        const names: string[] = [];
+        for (const prop of node.deploymentGroupProps ?? []) {
+            for (const ref of prop.deploymentGroups ?? []) {
+                const name = C4Utils.stripQuotes(ref.ref?.name);
+                if (name && !names.includes(name)) names.push(name);
+            }
+        }
+        return names.length > 0 ? names : undefined;
+    }
+
     /**
      * Checks whether two instance nodes share at least one common deployment group.
      *
@@ -2452,6 +2602,38 @@ class JsonGenerator {
      * from !elements/!relationships directives.
      * Returns a comma-separated tag string, or undefined if no tags exist.
      */
+    /**
+     * Splits a DSL tag value the way the reference tokenizer does: double quotes are
+     * stripped and preserve spaces/commas inside them; everything else is split on
+     * whitespace and commas, and single quotes are kept verbatim.
+     */
+    private parseDslTagValue(raw: string): string[] {
+        const trimmed = raw.trim();
+        if (trimmed.length === 0) return [];
+        if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+            const inner = trimmed.replace(/^"([\s\S]*)"$/, '$1');
+            return inner.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+        }
+        return trimmed.split(/[\s,]+/).filter(tag => tag.length > 0);
+    }
+
+    /**
+     * Default tags the reference assigns to an element by its type. These are used
+     * when matching `element.tag==...` view expressions.
+     */
+    private elementDefaultTags(element: any): [string, string?] {
+        if (isPerson(element)) return ['Element', 'Person'];
+        if (isSoftwareSystem(element)) return ['Element', 'Software System'];
+        if (isContainer(element)) return ['Element', 'Container'];
+        if (isComponent(element)) return ['Element', 'Component'];
+        if (isCustomElement(element)) return ['Element'];
+        if (isDeploymentNode(element)) return ['Element', 'Deployment Node'];
+        if (isInfrastructureNode(element)) return ['Element', 'Infrastructure Node'];
+        if (isSoftwareSystemInstance(element)) return ['Software System Instance'];
+        if (isContainerInstance(element)) return ['Container Instance'];
+        return ['Element'];
+    }
+
     private extractTags(node: any, extraTag1?: string, extraTag2?: string): string | undefined {
         // Initialize set for collecting unique, cleaned tags
         const collectedTags = new Set<string>();
@@ -2469,38 +2651,28 @@ class JsonGenerator {
         for (const inherited of this.archetypeDefaults(node).tags) {
             collectedTags.add(inherited);
         }
-        // 3. Process node.tags array (split by comma)
+        // 3. Process node.tags array
         if (Array.isArray(node.tags)) {
             for (const rawTag of node.tags) {
                 if (typeof rawTag !== 'string') continue;
-                const stripped = C4Utils.stripQuotes(rawTag);
-                if (!stripped) continue;
-                for (const subTag of stripped.split(',')) {
-                    const trimmed = subTag.trim();
-                    if (trimmed.length > 0) {
-                        collectedTags.add(trimmed);
-                    }
+                for (const tag of this.parseDslTagValue(rawTag)) {
+                    collectedTags.add(tag);
                 }
             }
         }
         // 3.5. Fallback: handle DeploymentGroupOrTag.value if not yet resolved
         // (resolveAllInstanceValues() normally clears this, but this handles edge cases)
         if (node.value) {
-            const val = C4Utils.stripQuotes(node.value);
-            if (val) {
-                const trimmed = val.trim();
-                if (trimmed) collectedTags.add(trimmed);
+            for (const tag of this.parseDslTagValue(String(node.value))) {
+                collectedTags.add(tag);
             }
         }
         // 4. Process node.tagsProps array
         if (Array.isArray(node.tagsProps)) {
             for (const tagOrValue of node.tagsProps) {
                 if (typeof tagOrValue === 'string') {
-                    const stripped = C4Utils.stripQuotes(tagOrValue);
-                    if (!stripped) continue;
-                    for (const subTag of stripped.split(',')) {
-                        const trimmed = subTag.trim();
-                        if (trimmed.length > 0) collectedTags.add(trimmed);
+                    for (const tag of this.parseDslTagValue(tagOrValue)) {
+                        collectedTags.add(tag);
                     }
                 } else if (tagOrValue && typeof tagOrValue === 'object') {
                     const valuesArray = tagOrValue.values || tagOrValue.value;
@@ -2508,13 +2680,8 @@ class JsonGenerator {
                         valuesArray.forEach((tagObj: any) => {
                             const rawValue = typeof tagObj === 'object' ? tagObj.value : tagObj;
                             if (typeof rawValue !== 'string') return;
-                            const stripped = C4Utils.stripQuotes(rawValue);
-                            if (!stripped) return;
-                            // A value may carry a comma-separated list (`tags 'a, b'`);
-                            // split and trim it like the sibling branches.
-                            for (const subTag of stripped.split(',')) {
-                                const trimmed = subTag.trim();
-                                if (trimmed.length > 0) collectedTags.add(trimmed);
+                            for (const tag of this.parseDslTagValue(rawValue)) {
+                                collectedTags.add(tag);
                             }
                         });
                     }
@@ -2537,13 +2704,7 @@ class JsonGenerator {
             return undefined;
         }
         // Convert set to comma-separated string
-        const join = (tags: string[]) =>
-            tags.
-            map(t => C4Utils.stripQuotes(t)).
-            filter(t => t !== undefined).
-            join(',');
-
-        return join(Array.from(collectedTags));
+        return Array.from(collectedTags).join(',');
     }
 
     /**
@@ -2649,6 +2810,7 @@ class JsonGenerator {
                 const result: any = {
                     id: this.getId(ce),
                     name: this.substitute(ce.name),
+                    metadata: this.metadata(ce),
                     relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(ce).map(el => this.relationshipToJson(el))),
                     tags: this.extractTags(ce, 'Element')
                 };
@@ -2740,6 +2902,7 @@ class JsonGenerator {
             technology: this.technology(node),
             environment: this.getEnvironment(node),
             instances: String(node.instances || "1"),
+            deploymentGroups: this.deploymentGroupNames(node),
             // Find nested child deployment nodes (traversing through groups)
             children: this.onlyIfNotEmpty(this.collectNested(node, isDeploymentNode)?.map(child => {
                 const childJson = this.transformDeploymentNode(child);
@@ -2755,6 +2918,7 @@ class JsonGenerator {
                     tags: this.extractTags(infra, 'Element', 'Infrastructure Node'),
                     description: this.description(infra),
                     technology: this.technology(infra),
+                    environment: this.getEnvironment(infra),
                     relationships: this.onlyIfNotEmpty(this.extractRelationshipsForInfrastructureNode(infra).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(infraJson, infra);
@@ -2766,12 +2930,11 @@ class JsonGenerator {
             map(ssi => {
                 const ssiJson: any = {
                     id: this.getId(ssi),
+                    instanceId: this.instanceId(ssi),
                     group: this.extractGroup(ssi),
                     tags: this.extractTags(ssi, 'Software System Instance'),
                     softwareSystemId: this.getId(ssi.softwareSystem.ref),
                     environment: this.getEnvironment(ssi),
-                    name: this.substitute(ssi.softwareSystem.ref?.name),
-                    description: this.description(ssi.softwareSystem.ref),
                     relationships: this.onlyIfNotEmpty(this.extractRelationshipsForSoftwareSystemInstance(ssi).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(ssiJson, ssi);
@@ -2784,12 +2947,10 @@ class JsonGenerator {
                 const ciJson: any = {
                     id: this.getId(ci),
                     containerId: this.getId(ci.container.ref),
+                    instanceId: this.instanceId(ci),
                     environment: this.getEnvironment(ci),
                     group: this.extractGroup(ci),
                     tags: this.extractTags(ci, 'Container Instance'),
-                    name: ci.container.ref?.name,
-                    description: this.description(ci.container.ref),
-                    technology: this.technology(ci.container.ref),
                     relationships: this.onlyIfNotEmpty(this.extractRelationshipsForContainerInstance(ci).map(el => this.relationshipToJson(el))),
                     parentId: this.getId(this.resolveDeploymentNodeParent(ci))
                 };
@@ -2935,6 +3096,7 @@ class JsonGenerator {
                 const relationships = new Set<Relationship>();
                 this.resolveCustom(view, elements, relationships);
                 return {
+                    name: this.viewName(view),
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
@@ -2959,6 +3121,7 @@ class JsonGenerator {
                 const relationships = new Set<Relationship>();
                 this.resolveSystemLandscape(view, elements, relationships);
                 return {
+                    name: this.viewName(view),
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
@@ -3923,6 +4086,37 @@ class JsonGenerator {
         }
     }
 
+    /** Finds the element an `!element` directive extends. */
+    private resolveElementExtensionTarget(extension: any): NamedElement | undefined {
+        for (const [target, extensions] of this.elementExtensionsByTarget) {
+            if (extensions.includes(extension)) {
+                return this.el(target);
+            }
+        }
+        return undefined;
+    }
+
+    /**
+     * 1-based index of an instance among the instances of the same container/software
+     * system in the same environment, in declaration order.
+     */
+    private instanceId(node: any): number {
+        const containerInstance = isContainerInstance(node);
+        const reference = containerInstance ? node.container?.ref : node.softwareSystem?.ref;
+        const parent = this.resolveDeploymentNodeParent(node);
+        let count = 0;
+        for (const element of this.elements) {
+            const matches = containerInstance
+                ? isContainerInstance(element) && element.container?.ref === reference
+                : isSoftwareSystemInstance(element) && element.softwareSystem?.ref === reference;
+            if (matches && this.resolveDeploymentNodeParent(element) === parent) {
+                count++;
+                if (element === node) break;
+            }
+        }
+        return count || 1;
+    }
+
     /**
      * Resolves the parent SoftwareSystem for a given Container by climbing
      * up the AST $container chain.
@@ -3945,6 +4139,14 @@ class JsonGenerator {
             const el = this.el(current);
             if (isSoftwareSystem(el)) {
                 return el;
+            }
+            if (isElementExtension(el)) {
+                // A container declared by `!element` logically belongs to the
+                // extended element, not to the ElementExtension directive.
+                const target = this.resolveElementExtensionTarget(el);
+                if (target && isSoftwareSystem(target)) {
+                    return target;
+                }
             }
             current = current.$container;
         }
@@ -3992,6 +4194,14 @@ class JsonGenerator {
             const el = this.el(current);
             if (isContainer(el)) {
                 return el;
+            }
+            if (isElementExtension(el)) {
+                // A component declared by `!element` logically belongs to the
+                // extended element, not to the ElementExtension directive.
+                const target = this.resolveElementExtensionTarget(el);
+                if (target && isContainer(target)) {
+                    return target;
+                }
             }
             current = current.$container;
         }
@@ -4068,8 +4278,24 @@ class JsonGenerator {
             const reason = document.parseResult.parserErrors.map(e => e.message).join('; ');
             console.warn(`[C4 JSON] Cannot parse quoted view filter "${text}"${reason ? `: ${reason}` : ''}`);
         }
+        // The document is never linked, so register its references: they must be
+        // resolved from $refText instead of triggering reference resolution.
+        for (const expression of parsed) {
+            this.registerQuotedFilterReferences(expression);
+        }
         this.quotedFilterExpressions.set(text, parsed);
         return parsed;
+    }
+
+    /** Marks every reference inside a quoted-filter expression as unlinked. */
+    private registerQuotedFilterReferences(expression: ViewExpression): void {
+        for (const node of AstUtils.streamAllContents(expression) as any) {
+            for (const value of Object.values(node)) {
+                if (value && typeof value === 'object' && typeof (value as any).$refText === 'string') {
+                    this.quotedFilterReferences.add(value);
+                }
+            }
+        }
     }
 
     /**
@@ -4110,6 +4336,55 @@ class JsonGenerator {
     }
 
     /**
+     * Resolves an element reference from a view expression. Expressions parsed from
+     * quoted filters live in an unlinked in-memory document, so `ref` is resolved
+     * from `$refText` against the collected elements first; native expressions fall
+     * back to the linked reference.
+     */
+    private resolveExpressionReference(reference: any): any {
+        if (!reference) return undefined;
+        const text = reference.$refText;
+        // Quoted-filter references are never linked: resolve from $refText only,
+        // otherwise accessing `.ref` logs "Attempted reference resolution ...".
+        if (this.quotedFilterReferences.has(reference)) {
+            return typeof text === 'string' ? this.findElementByReferenceText(text) : undefined;
+        }
+        if (typeof text === 'string' && text.length > 0) {
+            const match = this.findElementByReferenceText(text);
+            if (match) return match;
+        }
+        return this.el(reference.ref);
+    }
+
+    /** Resolves a reference text (identifier, name, or qualified path) to a collected element. */
+    private findElementByReferenceText(text: string): any {
+        const name = C4Utils.stripQuotes(text);
+        const exact = this.elements.find(element =>
+            (element as any).id === name
+            || C4Utils.stripQuotes((element as any).name ?? '') === name
+            || this.qualifiedIdentifier(element) === name);
+        if (exact) return exact;
+        const lastSegment = name.split('.').pop() ?? name;
+        return this.elements.find(element =>
+            (element as any).id === lastSegment
+            || C4Utils.stripQuotes((element as any).name ?? '') === lastSegment);
+    }
+
+    /** Hierarchical identifier of an element, built from its ancestors' ids. */
+    private qualifiedIdentifier(element: any): string {
+        const parts: string[] = [];
+        let current = element;
+        while (current && isNamedElement(current)) {
+            const id = (current as any).id;
+            if (typeof id === 'string' && id.length > 0) {
+                parts.unshift(id);
+            }
+            current = this.el(current.$container);
+        }
+        return parts.join('.');
+    }
+
+    /**
      * Evaluates a ViewExpression to determine which elements and relationships
      * should be included in a view. Supports Structurizr expression syntax:
      * element references, afferent/efferent couplings, star expressions,
@@ -4134,7 +4409,7 @@ class JsonGenerator {
         }
         if (isSingleElementExpression(e)) {
             // Normalise to the materialised element before matching.
-            const ref = this.el(e.element.ref);
+            const ref = this.resolveExpressionReference(e.element);
             if (isGroup(ref)) {
                 // Groups expand to their leaf-level named elements
                 const leafElements = new Set<NamedElement>();
@@ -4319,7 +4594,7 @@ class JsonGenerator {
         }
         // element.parent==<identifier>: elements with the specified parent
         else if (isElementParentExpression(e)) {
-            const parentRef = this.el(e.element.ref);
+            const parentRef = this.resolveExpressionReference(e.element);
             if (parentRef) this.elements.forEach(el => {
                 // Resolve parent using type-guarded helper functions
                 let elParent: NamedElement | undefined;
@@ -4340,7 +4615,8 @@ class JsonGenerator {
         else if (isElementTagExpression(e)) {
             const searchTags = e.values.map(t => C4Utils.stripQuotes(t));
             this.elements.forEach(el => {
-                const elTags = (this.extractTags(el)?.split(',') || []).map(t => t.trim());
+                const defaults = this.elementDefaultTags(el);
+                const elTags = (this.extractTags(el, defaults[0], defaults[1])?.split(',') || []).map(t => t.trim());
                 const hasAllTags = searchTags.every(st => elTags.includes(st));
                 const matches = e.operator === '==' ? hasAllTags : !hasAllTags;
                 if (matches && isAllowed(el)) res.add(el);
@@ -4394,14 +4670,14 @@ class JsonGenerator {
         }
         // relationship.source==<identifier>: all relationships with the specified source element
         else if (isRelationshipSourceExpression(e)) {
-            const source = this.el(e.element.ref);
+            const source = this.resolveExpressionReference(e.element);
             if (source && elementsAtView.has(source)) relationshipsAtScope.forEach(r => {
                 if (r.source === source && elementsAtView.has(r.target)) res.add(r.relationship);
             });
         }
         // relationship.destination==<identifier>: all relationships with the specified destination element
         else if (isRelationshipDestinationExpression(e)) {
-            const destination = this.el(e.element.ref);
+            const destination = this.resolveExpressionReference(e.element);
             if (destination && elementsAtView.has(destination)) relationshipsAtScope.forEach(r => {
                 if (r.target === destination && elementsAtView.has(r.source)) res.add(r.relationship);
             });
@@ -4437,22 +4713,22 @@ class JsonGenerator {
             }
             // relationship==*-><id>: all relationships targeting the specified element
             else if (e.starSource === '*') {
-                const t = this.el(e.target?.ref);
+                const t = this.resolveExpressionReference(e.target);
                 if (t && elementsAtView.has(t)) relationshipsAtScope.forEach(r => {
                     if (r.target === t && elementsAtView.has(r.source)) res.add(r.relationship);
                 });
             }
             // relationship==<id>->*: all relationships originating from the specified source
             else if (e.starTarget === '*') {
-                const s = this.el(e.source?.ref);
+                const s = this.resolveExpressionReference(e.source);
                 if (s && elementsAtView.has(s)) relationshipsAtScope.forEach(r => {
                     if (r.source === s && elementsAtView.has(r.target)) res.add(r.relationship);
                 });
             }
             // relationship==<id1>-><id2>: a specific relationship between two elements
             else {
-                const s = this.el(e.source?.ref);
-                const t = this.el(e.target?.ref);
+                const s = this.resolveExpressionReference(e.source);
+                const t = this.resolveExpressionReference(e.target);
                 if (s && elementsAtView.has(s) && t && elementsAtView.has(t)) relationshipsAtScope.forEach(r => {
                     if (r.source === s && r.target === t) res.add(r.relationship);
                 });
@@ -4602,7 +4878,7 @@ class JsonGenerator {
 
             // Apply perspectives
             if (extension.perspectivesBlocks && extension.perspectivesBlocks.length > 0) {
-                overlay.perspectives = extension.perspectivesBlocks;
+                overlay.perspectives = this.perspectivesToJson(extension.perspectivesBlocks);
             }
         }
 
@@ -4780,7 +5056,7 @@ class JsonGenerator {
 
         // Apply perspectives
         if (source.perspectivesBlocks && source.perspectivesBlocks.length > 0) {
-            overlay.perspectives = source.perspectivesBlocks;
+            overlay.perspectives = this.perspectivesToJson(source.perspectivesBlocks);
         }
     }
 
@@ -5860,6 +6136,27 @@ class JsonGenerator {
         const currentElements = Array.from(elementsAtView);
         currentElements.forEach(el => this.collectDeploymentParents(el, elementsAtView, environment));
 
+        // A deployment view cannot show both a software system instance and its
+        // container instances (DeploymentView.checkElementCanBeAdded): drop the
+        // container instances when their software system instance is visible.
+        const visibleSystems = new Set(
+            Array.from(elementsAtView)
+                .filter(isSoftwareSystemInstance)
+                .map(ssi => this.el(ssi.softwareSystem.ref)));
+        for (const el of Array.from(elementsAtView)) {
+            if (isContainerInstance(el)) {
+                const system = el.container.ref ? this.resolveConatinerParent(el.container.ref) : undefined;
+                if (system && visibleSystems.has(system)) {
+                    elementsAtView.delete(el);
+                }
+            }
+        }
+        rels.forEach(r => {
+            if (!elementsAtView.has(r.source) || !elementsAtView.has(r.target)) {
+                relationshipsAtView.delete(r.relationship);
+            }
+        });
+
         this.filterDuplicateRelationships(relationshipsAtView);
     }
 
@@ -5990,6 +6287,7 @@ class JsonGenerator {
             this.resolveSystemContext(view, elements, relationships, scopeSystem);
             return {
                 softwareSystemId: this.getId(scopeSystem),
+                name: this.viewName(view),
                 key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                 title: this.substitute(view.titleProps?.at(0)?.value),
                 elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),
@@ -6017,6 +6315,7 @@ class JsonGenerator {
                 this.resolveContainer(view, elements, relationships, scopeSystem);
                 return {
                     softwareSystemId: this.getId(scopeSystem),
+                    name: this.viewName(view),
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
@@ -6044,6 +6343,7 @@ class JsonGenerator {
                 this.resolveComponent(view, elements, relationships, scopeContainer);
                 return {
                     containerId: this.getId(scopeContainer),
+                    name: this.viewName(view),
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
@@ -6105,11 +6405,12 @@ class JsonGenerator {
         const views = workspace.viewsBlocks?.at(0)?.views.filter(isDeploymentView)
             .map(view => {
                 const scopeSystem = this.el(view.softwareSystem?.ref);
-                const environment = (view.all === '*' || !view.environment.ref) ? undefined : C4Utils.stripQuotes(view.environment.ref.name);
+                const environment = view.environment?.ref ? C4Utils.stripQuotes(view.environment.ref.name) : undefined;
                 const elements = new Set<RelationshipMember>();
                 const relationships = new Set<Relationship>();
                 this.resolveDeployment(view, elements, relationships, environment, scopeSystem);
                 return {
+                    name: this.viewName(view),
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
@@ -6144,10 +6445,12 @@ class JsonGenerator {
                 // Structurizr defaults (TopBottom / 300 / 300) when absent.
                 const autoLayout = this.transformAutoLayout(view);
                 return {
+                    name: this.viewName(view),
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
-                    title: this.substitute(view.titleProps?.[0]?.value) ?? "Dynamic View",
+                    title: this.substitute(view.titleProps?.[0]?.value),
                     description: this.description(view),
                     elementId: scopeElement ? this.getId(scopeElement) : undefined,
+                    externalBoundariesVisible: false,
                     elements: this.onlyIfNotEmpty(content.elements),
                     relationships: this.onlyIfNotEmpty(content.relationships),
                     automaticLayout: this.transformAutoLayout(view),
@@ -6167,11 +6470,17 @@ class JsonGenerator {
      * and filters its elements by tags using either Include or Exclude mode.
      */
     private extractFilteredViews(workspace: Workspace) {
-        const views = workspace.viewsBlocks?.at(0)?.views.filter(isFilteredView)
+        const allViews = workspace.viewsBlocks?.at(0)?.views ?? [];
+        const views = allViews.filter(isFilteredView)
             .map(view => {
+                const baseKey = this.substitute(view.baseKey);
+                const baseView = allViews.find(candidate =>
+                    this.substitute(this.services.workspace.ViewKeyProvider.getKey(candidate)) === baseKey);
+                const baseName = baseView ? this.viewName(baseView) : undefined;
                 return {
+                    name: baseName ? `Filtered: ${baseName}` : undefined,
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
-                    baseViewKey: this.substitute(view.baseKey),
+                    baseViewKey: baseKey,
                     mode: view.mode === 'include' ? 'Include' : 'Exclude',
                     tags: this.parseTags(view.tagsProp),
                     title: this.substitute(view.titleProps?.at(0)?.value),

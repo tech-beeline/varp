@@ -1,0 +1,378 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "people": [
+      {
+        "id": "1",
+        "name": "User",
+        "properties": {
+          "structurizr.dsl.identifier": "user"
+        },
+        "relationships": [
+          {
+            "description": "Uses 1",
+            "destinationId": "4",
+            "id": "8",
+            "sourceId": "1",
+            "tags": "Relationship"
+          },
+          {
+            "description": "Uses 1",
+            "destinationId": "3",
+            "id": "9",
+            "linkedRelationshipId": "8",
+            "sourceId": "1"
+          },
+          {
+            "description": "Uses 1",
+            "destinationId": "2",
+            "id": "10",
+            "linkedRelationshipId": "8",
+            "sourceId": "1"
+          },
+          {
+            "description": "Uses 1",
+            "destinationId": "5",
+            "id": "11",
+            "sourceId": "1",
+            "tags": "Relationship"
+          },
+          {
+            "description": "Uses 1",
+            "destinationId": "6",
+            "id": "12",
+            "sourceId": "1",
+            "tags": "Relationship"
+          },
+          {
+            "description": "Uses",
+            "destinationId": "22",
+            "id": "26",
+            "sourceId": "1",
+            "tags": "Relationship"
+          },
+          {
+            "description": "Uses",
+            "destinationId": "21",
+            "id": "27",
+            "linkedRelationshipId": "26",
+            "sourceId": "1"
+          },
+          {
+            "description": "Uses",
+            "destinationId": "20",
+            "id": "28",
+            "linkedRelationshipId": "26",
+            "sourceId": "1"
+          },
+          {
+            "description": "Uses",
+            "destinationId": "24",
+            "id": "29",
+            "sourceId": "1",
+            "tags": "Relationship"
+          },
+          {
+            "description": "Uses",
+            "destinationId": "23",
+            "id": "30",
+            "sourceId": "1",
+            "tags": "Relationship"
+          }
+        ],
+        "tags": "Element,Person"
+      }
+    ],
+    "softwareSystems": [
+      {
+        "containers": [
+          {
+            "components": [
+              {
+                "documentation": {},
+                "id": "4",
+                "name": "ComponentA",
+                "properties": {
+                  "structurizr.dsl.identifier": "1ca00fa0-2211-460f-a063-d032814bd959"
+                },
+                "relationships": [
+                  {
+                    "description": "Uses 1",
+                    "destinationId": "7",
+                    "id": "13",
+                    "sourceId": "4",
+                    "tags": "Relationship,Tag"
+                  },
+                  {
+                    "description": "Uses 2",
+                    "destinationId": "7",
+                    "id": "17",
+                    "sourceId": "4",
+                    "tags": "Relationship,Tag"
+                  }
+                ],
+                "tags": "Element,Component,Tag 1"
+              },
+              {
+                "documentation": {},
+                "id": "5",
+                "name": "ComponentB",
+                "properties": {
+                  "structurizr.dsl.identifier": "44f95dea-025d-47af-b238-f29fc87f9c41"
+                },
+                "relationships": [
+                  {
+                    "description": "Uses 1",
+                    "destinationId": "7",
+                    "id": "15",
+                    "sourceId": "5",
+                    "tags": "Relationship,Tag"
+                  },
+                  {
+                    "description": "Uses 2",
+                    "destinationId": "7",
+                    "id": "18",
+                    "sourceId": "5",
+                    "tags": "Relationship,Tag"
+                  }
+                ],
+                "tags": "Element,Component,Tag 1"
+              },
+              {
+                "documentation": {},
+                "id": "6",
+                "name": "ComponentC",
+                "properties": {
+                  "structurizr.dsl.identifier": "52851e6b-031f-4cf4-8d3d-2d8cbfc5cbc6"
+                },
+                "relationships": [
+                  {
+                    "description": "Uses 1",
+                    "destinationId": "7",
+                    "id": "16",
+                    "sourceId": "6",
+                    "tags": "Relationship,Tag"
+                  },
+                  {
+                    "description": "Uses 2",
+                    "destinationId": "7",
+                    "id": "19",
+                    "sourceId": "6",
+                    "tags": "Relationship,Tag"
+                  }
+                ],
+                "tags": "Element,Component,Tag 1"
+              }
+            ],
+            "documentation": {},
+            "id": "3",
+            "name": "Application",
+            "properties": {
+              "structurizr.dsl.identifier": "application1"
+            },
+            "relationships": [
+              {
+                "description": "Uses 1",
+                "destinationId": "7",
+                "id": "14",
+                "linkedRelationshipId": "13",
+                "sourceId": "3"
+              }
+            ],
+            "tags": "Element,Container"
+          },
+          {
+            "documentation": {},
+            "id": "7",
+            "name": "Database Schema",
+            "properties": {
+              "structurizr.dsl.identifier": "databaseSchema1"
+            },
+            "tags": "Element,Container"
+          }
+        ],
+        "documentation": {},
+        "id": "2",
+        "name": "Software System 1",
+        "properties": {
+          "structurizr.dsl.identifier": "softwareSystem1"
+        },
+        "tags": "Element,Software System"
+      },
+      {
+        "containers": [
+          {
+            "components": [
+              {
+                "documentation": {},
+                "id": "22",
+                "name": "ComponentA",
+                "properties": {
+                  "structurizr.dsl.identifier": "softwareSystem2.application2.7af05ff3-fbd5-417a-a427-b0f2d99dcc9f"
+                },
+                "relationships": [
+                  {
+                    "description": "Uses 1",
+                    "destinationId": "25",
+                    "id": "31",
+                    "sourceId": "22",
+                    "tags": "Relationship,Tag"
+                  },
+                  {
+                    "description": "Uses 2",
+                    "destinationId": "25",
+                    "id": "35",
+                    "sourceId": "22",
+                    "tags": "Relationship,Tag"
+                  },
+                  {
+                    "description": "Uses 3",
+                    "destinationId": "25",
+                    "id": "38",
+                    "sourceId": "22",
+                    "tags": "Relationship,Tag"
+                  },
+                  {
+                    "description": "Uses 4",
+                    "destinationId": "25",
+                    "id": "41",
+                    "sourceId": "22",
+                    "tags": "Relationship,Tag"
+                  }
+                ],
+                "tags": "Element,Component,Tag 1"
+              },
+              {
+                "documentation": {},
+                "id": "23",
+                "name": "ComponentB",
+                "properties": {
+                  "structurizr.dsl.identifier": "softwareSystem2.application2.2e45d1c9-1d18-4aac-bf13-8c2cf69f7349"
+                },
+                "relationships": [
+                  {
+                    "description": "Uses 1",
+                    "destinationId": "25",
+                    "id": "34",
+                    "sourceId": "23",
+                    "tags": "Relationship,Tag"
+                  },
+                  {
+                    "description": "Uses 2",
+                    "destinationId": "25",
+                    "id": "37",
+                    "sourceId": "23",
+                    "tags": "Relationship,Tag"
+                  },
+                  {
+                    "description": "Uses 3",
+                    "destinationId": "25",
+                    "id": "40",
+                    "sourceId": "23",
+                    "tags": "Relationship,Tag"
+                  },
+                  {
+                    "description": "Uses 4",
+                    "destinationId": "25",
+                    "id": "43",
+                    "sourceId": "23",
+                    "tags": "Relationship,Tag"
+                  }
+                ],
+                "tags": "Element,Component,Tag 1"
+              },
+              {
+                "documentation": {},
+                "id": "24",
+                "name": "ComponentC",
+                "properties": {
+                  "structurizr.dsl.identifier": "softwareSystem2.application2.0c005fd1-29f6-4358-aa26-1559b17aa244"
+                },
+                "relationships": [
+                  {
+                    "description": "Uses 1",
+                    "destinationId": "25",
+                    "id": "33",
+                    "sourceId": "24",
+                    "tags": "Relationship,Tag"
+                  },
+                  {
+                    "description": "Uses 2",
+                    "destinationId": "25",
+                    "id": "36",
+                    "sourceId": "24",
+                    "tags": "Relationship,Tag"
+                  },
+                  {
+                    "description": "Uses 3",
+                    "destinationId": "25",
+                    "id": "39",
+                    "sourceId": "24",
+                    "tags": "Relationship,Tag"
+                  },
+                  {
+                    "description": "Uses 4",
+                    "destinationId": "25",
+                    "id": "42",
+                    "sourceId": "24",
+                    "tags": "Relationship,Tag"
+                  }
+                ],
+                "tags": "Element,Component,Tag 1"
+              }
+            ],
+            "documentation": {},
+            "id": "21",
+            "name": "Application",
+            "properties": {
+              "structurizr.dsl.identifier": "softwareSystem2.application2"
+            },
+            "relationships": [
+              {
+                "description": "Uses 1",
+                "destinationId": "25",
+                "id": "32",
+                "linkedRelationshipId": "31",
+                "sourceId": "21"
+              }
+            ],
+            "tags": "Element,Container"
+          },
+          {
+            "documentation": {},
+            "id": "25",
+            "name": "Database Schema",
+            "properties": {
+              "structurizr.dsl.identifier": "softwareSystem2.databaseSchema2"
+            },
+            "tags": "Element,Container"
+          }
+        ],
+        "documentation": {},
+        "id": "20",
+        "name": "Software System 2",
+        "properties": {
+          "structurizr.dsl.identifier": "softwareSystem2"
+        },
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "73",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgdXNlciA9IHBlcnNvbiAiVXNlciINCg0KICAgICAgICAhaWRlbnRpZmllcnMgZmxhdA0KDQogICAgICAgIHNvZnR3YXJlU3lzdGVtMSA9IHNvZnR3YXJlU3lzdGVtICJTb2Z0d2FyZSBTeXN0ZW0gMSIgew0KICAgICAgICAgICAgYXBwbGljYXRpb24xID0gY29udGFpbmVyICJBcHBsaWNhdGlvbiIgew0KICAgICAgICAgICAgICAgIGNvbXBvbmVudCAiQ29tcG9uZW50QSINCiAgICAgICAgICAgICAgICBjb21wb25lbnQgIkNvbXBvbmVudEIiDQogICAgICAgICAgICAgICAgY29tcG9uZW50ICJDb21wb25lbnRDIg0KICAgICAgICAgICAgfQ0KDQogICAgICAgICAgICBkYXRhYmFzZVNjaGVtYTEgPSBjb250YWluZXIgIkRhdGFiYXNlIFNjaGVtYSINCg0KICAgICAgICAgICAgIWVsZW1lbnRzICJlbGVtZW50LnBhcmVudD09YXBwbGljYXRpb24xIiB7DQogICAgICAgICAgICAgICAgdGFncyAiVGFnIDEiDQogICAgICAgICAgICAgICAgdXNlciAtPiB0aGlzICJVc2VzIDEiDQogICAgICAgICAgICAgICAgdGhpcyAtPiBkYXRhYmFzZVNjaGVtYTEgIlVzZXMgMSIgew0KICAgICAgICAgICAgICAgICAgICB0YWdzICJUYWciDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgfQ0KDQogICAgICAgICAgICAhZWxlbWVudHMgImVsZW1lbnQucGFyZW50PT1hcHBsaWNhdGlvbjEiIHsNCiAgICAgICAgICAgICAgICAtPiBkYXRhYmFzZVNjaGVtYTEgIlVzZXMgMiIgew0KICAgICAgICAgICAgICAgICAgICB0YWdzICJUYWciDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQoNCiAgICAgICAgIWlkZW50aWZpZXJzIGhpZXJhcmNoaWNhbA0KDQogICAgICAgIHNvZnR3YXJlU3lzdGVtMiA9IHNvZnR3YXJlU3lzdGVtICJTb2Z0d2FyZSBTeXN0ZW0gMiIgew0KICAgICAgICAgICAgYXBwbGljYXRpb24yID0gY29udGFpbmVyICJBcHBsaWNhdGlvbiIgew0KICAgICAgICAgICAgICAgIGNvbXBvbmVudCAiQ29tcG9uZW50QSINCiAgICAgICAgICAgICAgICBjb21wb25lbnQgIkNvbXBvbmVudEIiDQogICAgICAgICAgICAgICAgY29tcG9uZW50ICJDb21wb25lbnRDIg0KICAgICAgICAgICAgfQ0KDQogICAgICAgICAgICBkYXRhYmFzZVNjaGVtYTIgPSBjb250YWluZXIgIkRhdGFiYXNlIFNjaGVtYSINCg0KICAgICAgICAgICAgIWVsZW1lbnRzICJlbGVtZW50LnBhcmVudD09YXBwbGljYXRpb24yIiB7DQogICAgICAgICAgICAgICAgdGFncyAiVGFnIDEiDQogICAgICAgICAgICAgICAgdXNlciAtPiB0aGlzICJVc2VzIg0KICAgICAgICAgICAgICAgIHRoaXMgLT4gc29mdHdhcmVTeXN0ZW0yLmRhdGFiYXNlU2NoZW1hMiAiVXNlcyAxIiB7DQogICAgICAgICAgICAgICAgICAgIHRhZ3MgIlRhZyINCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgICFlbGVtZW50cyAiZWxlbWVudC5wYXJlbnQ9PWFwcGxpY2F0aW9uMiIgew0KICAgICAgICAgICAgICAgIHRoaXMgLT4gZGF0YWJhc2VTY2hlbWEyICJVc2VzIDIiIHsNCiAgICAgICAgICAgICAgICAgICAgdGFncyAiVGFnIg0KICAgICAgICAgICAgICAgIH0NCiAgICAgICAgICAgIH0NCg0KICAgICAgICAgICAgIWVsZW1lbnRzICJlbGVtZW50LnBhcmVudD09YXBwbGljYXRpb24yIiB7DQogICAgICAgICAgICAgICAgLT4gc29mdHdhcmVTeXN0ZW0yLmRhdGFiYXNlU2NoZW1hMiAiVXNlcyAzIiB7DQogICAgICAgICAgICAgICAgICAgIHRhZ3MgIlRhZyINCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgICFlbGVtZW50cyAiZWxlbWVudC5wYXJlbnQ9PWFwcGxpY2F0aW9uMiIgew0KICAgICAgICAgICAgICAgIC0+IGRhdGFiYXNlU2NoZW1hMiAiVXNlcyA0IiB7DQogICAgICAgICAgICAgICAgICAgdGFncyAiVGFnIg0KICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQogICAgfQ0KDQp9",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

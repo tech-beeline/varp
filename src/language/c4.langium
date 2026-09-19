@@ -1483,6 +1483,15 @@ fragment PersonMeta:
     |    
     (description=STRING);
 
+// ─── SoftwareSystemMeta fragment ───────────────────────────────────────────
+// Software systems have no technology: softwaresystem <name> [description] [tags]
+fragment SoftwareSystemMeta:
+    (description=STRING QuotedTag)
+    |
+    (description=STRING UnquotedTag)
+    |
+    (description=STRING);
+
 // Person: person <name> [description] [tags] { ... }
 Person:
     Id? PERSON_KW Name PersonMeta?
@@ -1499,9 +1508,9 @@ Person:
         NL+ '}'
     )?;
 
-// SoftwareSystem: softwaresystem <name> [description] [technology] [tags] { ... }
+// SoftwareSystem: softwaresystem <name> [description] [tags] { ... }
 SoftwareSystem:
-    Id? SOFTWARE_SYSTEM_KW Name Meta?
+    Id? SOFTWARE_SYSTEM_KW Name SoftwareSystemMeta?
     (
         '{'
             (

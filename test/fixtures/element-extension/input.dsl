@@ -6,22 +6,22 @@ workspace "Extension" "Description" {
                 ui = component "UI"
             }
         }
+
+        // !element — add a container to the existing software system
+        !element softwareSystem {
+            container "API" "API container" "REST"
+        }
+
+        // !element — add a component to the existing container
+        !element webapp {
+            component "Backend" "Backend component" "Java"
+            tags "ExtraTwik,ExtraOne"
+        }
     }
 
     views {
         container softwareSystem {
             include *
         }
-    }
-
-    // Top-level !element — add a container to the existing software system
-    !element "Software System" {
-        container "API" "API container" "REST"
-    }
-
-    // Top-level !element — add a component to the existing container
-    !element "Web Application" {
-        component "Backend" "Backend component" "Java"
-        tags "ExtraTwik,ExtraOne"
     }
 }

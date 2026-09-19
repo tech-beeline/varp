@@ -103,11 +103,21 @@ const projectionDsl = `workspace {
 }
 `;
 
+/** Maps container ids to their names, since instances only carry containerId. */
+function containerNames(json: any): Map<string, string> {
+    const names = new Map<string, string>();
+    for (const container of collect(json.model, node => Array.isArray(node.containers)).flatMap(node => node.containers)) {
+        names.set(container.id, container.name);
+    }
+    return names;
+}
+
 function instanceIds(json: any): { ui: string; backend: string; lb: string } {
+    const names = containerNames(json);
     const containerInstances = collect(json.model, node => Array.isArray(node.containerInstances)).flatMap(node => node.containerInstances);
     const infrastructureNodes = collect(json.model, node => Array.isArray(node.infrastructureNodes)).flatMap(node => node.infrastructureNodes);
-    const ui = containerInstances.find((ci: any) => ci.name?.includes('UI'));
-    const backend = containerInstances.find((ci: any) => ci.name?.includes('Backend'));
+    const ui = containerInstances.find((ci: any) => names.get(ci.containerId)?.includes('UI'));
+    const backend = containerInstances.find((ci: any) => names.get(ci.containerId)?.includes('Backend'));
     const lb = infrastructureNodes[0];
     return { ui: ui.id, backend: backend.id, lb: lb.id };
 }
@@ -176,9 +186,10 @@ describe('reference no-relationship fixture', () => {
     const fixturePath = resolve(__dirname, '../../test/fixtures/dsl/no-relationship.dsl');
 
     function containerInstance(json: any, environment: string, namePart: string): any {
+        const names = containerNames(json);
         return collect(json.model, node => Array.isArray(node.containerInstances))
             .flatMap(node => node.containerInstances)
-            .find((ci: any) => ci.environment === environment && ci.name?.includes(namePart));
+            .find((ci: any) => ci.environment === environment && names.get(ci.containerId)?.includes(namePart));
     }
 
     it('matches the reference behaviour across all deployment environments', async () => {

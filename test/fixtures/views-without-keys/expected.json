@@ -1,0 +1,49 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "people" : [ {
+      "id" : "1",
+      "name" : "User",
+      "properties" : {
+        "structurizr.dsl.identifier" : "1a0c8477-a97f-4914-a534-94e30aa31709"
+      },
+      "tags" : "Element,Person"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "13",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgcGVyc29uICJVc2VyIg0KICAgIH0NCg0KICAgIHZpZXdzIHsNCiAgICAgICAgc3lzdGVtTGFuZHNjYXBlIHsNCiAgICAgICAgfQ0KDQogICAgICAgIHN5c3RlbUxhbmRzY2FwZSB7DQogICAgICAgIH0NCg0KICAgICAgICBzeXN0ZW1MYW5kc2NhcGUgew0KICAgICAgICB9DQogICAgfQ0KDQp9",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "systemLandscapeViews" : [ {
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-001",
+      "name" : "System Landscape View",
+      "order" : 1
+    }, {
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-002",
+      "name" : "System Landscape View",
+      "order" : 2
+    }, {
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-003",
+      "name" : "System Landscape View",
+      "order" : 3
+    } ]
+  }
+}

@@ -1,57 +1,63 @@
 {
-    "name": "Name",
-    "description": "Description",
-    "model": {
-        "properties": {},
-        "softwareSystems": [
-            {
-                "id": "softwaresystem_4e066da5",
-                "name": "S",
-                "tags": "Element,Software System",
-                "containers": [
-                    {
-                        "id": "container_5b129027",
-                        "name": "C0",
-                        "tags": "Element,Container,tag1"
-                    },
-                    {
-                        "id": "container_5b128f30",
-                        "name": "C1",
-                        "tags": "Element,Container,tag A"
-                    }
-                ]
-            }
-        ]
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "2",
+        "name" : "C0",
+        "properties" : {
+          "structurizr.dsl.identifier" : "s.c0"
+        },
+        "tags" : "Element,Container,'tag1'"
+      }, {
+        "documentation" : { },
+        "id" : "3",
+        "name" : "C1",
+        "properties" : {
+          "structurizr.dsl.identifier" : "s.c1"
+        },
+        "tags" : "Element,Container,'tag,A'"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "S",
+      "properties" : {
+        "structurizr.dsl.identifier" : "s"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "16",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCiAgICAhaWRlbnRpZmllcnMgaGllcmFyY2hpY2FsDQogICAgbW9kZWwgew0KICAgICAgICBzID0gc29mdHdhcmVTeXN0ZW0gIlMiIHsNCiAgICAgICAgICAgIGMwID0gY29udGFpbmVyICJDMCIgew0KICAgICAgICAgICAgICAgIHRhZ3MgJ3RhZzEnDQogICAgICAgICAgICB9DQogICAgICAgICAgICBjMSA9IGNvbnRhaW5lciAiQzEiIHsNCiAgICAgICAgICAgICAgICB0YWdzICd0YWcgQScNCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KICAgIH0NCiAgICB2aWV3cyB7DQogICAgICAgIGNvbnRhaW5lciBzIHsNCiAgICAgICAgICAgIGluY2x1ZGUgZWxlbWVudC50YWc9PXRhZzENCiAgICAgICAgICAgIGluY2x1ZGUgImVsZW1lbnQudGFnPT10YWcgQSINCiAgICAgICAgICAgIGF1dG9MYXlvdXQNCiAgICAgICAgfQ0KICAgIH0NCn0=",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
     },
-    "views": {
-        "containerViews": [
-            {
-                "softwareSystemId": "softwaresystem_4e066da5",
-                "key": "S-Container-3afb9a6a",
-                "elements": [
-                    {
-                        "id": "container_5b129027",
-                        "x": 450,
-                        "y": 449,
-                        "width": 450,
-                        "height": 300
-                    },
-                    {
-                        "id": "container_5b128f30",
-                        "x": 1200,
-                        "y": 449,
-                        "width": 450,
-                        "height": 300
-                    }
-                ],
-                "dimensions": {
-                    "width": 2100,
-                    "height": 1279
-                }
-            }
-        ],
-        "configuration": {
-            "properties": {}
-        }
-    }
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Container-001",
+      "name" : "Container View: S",
+      "order" : 1,
+      "softwareSystemId" : "1"
+    } ]
+  }
 }

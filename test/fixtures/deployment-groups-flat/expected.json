@@ -1,0 +1,342 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "deploymentNodes": [
+      {
+        "containerInstances": [
+          {
+            "containerId": "3",
+            "environment": "WithoutDeploymentGroups",
+            "id": "6",
+            "instanceId": 1,
+            "properties": {
+              "structurizr.dsl.identifier": "55839823-23b8-49e9-b0e6-de4e68d92de7"
+            },
+            "relationships": [
+              {
+                "description": "Uses",
+                "destinationId": "7",
+                "id": "8",
+                "linkedRelationshipId": "4",
+                "sourceId": "6"
+              },
+              {
+                "description": "Uses",
+                "destinationId": "12",
+                "id": "13",
+                "linkedRelationshipId": "4",
+                "sourceId": "6"
+              }
+            ],
+            "tags": "Container Instance"
+          },
+          {
+            "containerId": "2",
+            "environment": "WithoutDeploymentGroups",
+            "id": "7",
+            "instanceId": 1,
+            "properties": {
+              "structurizr.dsl.identifier": "181881a3-051e-4f66-adf3-42cb004e6709"
+            },
+            "tags": "Container Instance"
+          }
+        ],
+        "environment": "WithoutDeploymentGroups",
+        "id": "5",
+        "instances": "1",
+        "name": "Server 1",
+        "properties": {
+          "structurizr.dsl.identifier": "a8cec0cd-f11a-417a-8398-02e9e251c9fa"
+        },
+        "tags": "Element,Deployment Node"
+      },
+      {
+        "containerInstances": [
+          {
+            "containerId": "3",
+            "environment": "WithoutDeploymentGroups",
+            "id": "10",
+            "instanceId": 1,
+            "properties": {
+              "structurizr.dsl.identifier": "a78bfe4b-95bb-4145-bce8-f09aa6cd6f89"
+            },
+            "relationships": [
+              {
+                "description": "Uses",
+                "destinationId": "7",
+                "id": "11",
+                "linkedRelationshipId": "4",
+                "sourceId": "10"
+              },
+              {
+                "description": "Uses",
+                "destinationId": "12",
+                "id": "14",
+                "linkedRelationshipId": "4",
+                "sourceId": "10"
+              }
+            ],
+            "tags": "Container Instance"
+          },
+          {
+            "containerId": "2",
+            "environment": "WithoutDeploymentGroups",
+            "id": "12",
+            "instanceId": 1,
+            "properties": {
+              "structurizr.dsl.identifier": "47d7d43b-02a1-4833-8556-a051849f13d9"
+            },
+            "tags": "Container Instance"
+          }
+        ],
+        "environment": "WithoutDeploymentGroups",
+        "id": "9",
+        "instances": "1",
+        "name": "Server 2",
+        "properties": {
+          "structurizr.dsl.identifier": "6cb0687c-6d11-4910-b5c9-3f9f3b1fcc28"
+        },
+        "tags": "Element,Deployment Node"
+      },
+      {
+        "containerInstances": [
+          {
+            "containerId": "3",
+            "deploymentGroups": [
+              "Service Instance 1"
+            ],
+            "environment": "WithSpecifiedDeploymentGroups",
+            "id": "16",
+            "instanceId": 1,
+            "properties": {
+              "structurizr.dsl.identifier": "ca6ddcd1-cff0-44f2-af69-22a81550efad"
+            },
+            "relationships": [
+              {
+                "description": "Uses",
+                "destinationId": "17",
+                "id": "18",
+                "linkedRelationshipId": "4",
+                "sourceId": "16"
+              }
+            ],
+            "tags": "Container Instance"
+          },
+          {
+            "containerId": "2",
+            "deploymentGroups": [
+              "Service Instance 1"
+            ],
+            "environment": "WithSpecifiedDeploymentGroups",
+            "id": "17",
+            "instanceId": 1,
+            "properties": {
+              "structurizr.dsl.identifier": "ab1057bf-b110-4565-b1e2-6ac8a29ad07b"
+            },
+            "tags": "Container Instance"
+          }
+        ],
+        "environment": "WithSpecifiedDeploymentGroups",
+        "id": "15",
+        "instances": "1",
+        "name": "Server 1",
+        "properties": {
+          "structurizr.dsl.identifier": "35b19b14-8100-4f4a-b08d-1307b5e425c3"
+        },
+        "tags": "Element,Deployment Node"
+      },
+      {
+        "containerInstances": [
+          {
+            "containerId": "3",
+            "deploymentGroups": [
+              "Service Instance 2"
+            ],
+            "environment": "WithSpecifiedDeploymentGroups",
+            "id": "20",
+            "instanceId": 1,
+            "properties": {
+              "structurizr.dsl.identifier": "28cd02a8-297e-459d-be5e-8d56e1cbf7c9"
+            },
+            "relationships": [
+              {
+                "description": "Uses",
+                "destinationId": "21",
+                "id": "22",
+                "linkedRelationshipId": "4",
+                "sourceId": "20"
+              }
+            ],
+            "tags": "Container Instance"
+          },
+          {
+            "containerId": "2",
+            "deploymentGroups": [
+              "Service Instance 2"
+            ],
+            "environment": "WithSpecifiedDeploymentGroups",
+            "id": "21",
+            "instanceId": 1,
+            "properties": {
+              "structurizr.dsl.identifier": "1edc8c3f-d7d7-4b27-acb2-805891948614"
+            },
+            "tags": "Container Instance"
+          }
+        ],
+        "environment": "WithSpecifiedDeploymentGroups",
+        "id": "19",
+        "instances": "1",
+        "name": "Server 2",
+        "properties": {
+          "structurizr.dsl.identifier": "1458660d-cf63-4b1e-a8e5-ead2231feb44"
+        },
+        "tags": "Element,Deployment Node"
+      },
+      {
+        "containerInstances": [
+          {
+            "containerId": "3",
+            "environment": "WithInheritedDeploymentGroups",
+            "id": "24",
+            "instanceId": 1,
+            "properties": {
+              "structurizr.dsl.identifier": "f7fc8238-6ae8-4491-9181-fe0e1c742606"
+            },
+            "relationships": [
+              {
+                "description": "Uses",
+                "destinationId": "25",
+                "id": "26",
+                "linkedRelationshipId": "4",
+                "sourceId": "24"
+              }
+            ],
+            "tags": "Container Instance"
+          },
+          {
+            "containerId": "2",
+            "environment": "WithInheritedDeploymentGroups",
+            "id": "25",
+            "instanceId": 1,
+            "properties": {
+              "structurizr.dsl.identifier": "4447667d-b9ad-4db0-b3a8-acc1f9c93d8e"
+            },
+            "tags": "Container Instance"
+          }
+        ],
+        "deploymentGroups": [
+          "Service Instance 1"
+        ],
+        "environment": "WithInheritedDeploymentGroups",
+        "id": "23",
+        "instances": "1",
+        "name": "Server 1",
+        "properties": {
+          "structurizr.dsl.identifier": "01579aa2-5fed-41dd-b544-cc8f9a04ebf2"
+        },
+        "tags": "Element,Deployment Node"
+      },
+      {
+        "containerInstances": [
+          {
+            "containerId": "3",
+            "environment": "WithInheritedDeploymentGroups",
+            "id": "28",
+            "instanceId": 1,
+            "properties": {
+              "structurizr.dsl.identifier": "d5dec506-3d12-44d3-91bc-252632d4f075"
+            },
+            "relationships": [
+              {
+                "description": "Uses",
+                "destinationId": "29",
+                "id": "30",
+                "linkedRelationshipId": "4",
+                "sourceId": "28"
+              }
+            ],
+            "tags": "Container Instance"
+          },
+          {
+            "containerId": "2",
+            "environment": "WithInheritedDeploymentGroups",
+            "id": "29",
+            "instanceId": 1,
+            "properties": {
+              "structurizr.dsl.identifier": "54ddf6ef-72a8-4471-844d-a762a92e611a"
+            },
+            "tags": "Container Instance"
+          }
+        ],
+        "deploymentGroups": [
+          "Service Instance 2"
+        ],
+        "environment": "WithInheritedDeploymentGroups",
+        "id": "27",
+        "instances": "1",
+        "name": "Server 2",
+        "properties": {
+          "structurizr.dsl.identifier": "50ba6efa-b2bc-4fea-bc68-fff81a5fcbd6"
+        },
+        "tags": "Element,Deployment Node"
+      }
+    ],
+    "softwareSystems": [
+      {
+        "containers": [
+          {
+            "documentation": {},
+            "id": "2",
+            "name": "DB",
+            "properties": {
+              "structurizr.dsl.identifier": "database"
+            },
+            "tags": "Element,Container"
+          },
+          {
+            "documentation": {},
+            "id": "3",
+            "name": "API",
+            "properties": {
+              "structurizr.dsl.identifier": "api"
+            },
+            "relationships": [
+              {
+                "description": "Uses",
+                "destinationId": "2",
+                "id": "4",
+                "sourceId": "3",
+                "tags": "Relationship"
+              }
+            ],
+            "tags": "Element,Container"
+          }
+        ],
+        "documentation": {},
+        "id": "1",
+        "name": "Software System",
+        "properties": {
+          "structurizr.dsl.identifier": "softwareSystem"
+        },
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "52",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gPSBzb2Z0d2FyZVN5c3RlbSAiU29mdHdhcmUgU3lzdGVtIiB7DQogICAgICAgICAgICBkYXRhYmFzZSA9IGNvbnRhaW5lciAiREIiDQogICAgICAgICAgICBhcGkgPSBjb250YWluZXIgIkFQSSIgew0KICAgICAgICAgICAgICAgIC0+IGRhdGFiYXNlICJVc2VzIg0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQoNCiAgICAgICAgZGVwbG95bWVudEVudmlyb25tZW50ICJXaXRob3V0RGVwbG95bWVudEdyb3VwcyIgew0KICAgICAgICAgICAgZGVwbG95bWVudE5vZGUgIlNlcnZlciAxIiB7DQogICAgICAgICAgICAgICAgY29udGFpbmVySW5zdGFuY2UgYXBpDQogICAgICAgICAgICAgICAgY29udGFpbmVySW5zdGFuY2UgZGF0YWJhc2UNCiAgICAgICAgICAgIH0NCiAgICAgICAgICAgIGRlcGxveW1lbnROb2RlICJTZXJ2ZXIgMiIgew0KICAgICAgICAgICAgICAgIGNvbnRhaW5lckluc3RhbmNlIGFwaQ0KICAgICAgICAgICAgICAgIGNvbnRhaW5lckluc3RhbmNlIGRhdGFiYXNlDQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICBkZXBsb3ltZW50RW52aXJvbm1lbnQgIldpdGhTcGVjaWZpZWREZXBsb3ltZW50R3JvdXBzIiB7DQogICAgICAgICAgICBzZXJ2aWNlSW5zdGFuY2UxID0gZGVwbG95bWVudEdyb3VwICJTZXJ2aWNlIEluc3RhbmNlIDEiDQogICAgICAgICAgICBzZXJ2aWNlSW5zdGFuY2UyID0gZGVwbG95bWVudEdyb3VwICJTZXJ2aWNlIEluc3RhbmNlIDIiDQogICAgICAgICAgICBkZXBsb3ltZW50Tm9kZSAiU2VydmVyIDEiIHsNCiAgICAgICAgICAgICAgICBjb250YWluZXJJbnN0YW5jZSBhcGkgc2VydmljZUluc3RhbmNlMQ0KICAgICAgICAgICAgICAgIGNvbnRhaW5lckluc3RhbmNlIGRhdGFiYXNlIHNlcnZpY2VJbnN0YW5jZTENCiAgICAgICAgICAgIH0NCiAgICAgICAgICAgIGRlcGxveW1lbnROb2RlICJTZXJ2ZXIgMiIgew0KICAgICAgICAgICAgICAgIGNvbnRhaW5lckluc3RhbmNlIGFwaSBzZXJ2aWNlSW5zdGFuY2UyDQogICAgICAgICAgICAgICAgY29udGFpbmVySW5zdGFuY2UgZGF0YWJhc2Ugc2VydmljZUluc3RhbmNlMg0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQoNCiAgICAgICAgZGVwbG95bWVudEVudmlyb25tZW50ICJXaXRoSW5oZXJpdGVkRGVwbG95bWVudEdyb3VwcyIgew0KICAgICAgICAgICAgZGVwbG95bWVudE5vZGUgIlNlcnZlciAxIiB7DQogICAgICAgICAgICAgICAgZGVwbG95bWVudEdyb3VwIHNlcnZpY2VJbnN0YW5jZTENCiAgICAgICAgICAgICAgICBjb250YWluZXJJbnN0YW5jZSBhcGkNCiAgICAgICAgICAgICAgICBjb250YWluZXJJbnN0YW5jZSBkYXRhYmFzZQ0KICAgICAgICAgICAgfQ0KICAgICAgICAgICAgZGVwbG95bWVudE5vZGUgIlNlcnZlciAyIiB7DQogICAgICAgICAgICAgICAgZGVwbG95bWVudEdyb3VwIHNlcnZpY2VJbnN0YW5jZTINCiAgICAgICAgICAgICAgICBjb250YWluZXJJbnN0YW5jZSBhcGkNCiAgICAgICAgICAgICAgICBjb250YWluZXJJbnN0YW5jZSBkYXRhYmFzZQ0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQogICAgfQ0KDQp9",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

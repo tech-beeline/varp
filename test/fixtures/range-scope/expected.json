@@ -1,44 +1,68 @@
 {
-    "name": "Name",
-    "description": "Description",
-    "model": {
-        "properties": {},
-        "people": [
-            {
-                "id": "person_64a01998",
-                "name": "Alice",
-                "tags": "Element,Person",
-                "relationships": [
-                    {
-                        "id": "relationship_3489685a",
-                        "sourceId": "person_64a01998",
-                        "destinationId": "softwaresystem_14f21264",
-                        "tags": "Relationship"
-                    }
-                ]
-            }
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "people": [
+      {
+        "id": "3",
+        "name": "Alice",
+        "properties": {
+          "structurizr.dsl.identifier": "A"
+        },
+        "relationships": [
+          {
+            "destinationId": "1",
+            "id": "4",
+            "sourceId": "3",
+            "tags": "Relationship"
+          }
         ],
-        "softwareSystems": [
-            {
-                "id": "softwaresystem_72c73c28",
-                "name": "Workspace B System",
-                "tags": "Element,Software System"
-            },
-            {
-                "id": "softwaresystem_7f52555c",
-                "name": "Workspace C System",
-                "tags": "Element,Software System"
-            },
-            {
-                "id": "softwaresystem_14f21264",
-                "name": "Target System",
-                "tags": "Element,Software System"
-            }
-        ]
-    },
-    "views": {
-        "configuration": {
-            "properties": {}
-        }
+        "tags": "Element,Person"
+      }
+    ],
+    "softwareSystems": [
+      {
+        "documentation": {},
+        "id": "1",
+        "name": "Target System",
+        "properties": {
+          "structurizr.dsl.identifier": "T"
+        },
+        "tags": "Element,Software System"
+      },
+      {
+        "documentation": {},
+        "id": "2",
+        "name": "Workspace C System",
+        "properties": {
+          "structurizr.dsl.identifier": "C"
+        },
+        "tags": "Element,Software System"
+      },
+      {
+        "documentation": {},
+        "id": "5",
+        "name": "Workspace B System",
+        "properties": {
+          "structurizr.dsl.identifier": "B"
+        },
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "14",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
     }
+  }
 }

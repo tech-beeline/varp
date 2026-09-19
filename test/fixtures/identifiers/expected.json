@@ -1,0 +1,73 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "people": [
+      {
+        "id": "1",
+        "name": "User",
+        "properties": {
+          "structurizr.dsl.identifier": "user"
+        },
+        "relationships": [
+          {
+            "description": "Uses",
+            "destinationId": "3",
+            "id": "4",
+            "properties": {
+              "structurizr.dsl.identifier": "rel"
+            },
+            "sourceId": "1",
+            "tags": "Relationship"
+          },
+          {
+            "description": "Uses",
+            "destinationId": "2",
+            "id": "5",
+            "linkedRelationshipId": "4",
+            "sourceId": "1"
+          }
+        ],
+        "tags": "Element,Person"
+      }
+    ],
+    "softwareSystems": [
+      {
+        "containers": [
+          {
+            "documentation": {},
+            "id": "3",
+            "name": "Container",
+            "properties": {
+              "structurizr.dsl.identifier": "softwareSystem.container"
+            },
+            "tags": "Element,Container"
+          }
+        ],
+        "documentation": {},
+        "id": "2",
+        "name": "Software System",
+        "properties": {
+          "structurizr.dsl.identifier": "softwareSystem"
+        },
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "13",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgdXNlciA9IHBlcnNvbiAiVXNlciINCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gPSBzb2Z0d2FyZVN5c3RlbSAiU29mdHdhcmUgU3lzdGVtIiB7DQogICAgICAgICAgICBjb250YWluZXIgPSBjb250YWluZXIgIkNvbnRhaW5lciIgew0KICAgICAgICAgICAgICAgIHJlbCA9IHVzZXIgLT4gdGhpcyAiVXNlcyINCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KICAgIH0NCg0KfQ==",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

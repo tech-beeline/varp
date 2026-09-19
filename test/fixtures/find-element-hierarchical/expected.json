@@ -1,0 +1,58 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "softwareSystems": [
+      {
+        "containers": [
+          {
+            "components": [
+              {
+                "documentation": {},
+                "id": "3",
+                "name": "C",
+                "properties": {
+                  "structurizr.dsl.identifier": "a.b.c",
+                  "Name3": "Value3",
+                  "Name1": "Value1",
+                  "Name2": "Value2"
+                },
+                "tags": "Element,Component"
+              }
+            ],
+            "documentation": {},
+            "id": "2",
+            "name": "B",
+            "properties": {
+              "structurizr.dsl.identifier": "a.b"
+            },
+            "tags": "Element,Container"
+          }
+        ],
+        "documentation": {},
+        "id": "1",
+        "name": "A",
+        "properties": {
+          "structurizr.dsl.identifier": "a"
+        },
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "15",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgIGEgPSBzb2Z0d2FyZVN5c3RlbSAiQSIgew0KICAgICAgICAgICAgYiA9IGNvbnRhaW5lciAiQiIgew0KICAgICAgICAgICAgICAgIGMgPSBjb21wb25lbnQgIkMiDQoNCiAgICAgICAgICAgICAgICAhZWxlbWVudCBjIHsNCiAgICAgICAgICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgICAgICAgICAiTmFtZTEiICJWYWx1ZTEiDQogICAgICAgICAgICAgICAgICAgIH0NCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgICFlbGVtZW50IGIuYyB7DQogICAgICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgICAgICJOYW1lMiIgIlZhbHVlMiINCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICAhZWxlbWVudCBhLmIuYyB7DQogICAgICAgICAgICBwcm9wZXJ0aWVzIHsNCiAgICAgICAgICAgICAgICAiTmFtZTMiICJWYWx1ZTMiDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQoNCn0=",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

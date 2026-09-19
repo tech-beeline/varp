@@ -1,48 +1,55 @@
 {
-    "name": "Name",
-    "description": "Description",
-    "model": {
-        "properties": {},
-        "people": [
-            {
-                "id": "person_187c83e5",
-                "name": "User 3",
-                "tags": "Element,Person"
-            },
-            {
-                "id": "person_4f64a8fa",
-                "name": "User 2",
-                "tags": "Element,Person"
-            },
-            {
-                "id": "person_48ba2a04",
-                "name": "User 1",
-                "tags": "Element,Person"
-            }
-        ]
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "people" : [ {
+      "id" : "1",
+      "name" : "User 1",
+      "properties" : {
+        "structurizr.dsl.identifier" : "user1"
+      },
+      "tags" : "Element,Person"
+    }, {
+      "id" : "2",
+      "name" : "User 2",
+      "properties" : {
+        "structurizr.dsl.identifier" : "user2"
+      },
+      "tags" : "Element,Person"
+    }, {
+      "id" : "3",
+      "name" : "User 3",
+      "properties" : {
+        "structurizr.dsl.identifier" : "user3"
+      },
+      "tags" : "Element,Person"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "11",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
     },
-    "views": {
-        "systemLandscapeViews": [
-            {
-                "key": "Landscape-SystemLandscape-91e39541",
-                "elements": [
-                    {
-                        "id": "person_4f64a8fa",
-                        "x": 400,
-                        "y": 400,
-                        "width": 450,
-                        "height": 300
-                    }
-                ],
-                "enterpriseBoundaryVisible": true,
-                "dimensions": {
-                    "width": 1250,
-                    "height": 1100
-                }
-            }
-        ],
-        "configuration": {
-            "properties": {}
-        }
-    }
+    "systemLandscapeViews" : [ {
+      "elements" : [ {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-001",
+      "name" : "System Landscape View",
+      "order" : 1
+    } ]
+  }
 }

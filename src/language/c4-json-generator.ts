@@ -1831,7 +1831,9 @@ class JsonGenerator {
             for (const rel of list) {
                 if (rel.linked !== undefined) continue;
                 const pair = this.relationshipPairKey(rel);
-                const key = `${pair}|${rel.relationship.$cstNode?.offset ?? ''}|${this.description(rel.relationship)}`;
+                // Reference semantics: at most one relationship per source/target
+                // pair and description (a second identical one is a parse error).
+                const key = `${pair}|${this.description(rel.relationship)}`;
                 if (directKeys.has(key)) continue;
                 directKeys.add(key);
                 pairs.add(pair);

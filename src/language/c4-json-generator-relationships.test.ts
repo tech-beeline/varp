@@ -99,3 +99,23 @@ describe('relationship ownership and deduplication', () => {
         expect(aToB[0].linkedRelationshipId).toBeDefined();
     });
 });
+
+describe('duplicate relationships', () => {
+    it('keeps one relationship per source/destination pair and description', async () => {
+        const json = await generate(`workspace {
+    model {
+        a = softwareSystem "A"
+        b = softwareSystem "B"
+        a -> b "Uses"
+        a -> b "Uses"
+        a -> b "Uses twice"
+    }
+}
+`);
+        const systemA = json.model.softwareSystems.find((s: any) => s.name === 'A');
+        const systemB = json.model.softwareSystems.find((s: any) => s.name === 'B');
+        const aToB = systemA.relationships.filter((r: any) => r.destinationId === systemB.id);
+        expect(aToB).toHaveLength(2);
+        expect(aToB.map((r: any) => r.description).sort()).toEqual(['Uses', 'Uses twice']);
+    });
+});

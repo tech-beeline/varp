@@ -69,6 +69,8 @@ import {
     ElementsDirective,
     isRelationshipsDirective,
     RelationshipsDirective,
+    isRelationshipExtension,
+    RelationshipExtension,
     ElementExtension,
     isElementExtension,
     isStringLiteralExpression} from '../generated/ast';
@@ -149,6 +151,7 @@ class JsonGenerator {
     private readonly relationshipOverlays: Map<string, {
         tags?: string[];
         url?: string;
+        technology?: string;
         properties?: Record<string, string>;
         perspectives?: any[];
     }> = new Map();
@@ -1019,7 +1022,7 @@ class JsonGenerator {
             sourceId: this.getId(this.resolveSource(relationship.relationship)),
             destinationId: this.getId(this.resolveTarget(relationship.relationship)),
             description: this.description(relationship.relationship),
-            technology: this.technology(relationship.relationship),
+            technology: overlay?.technology ?? this.technology(relationship.relationship),
             tags: this.extractTags(relationship.relationship, 'Relationship'),
             linkedRelationshipId: relationship.linked ? this.getId(relationship.linked) : undefined
         };
@@ -1030,6 +1033,10 @@ class JsonGenerator {
         // Apply overlay properties
         if (overlay?.properties && Object.keys(overlay.properties).length > 0) {
             result.properties = { ...overlay.properties };
+        }
+        // Apply overlay perspectives
+        if (overlay?.perspectives) {
+            result.perspectives = overlay.perspectives;
         }
         return result;
     }
@@ -4396,8 +4403,8 @@ class JsonGenerator {
     }
 
     /**
-     * Applies tags, url, properties, and perspectives from a !relationships directive
-     * to all matched relationships. Uses overlay maps to avoid mutating AST nodes.
+     * Applies the !relationships directive to all relationships matched by its
+     * expression. Uses overlay maps to avoid mutating AST nodes.
      */
     private applyRelationshipsDirective(directive: RelationshipsDirective): void {
         const matched = this.resolveRelationshipsFromExpression(directive.expression);
@@ -4408,24 +4415,39 @@ class JsonGenerator {
                 overlay = {};
                 this.relationshipOverlays.set(relId, overlay);
             }
+            this.applyRelationshipOverlayValues(overlay, directive);
+        }
+    }
 
-            // Apply tags (merge)
-            if (directive.tagsProps && directive.tagsProps.length > 0) {
-                const newTags: string[] = [];
-                for (const tagProp of directive.tagsProps) {
-                    const values = (tagProp as any).values || (tagProp as any).value;
-                    if (Array.isArray(values)) {
-                        for (const v of values) {
-                            const stripped = C4Utils.stripQuotes(typeof v === 'string' ? v : v.value);
-                            if (stripped) {
-                                for (const t of stripped.split(',')) {
-                                    const trimmed = t.trim();
-                                    if (trimmed) newTags.push(trimmed);
-                                }
-                            }
-                        }
-                    } else if (typeof values === 'string') {
-                        const stripped = C4Utils.stripQuotes(values);
+    /**
+     * Applies the !relationship directive to the relationship it targets. Uses the
+     * same overlay map as !relationships to avoid mutating AST nodes.
+     */
+    private applyRelationshipExtension(extension: RelationshipExtension): void {
+        const target = extension.target?.ref;
+        if (!target) return;
+        const relId = this.getId(target);
+        let overlay = this.relationshipOverlays.get(relId);
+        if (!overlay) {
+            overlay = {};
+            this.relationshipOverlays.set(relId, overlay);
+        }
+        this.applyRelationshipOverlayValues(overlay, extension);
+    }
+
+    /**
+     * Merges tags, url, technology, properties and perspectives declared by a
+     * relationship directive into an overlay entry.
+     */
+    private applyRelationshipOverlayValues(overlay: any, source: any): void {
+        // Apply tags (merge)
+        if (source.tagsProps && source.tagsProps.length > 0) {
+            const newTags: string[] = [];
+            for (const tagProp of source.tagsProps) {
+                const values = (tagProp as any).values || (tagProp as any).value;
+                if (Array.isArray(values)) {
+                    for (const v of values) {
+                        const stripped = C4Utils.stripQuotes(typeof v === 'string' ? v : v.value);
                         if (stripped) {
                             for (const t of stripped.split(',')) {
                                 const trimmed = t.trim();
@@ -4433,37 +4455,69 @@ class JsonGenerator {
                             }
                         }
                     }
-                }
-                if (newTags.length > 0) {
-                    overlay.tags = [...(overlay.tags || []), ...newTags];
-                }
-            }
-
-            // Apply url
-            if (directive.urlProps && directive.urlProps.length > 0) {
-                const urlProp = directive.urlProps[0];
-                overlay.url = C4Utils.stripQuotes(urlProp.value) || overlay.url;
-            }
-
-            // Apply properties (merge)
-            if (directive.properties && directive.properties.length > 0) {
-                for (const propBlock of directive.properties) {
-                    if (propBlock.items) {
-                        for (const item of propBlock.items) {
-                            const name = C4Utils.stripQuotes(item.name);
-                            const value = C4Utils.stripQuotes(item.value);
-                            if (name && value) {
-                                if (!overlay.properties) overlay.properties = {};
-                                overlay.properties[name] = value;
-                            }
+                } else if (typeof values === 'string') {
+                    const stripped = C4Utils.stripQuotes(values);
+                    if (stripped) {
+                        for (const t of stripped.split(',')) {
+                            const trimmed = t.trim();
+                            if (trimmed) newTags.push(trimmed);
                         }
                     }
                 }
             }
+            if (newTags.length > 0) {
+                overlay.tags = [...(overlay.tags || []), ...newTags];
+            }
+        }
 
-            // Apply perspectives
-            if (directive.perspectivesBlocks && directive.perspectivesBlocks.length > 0) {
-                overlay.perspectives = directive.perspectivesBlocks;
+        // Apply url
+        if (source.urlProps && source.urlProps.length > 0) {
+            const urlProp = source.urlProps[0];
+            overlay.url = C4Utils.stripQuotes(urlProp.value) || overlay.url;
+        }
+
+        // Apply technology (overwrites)
+        if (source.techProps && source.techProps.length > 0) {
+            overlay.technology = C4Utils.stripQuotes(source.techProps[0].value) || overlay.technology;
+        }
+
+        // Apply properties (merge)
+        if (source.properties && source.properties.length > 0) {
+            for (const propBlock of source.properties) {
+                if (propBlock.items) {
+                    for (const item of propBlock.items) {
+                        const name = C4Utils.stripQuotes(item.name);
+                        const value = C4Utils.stripQuotes(item.value);
+                        if (name && value) {
+                            if (!overlay.properties) overlay.properties = {};
+                            overlay.properties[name] = value;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Apply perspectives
+        if (source.perspectivesBlocks && source.perspectivesBlocks.length > 0) {
+            overlay.perspectives = source.perspectivesBlocks;
+        }
+    }
+
+    /**
+     * Invokes the callback for every nested element of a node, across the child
+     * collections used by the different element kinds (containers/components live
+     * in `elements`, deployment nodes in `children`/`nodes`, instances in their
+     * dedicated arrays, groups in `groups`).
+     */
+    private forEachNestedElement(node: any, callback: (child: AstNode) => void): void {
+        for (const key of ['elements', 'groups', 'nodes', 'children',
+            'infrastructureNodes', 'softwareSystemInstances', 'containerInstances', 'genericInstances']) {
+            const value = node[key];
+            if (!Array.isArray(value)) continue;
+            for (const child of value) {
+                if (child && typeof child === 'object' && typeof child.$type === 'string') {
+                    callback(child);
+                }
             }
         }
     }
@@ -4511,11 +4565,7 @@ class JsonGenerator {
         }
 
         // Recurse into child elements (no visited check — same document traversal)
-        if (Array.isArray(anyNode.elements)) {
-            for (const el of anyNode.elements) {
-                this.processElementsDirectives(el, visited);
-            }
-        }
+        this.forEachNestedElement(anyNode, (child) => this.processElementsDirectives(child, visited));
 
         // Recurse into !include directives (with visited check for cycle prevention)
         if (Array.isArray(anyNode.includes)) {
@@ -4608,11 +4658,7 @@ class JsonGenerator {
         }
 
         // Recurse into child elements (same-document traversal, no visited)
-        if (Array.isArray(anyNode.elements)) {
-            for (const el of anyNode.elements) {
-                this.collectElementExtensions(el, visited);
-            }
-        }
+        this.forEachNestedElement(anyNode, (child) => this.collectElementExtensions(child, visited));
 
         // Recurse into elementExtensions' own children (groups/containers/etc.)
         if (Array.isArray(anyNode.elementExtensions)) {
@@ -4828,12 +4874,17 @@ class JsonGenerator {
             }
         }
 
-        // Recurse into child elements (no visited check — same document traversal)
-        if (Array.isArray(anyNode.elements)) {
-            for (const el of anyNode.elements) {
-                this.processRelationshipsDirectives(el, visited);
+        // Process !relationship directives declared on this element
+        if (Array.isArray(anyNode.relationshipExtensions)) {
+            for (const extension of anyNode.relationshipExtensions) {
+                if (isRelationshipExtension(extension)) {
+                    this.applyRelationshipExtension(extension);
+                }
             }
         }
+
+        // Recurse into child elements (no visited check — same document traversal)
+        this.forEachNestedElement(anyNode, (child) => this.processRelationshipsDirectives(child, visited));
 
         // Recurse into !include directives (with visited check for cycle prevention)
         if (Array.isArray(anyNode.includes)) {

@@ -356,6 +356,7 @@ ModelBlock:
             | NL+ EverywhereFeatures
             | NL+ archetypesBlocks+=ArchetypesBlock
             | NL+ elementExtensions+=ElementExtension
+            | NL+ relationshipExtensions+=RelationshipExtension
             | NL+ elements+=(Person | SoftwareSystem | DeploymentEnvironment | Group | CustomElement | ArchetypeInstance)
             | NL+ elementsDirectives+=ElementsDirective
             | NL+ properties+=PropertiesBlock
@@ -1230,9 +1231,6 @@ RelationshipExtension:
             | NL+ urlProps+=UrlProperty
             | NL+ properties+=PropertiesBlock
             | NL+ perspectivesBlocks+=PerspectivesBlock
-            | NL+ descriptionProps+=DescriptionProperty
-            | NL+ techProps+=TechnologyProperty
-            | NL+ includes+=Include
         )*
     NL+ '}';
 
@@ -1372,8 +1370,7 @@ RelationshipsDirective:
     _RELATIONSHIPS_KW expression=ViewExpression
     '{'
         (
-            NL+ includes+=Include
-            | NL+ perspectivesBlocks+=PerspectivesBlock
+            NL+ perspectivesBlocks+=PerspectivesBlock
             | NL+ properties+=PropertiesBlock
             | NL+ tagsProps+=TagProperty
             | NL+ techProps+=TechnologyProperty
@@ -1493,6 +1490,8 @@ Person:
         '{'
             (
                 NL+ ElementDirectives
+                | NL+ elementExtensions+=ElementExtension
+                | NL+ relationshipExtensions+=RelationshipExtension
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ relationships+=(Relationship | ImplicitRelationship)
@@ -1531,6 +1530,7 @@ Container:
                 | NL+ archetypeInstances+=ArchetypeInstance
                 | NL+ components+=ComponentsDirective
                 | NL+ elementExtensions+=ElementExtension
+                | NL+ relationshipExtensions+=RelationshipExtension
                 | NL+ elements+=Component
                 | NL+ groups+=Group
                 | NL+ relationships+=(Relationship | ImplicitRelationship)
@@ -1546,6 +1546,8 @@ Component:
         '{'
             (
                 NL+ DocumentableElementDirectives
+                | NL+ elementExtensions+=ElementExtension
+                | NL+ relationshipExtensions+=RelationshipExtension
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ groupProps+=GroupProperty
@@ -1562,6 +1564,8 @@ CustomElement:
         '{'
             (
                 NL+ ElementDirectives
+                | NL+ elementExtensions+=ElementExtension
+                | NL+ relationshipExtensions+=RelationshipExtension
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ relationships+=ImplicitRelationship
@@ -1627,6 +1631,8 @@ DeploymentNode:
         '{'
             (
                 NL+ ElementDirectives
+                | NL+ elementExtensions+=ElementExtension
+                | NL+ relationshipExtensions+=RelationshipExtension
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ children+=DeploymentNode
@@ -1680,6 +1686,8 @@ InfrastructureNode:
         '{'
             (
                 NL+ ElementDirectives
+                | NL+ elementExtensions+=ElementExtension
+                | NL+ relationshipExtensions+=RelationshipExtension
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ relationships+=(Relationship | ImplicitRelationship)
@@ -1716,6 +1724,8 @@ SoftwareSystemInstance:
         '{'
             (
                 NL+ ElementDirectives
+                | NL+ elementExtensions+=ElementExtension
+                | NL+ relationshipExtensions+=RelationshipExtension
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ healthChecks+=HealthCheck
@@ -1743,6 +1753,8 @@ ContainerInstance:
         '{'
             (
                 NL+ ElementDirectives
+                | NL+ elementExtensions+=ElementExtension
+                | NL+ relationshipExtensions+=RelationshipExtension
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ healthChecks+=HealthCheck
@@ -1770,6 +1782,8 @@ GenericInstance:
         '{'
             (
                 NL+ ElementDirectives
+                | NL+ elementExtensions+=ElementExtension
+                | NL+ relationshipExtensions+=RelationshipExtension
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ healthChecks+=HealthCheck

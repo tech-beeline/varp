@@ -1455,8 +1455,18 @@ class JsonGenerator {
         return this.groupPathMap.get(this.getId(node));
     }
 
-    private readonly resolveTarget = (rel : Relationship | ImplicitRelationship) => this.el((rel.target?.ref === undefined || rel.targetThis) ? this.resolveContextElement(rel) : rel.target.ref);
-    private readonly resolveSource = (rel : Relationship | ImplicitRelationship) => this.el((isImplicitRelationship(rel) || rel.source?.ref === undefined || rel.sourceThis) ? this.resolveContextElement(rel) : rel.source.ref);
+    private readonly resolveTarget = (rel : Relationship | ImplicitRelationship) => this.el((this.isThisReference(rel.target) || rel.targetThis) ? this.resolveContextElement(rel) : rel.target?.ref);
+    private readonly resolveSource = (rel : Relationship | ImplicitRelationship) => this.el((isImplicitRelationship(rel) || this.isThisReference(rel.source) || rel.sourceThis) ? this.resolveContextElement(rel) : rel.source?.ref);
+
+    /**
+     * True when a relationship endpoint is the `this` keyword. The grammar consumes
+     * `this` without storing it on the reference, so the reference is either absent
+     * or carries the literal text `this`. An unresolved named reference keeps its
+     * `$refText` and is therefore NOT treated as `this`.
+     */
+    private isThisReference(reference: any): boolean {
+        return reference === undefined || reference?.$refText?.toLowerCase() === 'this';
+    }
 
     /**
      * Builds the relationship-by-source index once per generate() call. Maps each element id
@@ -4632,9 +4642,9 @@ class JsonGenerator {
         return (explicitThis || this.isThisEndpoint(reference)) ? matched : this.resolveDeclaredMember(reference);
     }
 
-    /** True when an endpoint reference is absent, i.e. the endpoint is `this`. */
+    /** True when an endpoint reference is the `this` keyword. */
     private isThisEndpoint(reference: any): boolean {
-        return !reference?.ref;
+        return this.isThisReference(reference);
     }
 
     /** Resolves a relationship endpoint reference to a single element, if any. */
@@ -5874,7 +5884,7 @@ class JsonGenerator {
         while (parent) {
             // check for logical C4 elements
             const el = this.el(parent);
-            if (isSoftwareSystem(el) || isContainer(el) || isComponent(el)) {
+            if (isPerson(el) || isSoftwareSystem(el) || isContainer(el) || isComponent(el) || isCustomElement(el)) {
                 return el;
             }
             // check for physical deployment elements
@@ -5897,7 +5907,7 @@ class JsonGenerator {
                 for (const includeDirective of includes) {
                     parent = includeDirective.$container;
                     while (parent) {
-                        if (isSoftwareSystem(parent) || isContainer(parent) || isComponent(parent)) {
+                        if (isPerson(parent) || isSoftwareSystem(parent) || isContainer(parent) || isComponent(parent) || isCustomElement(parent)) {
                             return parent;
                         }
                         if (isDeploymentNode(parent) || 

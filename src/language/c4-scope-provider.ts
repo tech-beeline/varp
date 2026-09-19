@@ -191,21 +191,6 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     }
 
     /**
-     * Recursively climbs the AST $container chain to find the nearest enclosing NamedElement
-     * (System, Container, Component, etc.). Used for 'this' resolution in sourceThis/targetThis.
-     */
-    private findNearestNamedElement(node: AstNode | undefined): NamedElement | undefined {
-        let current = node;
-        while (current) {
-            if (isNamedElement(current)) {
-                return current;
-            }
-            current = current.$container;
-        }
-        return undefined;
-    }
-
-    /**
      * Exports element descriptions for the scope system.
      *
      * Each element is registered in up to three ways to support different reference styles:
@@ -365,9 +350,9 @@ export class C4ScopeProvider extends DefaultScopeProvider {
      *
      * How scope resolution works:
      *
-     * 1. **'this' keyword** (`sourceThis`/`targetThis` in relationships):
-     *    Resolves to the nearest enclosing NamedElement (e.g., a Container inside which
-     *    the relationship is defined). This allows `this -> anotherElement` syntax.
+     * 1. **`this` keyword** (`sourceThis`/`targetThis` in relationships): not resolved
+     *    here. The grammar consumes `this` without storing a reference, and the JSON
+     *    generator substitutes the enclosing element.
      *
      * 2. **NamedElement references** (element IDs, names, environment refs):
      *    Builds a multi-layered scope chain from three sources:
@@ -401,14 +386,6 @@ export class C4ScopeProvider extends DefaultScopeProvider {
      */
     override getScope(context: ReferenceInfo): Scope {
         
-        // Handle 'this' keyword for sourceThis/targetThis in relationships
-        if (context.property === 'targetThis' || context.property === 'sourceThis') {
-            const currentContainer = this.findNearestNamedElement(context.container);
-            if (currentContainer) {
-                return new MapScope([this.descriptions.createDescription(currentContainer, 'this')]);
-            }
-        }
-
         // Check whether this reference targets a C4 named element by its
         // DECLARED TYPE (see ELEMENT_REFERENCE_TYPES above), instead of a
         // hard-coded property-name list.

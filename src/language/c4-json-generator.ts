@@ -36,6 +36,7 @@ import {
     ImplicitRelationship,
     isImplicitRelationship, isInfrastructureNode,
     isSoftwareSystemInstance, isContainerInstance, isGenericInstance,
+    isNoRelationship,
     isDeploymentEnvironment, DeploymentNode,
     ViewsBlock, SystemContextView, isWorkspace, isC4Document,
     isViewsBlock, ElementStyle, RelationshipStyle, isStylesBlock,
@@ -126,6 +127,14 @@ class JsonGenerator {
     private readonly relationships: Relationship[] = [];
     /** Index of relationships by resolved source element id (built once per generate call). */
     private readonly relationshipsBySource: Map<string, Relationship[]> = new Map();
+    /** NoRelationship (`-/>`) directives collected from deployment environments. */
+    private readonly noRelationshipNodes: any[] = [];
+    /** Relationships declared directly in a deployment environment/node (or a `-/>` body) before instance projection. */
+    private readonly deploymentContextRelationships: Array<{ rel: any; noRelationship?: any }> = [];
+    /** Static relationship each `-/>` directive removed, used for description/technology inheritance. */
+    private readonly noRelationshipInheritance: Map<any, Relationship | undefined> = new Map();
+    /** Resolved `-/>` suppressions: projected instance relationships matching these are not emitted. */
+    private readonly noRelationshipSuppressions: Array<{ env: string; sourceIds: Set<string>; targetIds: Set<string>; description?: string }> = [];
     /** URI string of the root workspace document - elements defined there keep the short id hash. */
     private rootDocUri: string | undefined;
     /** Maps include file URI → list of Include directives that reference it (for resolving !elements/!relationships context) */
@@ -218,6 +227,10 @@ class JsonGenerator {
             : '/';
 
         this.collectElementsRelationships(workspace);
+        // Resolve `-/>` directives and project deployment-context relationships onto
+        // instances before indexing relationships by source.
+        this.buildNoRelationshipSuppressions();
+        this.expandDeploymentContextRelationships();
         // Index relationships by their resolved source element so the per-element
         // extractRelationshipsFor* lookups don't scan the whole relationship list.
         this.buildRelationshipsBySource();
@@ -978,7 +991,7 @@ class JsonGenerator {
                     this.collectLocal(item, [...groupStack, this.substitute(item.name) || ""], visitedDocs);
                 }
                 else if (isRelationship(item)) {
-                    this.relationships.push(item);
+                    this.addRelationship(item);
                 }
                 else if (isImplicitRelationship(item)) {
                     this.relationships.push(this.createSyntheticRelationship(item));
@@ -987,7 +1000,9 @@ class JsonGenerator {
                     // An ArchetypeInstance is materialised as an element of its
                     // archetype's base type; relationship-typed archetypes
                     // (`a --https-> b`) stay as instances.
-                    const element = this.materializeArchetypeInstance(item) ?? item;
+                    const element = this.materializeArchetypeInstance(item)
+                        ?? this.materializeGenericInstance(item)
+                        ?? item;
                     // Store group path in the map instead of mutating AST
                     if (groupStack.length > 0) {
                         this.groupPathMap.set(this.getId(element), groupStack.join(this.groupSeparator));
@@ -1014,6 +1029,24 @@ class JsonGenerator {
         // Archetype instances nested in an element body live in their own collection.
         if (node.archetypeInstances) processItems(node.archetypeInstances);
         if (node.relationships) processItems(node.relationships);
+        // `-/>` directives suppress projected instance relationships between the
+        // resolved instances; the body relationships are collected separately.
+        if (Array.isArray(node.noRelationships)) {
+            const collectNoRelationships = (list: any[]) => {
+                for (const noRelationship of list) {
+                    this.noRelationshipNodes.push(noRelationship);
+                    if (Array.isArray(noRelationship.relationships)) {
+                        for (const relationship of noRelationship.relationships) {
+                            this.addRelationship(relationship, noRelationship);
+                        }
+                    }
+                    if (Array.isArray(noRelationship.noRelationships)) {
+                        collectNoRelationships(noRelationship.noRelationships);
+                    }
+                }
+            };
+            collectNoRelationships(node.noRelationships);
+        }
         // Process !element (ElementExtension) contributions. Their children
         // (containers/components/nodes/...) are REAL model elements that must be
         // collected so relationships targeting them (e.g. Parent.Child -> Sibling)
@@ -1271,6 +1304,36 @@ class JsonGenerator {
     }
 
     /**
+     * Materialises an `instanceOf` (GenericInstance) as a ContainerInstance or
+     * SoftwareSystemInstance, depending on the referenced element type. The
+     * reference is copied onto the field the concrete instance type expects.
+     */
+    private materializeGenericInstance(inst: any): any | undefined {
+        const cached = this.materialized.get(inst);
+        if (cached) return cached;
+        const ref = inst.element?.ref;
+        const effective = isSoftwareSystem(ref) ? 'SoftwareSystemInstance'
+            : isContainer(ref) ? 'ContainerInstance'
+            : undefined;
+        if (!effective) return undefined;
+
+        const materialized: any = Object.assign({}, inst);
+        materialized.$type = effective;
+        materialized.$cstNode = inst.$cstNode;
+        materialized.$container = this.el(inst.$container);
+        const doc = AstUtils.getDocument(inst);
+        if (doc) materialized.$document = doc;
+        if (effective === 'SoftwareSystemInstance') {
+            materialized.softwareSystem = inst.element;
+        } else {
+            materialized.container = inst.element;
+        }
+
+        this.materialized.set(inst, materialized);
+        return materialized;
+    }
+
+    /**
      * Applies overlay URL, properties, and perspectives from !elements directives
      * to the element JSON output object. Tags are handled separately in extractTags().
      */
@@ -1419,6 +1482,188 @@ class JsonGenerator {
 
     /** Cached result of collectAllRelationships(). */
     private allRelationshipsCache?: ImpliedRelationship[];
+
+    /**
+     * Resolves each `-/>` directive into the set of instance ids it targets in its
+     * deployment environment, and records the static relationship it removes so
+     * that relationships inside the `-/>` body can inherit description/technology.
+     */
+    private buildNoRelationshipSuppressions(): void {
+        for (const noRelationship of this.noRelationshipNodes) {
+            const env = this.getEnvironment(noRelationship as any);
+            if (!env) continue;
+            this.noRelationshipInheritance.set(noRelationship, this.findInheritedRelationship(noRelationship));
+            const sources = this.resolveDeploymentEndpoints(noRelationship, noRelationship.source?.ref, noRelationship.sourceThis, env, true);
+            const targets = this.resolveDeploymentEndpoints(noRelationship, noRelationship.target?.ref, noRelationship.targetThis, env, true);
+            if (sources.length === 0 || targets.length === 0) continue;
+            this.noRelationshipSuppressions.push({
+                env,
+                sourceIds: new Set(sources.map(source => this.getId(source))),
+                targetIds: new Set(targets.map(target => this.getId(target))),
+                description: noRelationship.description !== undefined ? this.substitute(noRelationship.description) : undefined
+            });
+        }
+    }
+
+    /**
+     * Resolves one deployment relationship endpoint to the elements it refers to in
+     * the environment. Software systems and containers expand to their instances;
+     * instances and other elements stay themselves. When `restrictToInstances` is
+     * set, non-instance elements resolve to nothing (used by `-/>`).
+     */
+    private resolveDeploymentEndpoints(node: any, ref: any, isThis: boolean, env: string, restrictToInstances: boolean): any[] {
+        if (isThis || !ref) {
+            const context = this.resolveContextElement(node);
+            return context ? [context] : [];
+        }
+        const element = this.el(ref);
+        if (isSoftwareSystemInstance(element) || isContainerInstance(element)) {
+            return [element];
+        }
+        if (isSoftwareSystem(element)) {
+            return this.elements.filter(candidate => isSoftwareSystemInstance(candidate)
+                && candidate.softwareSystem.ref === element && this.getEnvironment(candidate) === env);
+        }
+        if (isContainer(element)) {
+            return this.elements.filter(candidate => isContainerInstance(candidate)
+                && candidate.container.ref === element && this.getEnvironment(candidate) === env);
+        }
+        return restrictToInstances ? [] : [element];
+    }
+
+    /** Static element behind a deployment endpoint: an instance unwraps to its software system/container. */
+    private resolveStaticElement(node: any, ref: any, isThis: boolean): any | undefined {
+        if (isThis || !ref) {
+            return this.resolveContextElement(node);
+        }
+        const element = this.el(ref);
+        if (isSoftwareSystemInstance(element)) return this.el(element.softwareSystem.ref);
+        if (isContainerInstance(element)) return this.el(element.container.ref);
+        return element;
+    }
+
+    /** Finds the static relationship a `-/>` directive removes, for body inheritance. */
+    private findInheritedRelationship(noRelationship: any): Relationship | undefined {
+        const source = this.resolveStaticElement(noRelationship, noRelationship.source?.ref, noRelationship.sourceThis);
+        const target = this.resolveStaticElement(noRelationship, noRelationship.target?.ref, noRelationship.targetThis);
+        if (!source || !target) return undefined;
+        const description = noRelationship.description !== undefined ? this.substitute(noRelationship.description) : undefined;
+        return this.relationships.find(rel =>
+            isRelationship(rel)
+            && this.el(this.resolveSource(rel)) === source
+            && this.el(this.resolveTarget(rel)) === target
+            && (description === undefined || this.description(rel) === description));
+    }
+
+    /**
+     * Stores an explicit relationship. Relationships declared directly in a
+     * deployment environment/node (or a `-/>` body) are not emitted as-is: they are
+     * projected onto the instances of that environment.
+     */
+    private addRelationship(rel: any, noRelationship?: any): void {
+        const context = noRelationship ?? this.findDeploymentContext(rel);
+        if (context === undefined) {
+            this.relationships.push(rel);
+        } else {
+            this.deploymentContextRelationships.push({ rel, noRelationship: context === true ? undefined : context });
+        }
+    }
+
+    /** Returns the enclosing `-/>` directive, `true` for a deployment env/node, or undefined. */
+    private findDeploymentContext(rel: any): any | undefined {
+        let current = rel.$container;
+        while (current) {
+            if (isNoRelationship(current)) return current;
+            if (isDeploymentEnvironment(current) || isDeploymentNode(current)) return true;
+            if (isGroup(current)) {
+                current = current.$container;
+                continue;
+            }
+            return undefined;
+        }
+        return undefined;
+    }
+
+    /**
+     * Expands deployment-context relationships into one relationship per
+     * (source instance, target instance) pair. `-/>` body relationships inherit
+     * description/technology from the static relationship the directive removed.
+     */
+    private expandDeploymentContextRelationships(): void {
+        for (const { rel, noRelationship } of this.deploymentContextRelationships) {
+            const env = noRelationship ? this.getEnvironment(noRelationship as any) : this.getEnvironment(rel as any);
+            if (!env) {
+                this.relationships.push(rel);
+                continue;
+            }
+            const inherited = noRelationship ? this.noRelationshipInheritance.get(noRelationship) : undefined;
+            const sources = this.resolveDeploymentEndpoints(rel, rel.source?.ref, rel.sourceThis, env, false);
+            const targets = this.resolveDeploymentEndpoints(rel, rel.target?.ref, rel.targetThis, env, false);
+            for (const source of sources) {
+                for (const target of targets) {
+                    this.relationships.push(this.createProjectedRelationship(rel, source, target, inherited));
+                }
+            }
+        }
+    }
+
+    /** Builds a synthetic relationship whose endpoints are concrete instances. */
+    private createProjectedRelationship(rel: any, source: any, target: any, inherited: Relationship | undefined): Relationship {
+        const relationship: any = {
+            $type: 'Relationship',
+            $cstNode: rel.$cstNode,
+            source: { ref: source, $refText: '' },
+            target: { ref: target, $refText: '' },
+            description: rel.description ?? inherited?.description,
+            technology: rel.technology ?? inherited?.technology,
+            technologyParts: rel.technologyParts,
+            tags: rel.tags,
+            url: rel.url,
+            properties: rel.properties,
+            perspectives: rel.perspectives
+        };
+        const doc = AstUtils.getDocument(rel);
+        if (doc) relationship.$document = doc;
+        return relationship as unknown as Relationship;
+    }
+
+    /** Whether a projected relationship between two instances is suppressed by a `-/>` directive. */
+    private isRelationshipSuppressed(env: string | undefined, source: any, target: any, description: string | undefined): boolean {
+        if (!env) return false;
+        const sourceId = this.getId(source);
+        const targetId = this.getId(target);
+        return this.noRelationshipSuppressions.some(suppression =>
+            suppression.env === env
+            && suppression.sourceIds.has(sourceId)
+            && suppression.targetIds.has(targetId)
+            && (suppression.description === undefined || suppression.description === description));
+    }
+
+    /** Pushes a projected (linked) relationship unless a `-/>` directive removes it. */
+    private addProjectedRelationship(list: ImpliedRelationship[], source: any, target: any, linked: Relationship): void {
+        if (this.isRelationshipSuppressed(this.getEnvironment(source), source, target, this.description(linked))) {
+            return;
+        }
+        list.push(this.createRelationshipEx(source, target, linked));
+    }
+
+    /**
+     * Drops duplicate projected instance relationships. The same instance pair can
+     * be reached from more than one parent relationship (e.g. a direct container
+     * relationship and its implied software system counterpart), which otherwise
+     * yields several entries with the same generated id.
+     */
+    private dedupeRelationships(list: ImpliedRelationship[]): ImpliedRelationship[] {
+        const seen = new Set<string>();
+        const result: ImpliedRelationship[] = [];
+        for (const rel of list) {
+            const id = this.getId(rel.relationship);
+            if (seen.has(id)) continue;
+            seen.add(id);
+            result.push(rel);
+        }
+        return result;
+    }
 
     /**
      * Returns every direct and implied relationship of the model, deduplicated by
@@ -1952,7 +2197,7 @@ class JsonGenerator {
                             if (this.shouldGenerateImplied(rel.relationship)) {
                                 if (rel.target === this.el(el.softwareSystem.ref) && elementEnv === softwareSystemInstanceEnv
                                     && this.hasCommonDeploymentGroup(softwareSystemInstance, el)) {
-                                    softwareSystemInstanceRels.push(this.createRelationshipEx(softwareSystemInstance, el, rel.relationship));
+                                    this.addProjectedRelationship(softwareSystemInstanceRels, softwareSystemInstance, el, rel.relationship);
                                 }
                             }
                         }
@@ -1962,7 +2207,7 @@ class JsonGenerator {
                             if (this.shouldGenerateImplied(rel.relationship)) {
                                 if (rel.target === this.el(el.container.ref) && elementEnv === softwareSystemInstanceEnv
                                     && this.hasCommonDeploymentGroup(softwareSystemInstance, el)) {
-                                    softwareSystemInstanceRels.push(this.createRelationshipEx(softwareSystemInstance, el, rel.relationship));
+                                    this.addProjectedRelationship(softwareSystemInstanceRels, softwareSystemInstance, el, rel.relationship);
                                 }
                             }
                         }
@@ -1971,7 +2216,7 @@ class JsonGenerator {
             }
         }
 
-        return softwareSystemInstanceRels;
+        return this.dedupeRelationships(softwareSystemInstanceRels);
     }
 
     /**
@@ -2033,7 +2278,7 @@ class JsonGenerator {
                         if(this.shouldGenerateImplied(relContainer.relationship)) {
                             if(relContainer.target === this.el(el.softwareSystem.ref) && env === this.getEnvironment(el)
                                 && this.hasCommonDeploymentGroup(containerInstance, el)) {
-                                rels.push(this.createRelationshipEx(containerInstance, el, relContainer.relationship));
+                                this.addProjectedRelationship(rels, containerInstance, el, relContainer.relationship);
                             }
                         }
                     }
@@ -2044,7 +2289,7 @@ class JsonGenerator {
                                 const shouldProject = (relContainer.target === this.el(el.container.ref)) ||
                                     (el.container.ref && this.resolveConatinerParent(el.container.ref) === relContainer.target);
                                 if (shouldProject && this.hasCommonDeploymentGroup(containerInstance, el)) {
-                                    rels.push(this.createRelationshipEx(containerInstance, el, relContainer.relationship));
+                                    this.addProjectedRelationship(rels, containerInstance, el, relContainer.relationship);
                                 }
                             }
                         }
@@ -2053,7 +2298,7 @@ class JsonGenerator {
             });
         }
 
-        return rels;
+        return this.dedupeRelationships(rels);
     }
     
     /**
@@ -2308,7 +2553,7 @@ class JsonGenerator {
             ...(node.infrastructureNodes || []),
             ...(node.softwareSystemInstances || []),
             ...(node.containerInstances || []),
-            ...(node.genericInstances || []),
+            ...(node.genericInstances || []).map((inst: any) => this.el(inst)),
             // Nested archetype instances, exposed as their materialised element.
             ...(node.archetypeInstances || []).map((inst: any) => this.el(inst)),
         ];

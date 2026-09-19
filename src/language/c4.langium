@@ -1191,13 +1191,13 @@ ElementExtension:
 ElementsDirective:
     _ELEMENTS_KW expression=ViewExpression '{'
         (
-            NL+ tagsProps+=TagProperty
+            NL+ descriptionProps+=DescriptionProperty
+            | NL+ tagsProps+=TagProperty
             | NL+ urlProps+=UrlProperty
             | NL+ properties+=PropertiesBlock
             | NL+ perspectivesBlocks+=PerspectivesBlock
             | NL+ techProps+=TechnologyProperty
             | NL+ relationships+=(Relationship | ImplicitRelationship)
-            | NL+ includes+=Include
         )*
     NL+ '}';
 

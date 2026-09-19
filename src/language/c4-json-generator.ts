@@ -138,6 +138,8 @@ class JsonGenerator {
     private readonly materialized: Map<any, any> = new Map();
     /** Overlay modifications applied by !elements directives: element ID → modifications */
     private readonly elementOverlays: Map<string, {
+        description?: string;
+        technology?: string;
         tags?: string[];
         url?: string;
         properties?: Record<string, string>;
@@ -1301,7 +1303,8 @@ class JsonGenerator {
 
     /** Returns the description text for a node, with constant substitution applied. */
     private description(node: any) {
-        const own = node?.description ?? node?.descriptionProps?.[0]?.value;
+        const overlay = this.elementOverlays.get(this.getId(node))?.description;
+        const own = overlay ?? node?.description ?? node?.descriptionProps?.[0]?.value;
         const value = own ?? this.archetypeDefaults(node).description;
         return this.substitute(value);
     }
@@ -1313,7 +1316,8 @@ class JsonGenerator {
      */
     private technology(node: any) {
         const parts: string[] = [];
-        const base = node?.technology ?? node?.technologyProps?.[0]?.value ?? this.archetypeDefaults(node).technology;
+        const overlay = this.elementOverlays.get(this.getId(node))?.technology;
+        const base = overlay ?? node?.technology ?? node?.technologyProps?.[0]?.value ?? this.archetypeDefaults(node).technology;
         if (base !== undefined && base !== null && base !== '') parts.push(base);
         if (Array.isArray(node?.technologyParts)) {
             for (const p of node.technologyParts) {
@@ -4246,6 +4250,16 @@ class JsonGenerator {
                 this.elementOverlays.set(elId, overlay);
             }
 
+            // Apply description (overwrites the element description)
+            if (extension.descriptionProps && extension.descriptionProps.length > 0) {
+                overlay.description = C4Utils.stripQuotes(extension.descriptionProps[0].value) || overlay.description;
+            }
+
+            // Apply technology (overwrites the element technology)
+            if (extension.techProps && extension.techProps.length > 0) {
+                overlay.technology = C4Utils.stripQuotes(extension.techProps[0].value) || overlay.technology;
+            }
+
             // Apply tags (merge with existing)
             if (extension.tagsProps && extension.tagsProps.length > 0) {
                 const newTags: string[] = [];
@@ -4303,6 +4317,82 @@ class JsonGenerator {
                 overlay.perspectives = extension.perspectivesBlocks;
             }
         }
+
+        // Relationships declared inside !elements are created for every matched
+        // source/target combination; `this` stands for the matched elements.
+        if (extension.relationships && extension.relationships.length > 0) {
+            for (const declared of extension.relationships) {
+                const sources = this.elementsDirectiveMembers(declared, 'source', matched);
+                const targets = this.elementsDirectiveMembers(declared, 'target', matched);
+                for (const source of sources) {
+                    for (const target of targets) {
+                        if (source === target) continue;
+                        const synthetic = this.createElementDirectiveRelationship(declared, source, target);
+                        this.relationships.push(synthetic);
+                        const key = this.getId(source);
+                        const list = this.relationshipsBySource.get(key);
+                        if (list) list.push(synthetic); else this.relationshipsBySource.set(key, [synthetic]);
+                    }
+                }
+            }
+            this.allRelationshipsCache = undefined;
+        }
+    }
+
+    /**
+     * Matched elements for one side of a relationship declared inside !elements.
+     * An implicit source and an endpoint written as `this` (whose reference stays
+     * unresolved) both stand for every matched element.
+     */
+    private elementsDirectiveMembers(relationship: any, side: 'source' | 'target', matched: NamedElement[]): NamedElement[] {
+        if (isImplicitRelationship(relationship)) {
+            if (side === 'source') return matched;
+            return this.isThisEndpoint(relationship.target) ? matched : this.resolveDeclaredMember(relationship.target);
+        }
+        const reference = side === 'source' ? relationship.source : relationship.target;
+        const explicitThis = side === 'source' ? relationship.sourceThis : relationship.targetThis;
+        return (explicitThis || this.isThisEndpoint(reference)) ? matched : this.resolveDeclaredMember(reference);
+    }
+
+    /** True when an endpoint reference is absent, i.e. the endpoint is `this`. */
+    private isThisEndpoint(reference: any): boolean {
+        return !reference?.ref;
+    }
+
+    /** Resolves a relationship endpoint reference to a single element, if any. */
+    private resolveDeclaredMember(reference: any): NamedElement[] {
+        const ref = reference?.ref;
+        return ref ? [this.el(ref)] : [];
+    }
+
+    /**
+     * Builds a relationship node for one source/target pair declared inside
+     * !elements. The declared node's metadata (description, technology, tags,
+     * url, properties, perspectives, archetype) is carried over.
+     */
+    private createElementDirectiveRelationship(declared: any, source: NamedElement, target: NamedElement): Relationship {
+        const synthetic: any = {
+            $type: 'Relationship',
+            $cstNode: declared.$cstNode,
+            $container: declared.$container,
+            source: { ref: source, $refText: '' },
+            target: { ref: target, $refText: '' },
+            sourceThis: false,
+            targetThis: false,
+            description: declared.description,
+            technology: declared.technology,
+            technologyParts: declared.technologyParts,
+            archetype: declared.archetype,
+            tagsProps: declared.tagsProps ?? [],
+            urlProps: declared.urlProps ?? [],
+            properties: declared.properties ?? [],
+            perspectivesBlocks: declared.perspectivesBlocks ?? [],
+            includes: [],
+            scripts: [],
+        };
+        const doc = AstUtils.getDocument(declared);
+        if (doc) synthetic.$document = doc;
+        return synthetic as Relationship;
     }
 
     /**

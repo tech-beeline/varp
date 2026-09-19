@@ -633,7 +633,10 @@ export class C4Validator {
     /** Warns when a views block declares both theme and themes */
     checkViewsBlock(viewsBlock: ViewsBlock, accept: ValidationAcceptor): void {
         if (viewsBlock.themeProps.length > 0 && viewsBlock.themesProps.length > 0) {
-            accept('warning', "It's recommended to use either 'theme' or 'themes', but not both.", { node: viewsBlock, keyword: 'views' });
+            const message = "It's recommended to use either 'theme' or 'themes', but not both.";
+            // Anchor each warning to the declaration it concerns, not to the whole block.
+            accept('warning', message, { node: viewsBlock.themeProps[0] });
+            accept('warning', message, { node: viewsBlock.themesProps[0] });
         }
     }
 

@@ -36,14 +36,6 @@
                                 "destinationId": "container_5b128c0a",
                                 "description": "Reads/Writes",
                                 "tags": "Relationship"
-                            },
-                            {
-                                "id": "relationship_27423e57",
-                                "sourceId": "softwaresystem_4e066da6",
-                                "destinationId": "container_5b128c0a",
-                                "description": "Reads/Writes",
-                                "tags": "Relationship",
-                                "linkedRelationshipId": "relationship_1d9fa098"
                             }
                         ]
                     },
@@ -51,6 +43,16 @@
                         "id": "container_5b128c0a",
                         "name": "Database",
                         "tags": "Element,Container"
+                    }
+                ],
+                "relationships": [
+                    {
+                        "id": "relationship_27423e57",
+                        "sourceId": "softwaresystem_4e066da6",
+                        "destinationId": "container_5b128c0a",
+                        "description": "Reads/Writes",
+                        "tags": "Relationship",
+                        "linkedRelationshipId": "relationship_1d9fa098"
                     }
                 ]
             }

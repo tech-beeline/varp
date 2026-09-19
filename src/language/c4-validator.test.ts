@@ -104,6 +104,29 @@ workspace {
             "It's recommended to use either 'theme' or 'themes', but not both."
         );
     });
+
+    it('anchors the theme/themes warning to the declarations, not the whole views block', async () => {
+        const doc = await build(`
+workspace {
+    views {
+        theme "https://example.com/theme.json"
+        themes "https://example.com/theme.json"
+        systemLandscape "land" {
+            include *
+        }
+    }
+}
+`);
+
+        const warnings = (doc.diagnostics ?? []).filter(d => d.severity === WARNING_SEVERITY
+            && String(d.message).includes("either 'theme' or 'themes'"));
+        expect(warnings).toHaveLength(2);
+        // One warning on the `theme` line and one on the `themes` line.
+        expect(warnings.map(d => d.range.start.line).sort((a, b) => a - b)).toEqual([3, 4]);
+        for (const warning of warnings) {
+            expect(warning.range.start.line).toBe(warning.range.end.line);
+        }
+    });
 });
 
 describe('view key uniqueness', () => {

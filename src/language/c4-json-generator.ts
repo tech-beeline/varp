@@ -944,7 +944,7 @@ class JsonGenerator {
             for (const item of items) {
                 if (isGroup(item)) {
                     // Groups add another recursion level with an extended group stack
-                    this.collectLocal(item, [...groupStack, C4Utils.stripQuotes(item.name) || ""], visitedDocs);
+                    this.collectLocal(item, [...groupStack, this.substitute(item.name) || ""], visitedDocs);
                 }
                 else if (isRelationship(item)) {
                     this.relationships.push(item);
@@ -1341,7 +1341,7 @@ class JsonGenerator {
                     name: this.substitute(p.name),
                     group: this.extractGroup(p),
                     tags: this.extractTags(p, 'Element', 'Person'),
-                    relationships: this.onlyIfNotEmpty(this.extractRelationshipsForPerson(p).map(el => this.relationshipToJson(el)))
+                    relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(p).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(result, p);
                 return result;
@@ -1377,6 +1377,73 @@ class JsonGenerator {
                 this.relationshipsBySource.set(key, [rel]);
             }
         }
+    }
+
+    /** Cached result of collectAllRelationships(). */
+    private allRelationshipsCache?: ImpliedRelationship[];
+
+    /**
+     * Returns every direct and implied relationship of the model, deduplicated by
+     * source/destination pair. Direct relationships are collected first, so an
+     * implied relationship is only kept when no relationship already exists
+     * between the same two elements.
+     */
+    private collectAllRelationships(): ImpliedRelationship[] {
+        if (this.allRelationshipsCache) return this.allRelationshipsCache;
+
+        const lists = this.elements.map(el => this.extractRelationshipsForElement(el));
+        const ordered: ImpliedRelationship[] = [];
+        const pairs = new Set<string>();
+        const directKeys = new Set<string>();
+
+        for (const list of lists) {
+            for (const rel of list) {
+                if (rel.linked !== undefined) continue;
+                const pair = this.relationshipPairKey(rel);
+                const key = `${pair}|${rel.relationship.$cstNode?.offset ?? ''}|${this.description(rel.relationship)}`;
+                if (directKeys.has(key)) continue;
+                directKeys.add(key);
+                pairs.add(pair);
+                ordered.push(rel);
+            }
+        }
+        for (const list of lists) {
+            for (const rel of list) {
+                if (rel.linked === undefined) continue;
+                const pair = this.relationshipPairKey(rel);
+                if (pairs.has(pair)) continue;
+                pairs.add(pair);
+                ordered.push(rel);
+            }
+        }
+
+        this.allRelationshipsCache = ordered;
+        return ordered;
+    }
+
+    /** Source/destination pair key used to deduplicate relationships. */
+    private relationshipPairKey(rel: ImpliedRelationship): string {
+        return `${this.getId(rel.source)}|${this.getId(rel.target)}`;
+    }
+
+    /** Direct and implied relationships whose source is the given element. */
+    private relationshipsOwnedBy(element: NamedElement): ImpliedRelationship[] {
+        const id = this.getId(element);
+        return this.collectAllRelationships().filter(rel => this.getId(rel.source) === id);
+    }
+
+    /** Extracts the relationships of an element, dispatching on its concrete type. */
+    private extractRelationshipsForElement(el: NamedElement): ImpliedRelationship[] {
+        if (isPerson(el)) return this.extractRelationshipsForPerson(el);
+        if (isSoftwareSystem(el)) return this.extractRelationshipsForSoftwareSystem(el);
+        if (isContainer(el)) return this.extractRelationshipsForContainer(el);
+        if (isComponent(el)) return this.extractRelationshipsForComponent(el);
+        if (isCustomElement(el)) return this.extractRelationshipsForCustom(el);
+        if (isDeploymentNode(el)) return this.extractRelationshipsForDeploymentNode(el);
+        if (isInfrastructureNode(el)) return this.extractRelationshipsForInfrastructureNode(el);
+        if (isSoftwareSystemInstance(el)) return this.extractRelationshipsForSoftwareSystemInstance(el);
+        if (isContainerInstance(el)) return this.extractRelationshipsForContainerInstance(el);
+        return [];
     }
 
     /**
@@ -2269,12 +2336,12 @@ class JsonGenerator {
                     technology: this.technology(comp),
                     group: compGroup || undefined,
                     tags: this.extractTags(comp, 'Element', 'Component'),
-                    relationships: this.onlyIfNotEmpty(this.extractRelationshipsForComponent(comp).map(el => this.relationshipToJson(el)))
+                    relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(comp).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(compResult, comp);
                 return compResult;
             })),
-            relationships: this.onlyIfNotEmpty(this.extractRelationshipsForContainer(container).map(el => this.relationshipToJson(el)))
+            relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(container).map(el => this.relationshipToJson(el)))
         };
         this.applyElementOverlay(result, container);
         this.applyElementExtensions(result, container);
@@ -2289,7 +2356,7 @@ class JsonGenerator {
                 const result: any = {
                     id: this.getId(ce),
                     name: this.substitute(ce.name),
-                    relationships: this.onlyIfNotEmpty(this.extractRelationshipsForCustom(ce).map(el => this.relationshipToJson(el))),
+                    relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(ce).map(el => this.relationshipToJson(el))),
                     tags: this.extractTags(ce, 'Element')
                 };
                 this.applyElementOverlay(result, ce);
@@ -2320,7 +2387,7 @@ class JsonGenerator {
                     group: this.extractGroup(s),
                     tags: this.extractTags(s, 'Element', 'Software System'),
                     containers: this.onlyIfNotEmpty(this.collectNested(s, isContainer)?.map(c => this.transformContainer(c))),
-                    relationships: this.onlyIfNotEmpty(this.extractRelationshipsForSoftwareSystem(s).map(el => this.relationshipToJson(el)))
+                    relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(s).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(result, s);
                 this.applyElementExtensions(result, s);
@@ -4112,19 +4179,8 @@ class JsonGenerator {
      */
     private resolveElementsFromExpression(expression: ViewExpression): NamedElement[] {
         const result = new Set<NamedElement>();
-        const allRels = new Set<ImpliedRelationship>();
         // Build a full relationship set for coupling resolution
-        this.elements.forEach(el => {
-            if (isSoftwareSystem(el)) this.extractRelationshipsForSoftwareSystem(el).forEach(r => allRels.add(r));
-            else if (isPerson(el)) this.extractRelationshipsForPerson(el).forEach(r => allRels.add(r));
-            else if (isComponent(el)) this.extractRelationshipsForComponent(el).forEach(r => allRels.add(r));
-            else if (isContainer(el)) this.extractRelationshipsForContainer(el).forEach(r => allRels.add(r));
-            else if (isCustomElement(el)) this.extractRelationshipsForCustom(el).forEach(r => allRels.add(r));
-            else if (isDeploymentNode(el)) this.extractRelationshipsForDeploymentNode(el).forEach(r => allRels.add(r));
-            else if (isInfrastructureNode(el)) this.extractRelationshipsForInfrastructureNode(el).forEach(r => allRels.add(r));
-            else if (isSoftwareSystemInstance(el)) this.extractRelationshipsForSoftwareSystemInstance(el).forEach(r => allRels.add(r));
-            else if (isContainerInstance(el)) this.extractRelationshipsForContainerInstance(el).forEach(r => allRels.add(r));
-        });
+        const allRels = new Set<ImpliedRelationship>(this.collectAllRelationships());
 
         // Collect all elements as pass-through (no scope filtering)
         const allElements = new Set<RelationshipMember>();
@@ -4154,21 +4210,12 @@ class JsonGenerator {
      */
     private resolveRelationshipsFromExpression(expression: ViewExpression): Relationship[] {
         const result = new Set<Relationship>();
-        const allRels = new Set<ImpliedRelationship>();
+        const allRels = new Set<ImpliedRelationship>(this.collectAllRelationships());
         const allElements = new Set<RelationshipMember>();
 
         // Build full relationship and element sets
         this.elements.forEach(el => {
             if (isRelationshipMember(el)) allElements.add(el);
-            if (isSoftwareSystem(el)) this.extractRelationshipsForSoftwareSystem(el).forEach(r => allRels.add(r));
-            else if (isPerson(el)) this.extractRelationshipsForPerson(el).forEach(r => allRels.add(r));
-            else if (isComponent(el)) this.extractRelationshipsForComponent(el).forEach(r => allRels.add(r));
-            else if (isContainer(el)) this.extractRelationshipsForContainer(el).forEach(r => allRels.add(r));
-            else if (isCustomElement(el)) this.extractRelationshipsForCustom(el).forEach(r => allRels.add(r));
-            else if (isDeploymentNode(el)) this.extractRelationshipsForDeploymentNode(el).forEach(r => allRels.add(r));
-            else if (isInfrastructureNode(el)) this.extractRelationshipsForInfrastructureNode(el).forEach(r => allRels.add(r));
-            else if (isSoftwareSystemInstance(el)) this.extractRelationshipsForSoftwareSystemInstance(el).forEach(r => allRels.add(r));
-            else if (isContainerInstance(el)) this.extractRelationshipsForContainerInstance(el).forEach(r => allRels.add(r));
         });
 
         const isAllowed = (el: NamedElement | undefined): el is RelationshipMember =>
@@ -4549,7 +4596,7 @@ class JsonGenerator {
                         technology: this.technology(c),
                         group: this.extractGroup(c),
                         tags: this.extractTags(c, 'Element', 'Component'),
-                        relationships: this.onlyIfNotEmpty(this.extractRelationshipsForComponent(c).map(el => this.relationshipToJson(el)))
+                        relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(c).map(el => this.relationshipToJson(el)))
                     };
                     this.applyElementOverlay(json, c);
                     return json;
@@ -4852,13 +4899,7 @@ class JsonGenerator {
     ) {
         // collect all implied relationships for all elements in the model
         const relationshipsAllowed = new Set<ImpliedRelationship>();
-        this.elements.forEach(el => {
-            if(isSoftwareSystem(el)) this.extractRelationshipsForSoftwareSystem(el).forEach(rel => relationshipsAllowed.add(rel));
-            else if(isPerson(el)) this.extractRelationshipsForPerson(el).forEach(rel => relationshipsAllowed.add(rel));
-            else if(isComponent(el)) this.extractRelationshipsForComponent(el).forEach(rel => relationshipsAllowed.add(rel));
-            else if(isContainer(el)) this.extractRelationshipsForContainer(el).forEach(rel => relationshipsAllowed.add(rel));
-            else if(isCustomElement(el)) this.extractRelationshipsForCustom(el).forEach(rel => relationshipsAllowed.add(rel));
-        });
+        this.collectAllRelationships().forEach(rel => relationshipsAllowed.add(rel));
 
         // scope guard: only Containers (belonging to scope), SoftwareSystems, Persons, and CustomElements
         // the scope SoftwareSystem itself is excluded (it's rendered as a boundary cluster instead)
@@ -5027,14 +5068,7 @@ class JsonGenerator {
         // collect include/exclude operations sorted by CST offset (declaration order)
         const orderedOps = this.getIncludeExclude(view);
 
-        const rels = new Set<ImpliedRelationship>();
-        this.elements.forEach(el => {
-            if(isSoftwareSystem(el)) this.extractRelationshipsForSoftwareSystem(el).forEach(rel => rels.add(rel));
-            else if(isPerson(el)) this.extractRelationshipsForPerson(el).forEach(rel => rels.add(rel));
-            else if(isComponent(el)) this.extractRelationshipsForComponent(el).forEach(rel => rels.add(rel));
-            else if(isContainer(el)) this.extractRelationshipsForContainer(el).forEach(rel => rels.add(rel));
-            else if(isCustomElement(el)) this.extractRelationshipsForCustom(el).forEach(rel => rels.add(rel));
-        });
+        const rels = new Set<ImpliedRelationship>(this.collectAllRelationships());
 
         // scope guard: only top-level elements (SoftwareSystem, Person, CustomElement) are allowed on System Context
         const isInScope = (element: NamedElement | undefined) : element is (SoftwareSystem | Person | CustomElement) => {
@@ -5183,13 +5217,7 @@ class JsonGenerator {
         relationshipsAtView: Set<Relationship>
     ) {
         const relationshipsAllowed = new Set<ImpliedRelationship>();
-        this.elements.forEach(el => {
-            if(isSoftwareSystem(el)) this.extractRelationshipsForSoftwareSystem(el).forEach(rel => relationshipsAllowed.add(rel));
-            else if(isPerson(el)) this.extractRelationshipsForPerson(el).forEach(rel => relationshipsAllowed.add(rel));
-            else if(isComponent(el)) this.extractRelationshipsForComponent(el).forEach(rel => relationshipsAllowed.add(rel));
-            else if(isContainer(el)) this.extractRelationshipsForContainer(el).forEach(rel => relationshipsAllowed.add(rel));
-            else if(isCustomElement(el)) this.extractRelationshipsForCustom(el).forEach(rel => relationshipsAllowed.add(rel));
-        });
+        this.collectAllRelationships().forEach(rel => relationshipsAllowed.add(rel));
 
         // scope guard: only top-level elements (SoftwareSystem, Person, CustomElement) are allowed on System Landscape
         const isAllowed = (element: NamedElement | undefined) : element is (SoftwareSystem | Person | CustomElement) => isSoftwareSystem(element) || isPerson(element) || isCustomElement(element);

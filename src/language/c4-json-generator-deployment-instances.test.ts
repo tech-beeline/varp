@@ -215,7 +215,8 @@ describe('reference no-relationship fixture', () => {
             expect(toLb?.technology).toBe('JSON/HTTPS');
             const fromLb = relationships.find(r => r.sourceId === toLb?.destinationId && r.destinationId === backend.id);
             expect(fromLb?.description).toBe('Forwards API requests to');
-            expect(fromLb?.technology).toBe('');
+            // `""` technology is omitted, matching the reference JSON exporter.
+            expect(fromLb?.technology).toBeUndefined();
         }
     });
 });

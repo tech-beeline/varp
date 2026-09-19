@@ -127,6 +127,8 @@ class JsonGenerator {
     private readonly relationships: Relationship[] = [];
     /** Index of relationships by resolved source element id (built once per generate call). */
     private readonly relationshipsBySource: Map<string, Relationship[]> = new Map();
+    /** Explicit relationships indexed by their DSL identifier (`r = a -> b`). */
+    private readonly relationshipsByIdentifier: Map<string, Relationship> = new Map();
     /** NoRelationship (`-/>`) directives collected from deployment environments. */
     private readonly noRelationshipNodes: any[] = [];
     /** Relationships declared directly in a deployment environment/node (or a `-/>` body) before instance projection. */
@@ -1008,6 +1010,12 @@ class JsonGenerator {
                     const element = this.materializeArchetypeInstance(item)
                         ?? this.materializeGenericInstance(item)
                         ?? item;
+                    // A `group` archetype instance behaves like a Group: it is not an
+                    // element itself, it just contributes a group level for its children.
+                    if (isGroup(element)) {
+                        this.collectLocal(element, [...groupStack, this.substitute(element.name) || ""], visitedDocs);
+                        continue;
+                    }
                     // Store group path in the map instead of mutating AST
                     if (groupStack.length > 0) {
                         this.groupPathMap.set(this.getId(element), groupStack.join(this.groupSeparator));
@@ -1396,6 +1404,10 @@ class JsonGenerator {
                 const m = arch.metadataProps?.[0]?.value;
                 if (m !== undefined && m !== null && m !== '') metadata = m;
             }
+        }
+        // Tags are collected from the outermost archetype inward, matching the
+        // reference order (parent archetype tags before child archetype tags).
+        for (const arch of [...chain].reverse()) {
             for (const tp of arch.tagsProps ?? []) {
                 for (const raw of tp.values ?? []) {
                     for (const tag of this.parseDslTagValue(String(raw))) {
@@ -1507,7 +1519,10 @@ class JsonGenerator {
                 if (s) parts.push(s);
             }
         }
-        return this.substitute(parts.length > 0 ? parts.join(',') : undefined);
+        // Quoted segments (`""`, `"TCP"`) lose their quotes in substitute(); an
+        // empty result means no technology was declared.
+        const joined = parts.length > 0 ? this.substitute(parts.join(',')) : undefined;
+        return joined ? joined : undefined;
     }
 
     /** Helper to create a minimal element JSON stub with id and default position. */
@@ -1527,6 +1542,7 @@ class JsonGenerator {
                     id: this.getId(p),
                     name: this.substitute(p.name),
                     group: this.extractGroup(p),
+                    description: this.description(p),
                     tags: this.extractTags(p, 'Element', 'Person'),
                     relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(p).map(el => this.relationshipToJson(el)))
                 };
@@ -1657,6 +1673,11 @@ class JsonGenerator {
      * projected onto the instances of that environment.
      */
     private addRelationship(rel: any, noRelationship?: any): void {
+        // `r = a -> b` gives the relationship a DSL identifier that view
+        // expressions can reference (`include r` / `exclude r`).
+        if (typeof rel?.id === 'string' && rel.id.length > 0) {
+            this.relationshipsByIdentifier.set(C4Utils.stripQuotes(rel.id), rel);
+        }
         const context = noRelationship ?? this.findDeploymentContext(rel);
         if (context === undefined) {
             this.relationships.push(rel);
@@ -2649,7 +2670,7 @@ class JsonGenerator {
             const stripped = C4Utils.stripQuotes(extraTag2);
             if (stripped) collectedTags.add(stripped.trim());
         }
-        // 2.5. Tags inherited from the archetype chain (nearest archetype first).
+        // 2.5. Tags inherited from the archetype chain (outermost archetype first).
         for (const inherited of this.archetypeDefaults(node).tags) {
             collectedTags.add(inherited);
         }
@@ -4412,13 +4433,32 @@ class JsonGenerator {
         if (isSingleElementExpression(e)) {
             // Normalise to the materialised element before matching.
             const ref = this.resolveExpressionReference(e.element);
-            if (isGroup(ref)) {
+            if (isRelationship(ref)) {
+                // `include r` / `exclude r` where `r = a -> b` is a relationship
+                // identifier: it resolves the relationship and every implied
+                // relationship linked to it (ExpressionParser.parseIdentifier
+                // in the reference CLI).
+                res.add(ref);
+                for (const wrapper of this.collectAllRelationships()) {
+                    if (wrapper.linked === ref) res.add(wrapper.relationship);
+                }
+            } else if (isGroup(ref)) {
                 // Groups expand to their leaf-level named elements
                 const leafElements = new Set<NamedElement>();
                 this.collectLeafElements(ref, leafElements);
                 leafElements.forEach(el => this.addLeafElementWithInstanceFallback(el, res, isAllowed));
-            } else {
+            } else if (ref) {
                 this.addLeafElementWithInstanceFallback(ref as NamedElement, res, isAllowed);
+            } else {
+                // Unlinked identifier: fall back to the relationship index.
+                const text = e.element?.$refText;
+                const relationship = text ? this.relationshipsByIdentifier.get(C4Utils.stripQuotes(text)) : undefined;
+                if (relationship) {
+                    res.add(relationship);
+                    for (const wrapper of this.collectAllRelationships()) {
+                        if (wrapper.linked === relationship) res.add(wrapper.relationship);
+                    }
+                }
             }
         }
         // BinaryExpression: expr1 && expr2 (intersection) or expr1 || expr2 (union)
@@ -6225,13 +6265,15 @@ class JsonGenerator {
     }
 
     /**
-     * Removes duplicate relationships from a set. For pairs sharing the same source and target,
-     * only the relationship with the lowest CST offset (declared earliest in source code) is kept.
-     * Uses a map keyed by "sourceId|targetId" to track the best candidate per pair.
+     * Removes duplicate relationships from a set. For pairs sharing the same source,
+     * target and description, only the relationship with the lowest CST offset
+     * (declared earliest in source code) is kept; the model parser rejects exact
+     * duplicates anyway. Relationships between the same pair with different
+     * descriptions are distinct in the reference and are all kept.
      * @param relationshipsSet The set of relationships to filter for duplicates
      */
     private filterDuplicateRelationships(relationshipsSet: Set<Relationship>): void {
-        // Map: "sourceId|targetId" -> relationship with the smallest offset
+        // Map: "sourceId|targetId|description" -> relationship with the smallest offset
         const bestPerPair = new Map<string, Relationship>();
 
         for (const rel of relationshipsSet) {
@@ -6241,7 +6283,7 @@ class JsonGenerator {
 
             const sourceId = this.getId(source);
             const targetId = this.getId(target);
-            const key = `${sourceId}|${targetId}`;
+            const key = `${sourceId}|${targetId}|${this.description(rel)}`;
 
             const existing = bestPerPair.get(key);
             if (!existing) {

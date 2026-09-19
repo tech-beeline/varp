@@ -1,0 +1,123 @@
+{
+  "configuration" : { },
+  "description" : "This is an example of Filtered views",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "people" : [ {
+      "description" : "A description of the user.",
+      "id" : "1",
+      "name" : "Customer",
+      "properties" : {
+        "structurizr.dsl.identifier" : "user"
+      },
+      "relationships" : [ {
+        "description" : "Uses for tasks 1 and 2",
+        "destinationId" : "2",
+        "id" : "3",
+        "sourceId" : "1",
+        "tags" : "Relationship,Current"
+      }, {
+        "description" : "Uses for task 1",
+        "destinationId" : "2",
+        "id" : "5",
+        "sourceId" : "1",
+        "tags" : "Relationship,Future"
+      }, {
+        "description" : "Uses for task 2",
+        "destinationId" : "4",
+        "id" : "6",
+        "sourceId" : "1",
+        "tags" : "Relationship,Future"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "description" : "A description of software system A.",
+      "documentation" : { },
+      "id" : "2",
+      "name" : "Software System A",
+      "properties" : {
+        "structurizr.dsl.identifier" : "sysa"
+      },
+      "tags" : "Element,Software System"
+    }, {
+      "description" : "A description of software system B.",
+      "documentation" : { },
+      "id" : "4",
+      "name" : "Software System B",
+      "properties" : {
+        "structurizr.dsl.identifier" : "sysb"
+      },
+      "tags" : "Element,Software System,Future"
+    } ]
+  },
+  "name" : "FilteredDemo",
+  "properties" : {
+    "structurizr.inspection.error" : "4",
+    "structurizr.dsl" : "d29ya3NwYWNlICJGaWx0ZXJlZERlbW8iICJUaGlzIGlzIGFuIGV4YW1wbGUgb2YgRmlsdGVyZWQgdmlld3MiIHsNCg0KICAgICMgVGhpcyB3aWxsIHJlbmRlciB0aGUgdHdvIGRpYWdyYW1zIGF0IGh0dHBzOi8vc3RydWN0dXJpenIuY29tL2hlbHAvZmlsdGVyZWQtdmlld3MNCg0KICAgIG1vZGVsIHsNCg0KICAgICAgICB1c2VyID0gcGVyc29uICJDdXN0b21lciIgIkEgZGVzY3JpcHRpb24gb2YgdGhlIHVzZXIuIg0KICAgICAgICBzeXNhID0gc29mdHdhcmVTeXN0ZW0gIlNvZnR3YXJlIFN5c3RlbSBBIiAiQSBkZXNjcmlwdGlvbiBvZiBzb2Z0d2FyZSBzeXN0ZW0gQS4iDQoNCiAgICAgICAgdXNlciAtPiBzeXNhICJVc2VzIGZvciB0YXNrcyAxIGFuZCAyIiAiIiBDdXJyZW50DQoNCiAgICAgICAgc3lzYiA9IHNvZnR3YXJlU3lzdGVtICJTb2Z0d2FyZSBTeXN0ZW0gQiIgIkEgZGVzY3JpcHRpb24gb2Ygc29mdHdhcmUgc3lzdGVtIEIuIiBGdXR1cmUNCg0KICAgICAgICB1c2VyIC0+IHN5c2EgIlVzZXMgZm9yIHRhc2sgMSIgIiIgRnV0dXJlDQogICAgICAgIHVzZXIgLT4gc3lzYiAiVXNlcyBmb3IgdGFzayAyIiAiIiBGdXR1cmUNCg0KICAgIH0NCg0KICAgIHZpZXdzIHsNCg0KICAgICAgICBzeXN0ZW1MYW5kc2NhcGUgRnVsbExhbmRzY2FwZSAiU3lzdGVtIExhbmRzY2FwZSwgY3VycmVudCBhbmQgZnV0dXJlIiB7DQogICAgICAgICAgICBpbmNsdWRlICoNCiAgICAgICAgfQ0KDQogICAgICAgIGZpbHRlcmVkIEZ1bGxMYW5kc2NhcGUgZXhjbHVkZSBGdXR1cmUgQ3VycmVudExhbmRzY2FwZSAiVGhlIGN1cnJlbnQgc3lzdGVtIGxhbmRzY2FwZS4iDQogICAgICAgIGZpbHRlcmVkIEZ1bGxMYW5kc2NhcGUgZXhjbHVkZSBDdXJyZW50IEZ1dHVyZUxhbmRzY2FwZSAiVGhlIGZ1dHVyZSBzdGF0ZSBzeXN0ZW0gbGFuZHNjYXBlIGFmdGVyIFNvZnR3YXJlIFN5c3RlbSBCIGlzIGxpdmUuIg0KDQogICAgICAgIHN0eWxlcyB7DQogICAgICAgICAgICBlbGVtZW50ICJTb2Z0d2FyZSBTeXN0ZW0iIHsNCiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM5MWE0MzcNCiAgICAgICAgICAgICAgICBzaGFwZSBSb3VuZGVkQm94DQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgIGVsZW1lbnQgIlBlcnNvbiIgew0KICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzZhN2IxNQ0KICAgICAgICAgICAgICAgIHNoYXBlIFBlcnNvbg0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQoNCiAgICB9DQp9",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : {
+        "elements" : [ {
+          "background" : "#6a7b15",
+          "shape" : "Person",
+          "tag" : "Person"
+        }, {
+          "background" : "#91a437",
+          "shape" : "RoundedBox",
+          "tag" : "Software System"
+        } ]
+      },
+      "terminology" : { }
+    },
+    "filteredViews" : [ {
+      "baseViewKey" : "FullLandscape",
+      "description" : "The current system landscape.",
+      "key" : "CurrentLandscape",
+      "mode" : "Exclude",
+      "name" : "Filtered: System Landscape View",
+      "order" : 2,
+      "tags" : [ "Future" ]
+    }, {
+      "baseViewKey" : "FullLandscape",
+      "description" : "The future state system landscape after Software System B is live.",
+      "key" : "FutureLandscape",
+      "mode" : "Exclude",
+      "name" : "Filtered: System Landscape View",
+      "order" : 3,
+      "tags" : [ "Current" ]
+    } ],
+    "systemLandscapeViews" : [ {
+      "description" : "System Landscape, current and future",
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "FullLandscape",
+      "name" : "System Landscape View",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "3"
+      }, {
+        "id" : "5"
+      }, {
+        "id" : "6"
+      } ]
+    } ]
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "softwareSystems": [
+      {
+        "documentation": {},
+        "id": "1",
+        "name": "A",
+        "properties": {
+          "structurizr.dsl.identifier": "a"
+        },
+        "relationships": [
+          {
+            "description": "Makes API calls using",
+            "destinationId": "5",
+            "id": "6",
+            "sourceId": "1",
+            "tags": "Relationship",
+            "technology": "HTTPS"
+          },
+          {
+            "description": "Makes API calls using",
+            "destinationId": "4",
+            "id": "7",
+            "linkedRelationshipId": "6",
+            "sourceId": "1",
+            "technology": "HTTPS"
+          },
+          {
+            "description": "Makes API calls using",
+            "destinationId": "2",
+            "id": "8",
+            "linkedRelationshipId": "6",
+            "sourceId": "1",
+            "technology": "HTTPS"
+          }
+        ],
+        "tags": "Element,Software System"
+      },
+      {
+        "containers": [
+          {
+            "documentation": {},
+            "group": "Customer Service",
+            "id": "3",
+            "name": "Customer database",
+            "properties": {
+              "structurizr.dsl.identifier": "db"
+            },
+            "tags": "Element,Container,Datastore"
+          },
+          {
+            "components": [
+              {
+                "documentation": {},
+                "id": "5",
+                "name": "Customer Controller",
+                "properties": {
+                  "structurizr.dsl.identifier": "customerController"
+                },
+                "relationships": [
+                  {
+                    "destinationId": "9",
+                    "id": "10",
+                    "sourceId": "5",
+                    "tags": "Relationship"
+                  }
+                ],
+                "tags": "Element,Component,Spring MVC REST Controller",
+                "technology": "Spring MVC REST Controller"
+              },
+              {
+                "documentation": {},
+                "id": "9",
+                "name": "Customer Repository",
+                "properties": {
+                  "structurizr.dsl.identifier": "customerRepository"
+                },
+                "relationships": [
+                  {
+                    "destinationId": "3",
+                    "id": "11",
+                    "sourceId": "9",
+                    "tags": "Relationship"
+                  }
+                ],
+                "tags": "Element,Component,Spring Data Repository",
+                "technology": "Spring Data Repository"
+              }
+            ],
+            "documentation": {},
+            "group": "Customer Service",
+            "id": "4",
+            "name": "Customer API",
+            "properties": {
+              "structurizr.dsl.identifier": "api"
+            },
+            "relationships": [
+              {
+                "destinationId": "3",
+                "id": "12",
+                "linkedRelationshipId": "11",
+                "sourceId": "4"
+              }
+            ],
+            "tags": "Element,Container,Application,Spring Boot",
+            "technology": "Spring Boot"
+          }
+        ],
+        "documentation": {},
+        "id": "2",
+        "name": "X",
+        "properties": {
+          "structurizr.dsl.identifier": "x"
+        },
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "25",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgYXJjaGV0eXBlcyB7DQogICAgICAgICAgICBhcHBsaWNhdGlvbiA9IGNvbnRhaW5lciB7DQogICAgICAgICAgICAgICAgdGFnICJBcHBsaWNhdGlvbiINCiAgICAgICAgICAgIH0NCiAgICAgICAgICAgIGRhdGFzdG9yZSA9IGNvbnRhaW5lciB7DQogICAgICAgICAgICAgICAgdGFnICJEYXRhc3RvcmUiDQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgIG1pY3Jvc2VydmljZSA9IGdyb3VwDQoNCiAgICAgICAgICAgIHNwcmluZ0Jvb3RBcHBsaWNhdGlvbiA9IGFwcGxpY2F0aW9uIHsNCiAgICAgICAgICAgICAgICB0ZWNobm9sb2d5ICJTcHJpbmcgQm9vdCINCiAgICAgICAgICAgICAgICB0YWdzICJTcHJpbmcgQm9vdCINCiAgICAgICAgICAgIH0NCg0KICAgICAgICAgICAgcmVzdENvbnRyb2xsZXIgPSBjb21wb25lbnQgew0KICAgICAgICAgICAgICAgIHRlY2hub2xvZ3kgIlNwcmluZyBNVkMgUkVTVCBDb250cm9sbGVyIg0KICAgICAgICAgICAgICAgIHRhZyAiU3ByaW5nIE1WQyBSRVNUIENvbnRyb2xsZXIiDQogICAgICAgICAgICB9DQogICAgICAgICAgICByZXBvc2l0b3J5ID0gY29tcG9uZW50IHsNCiAgICAgICAgICAgICAgICB0ZWNobm9sb2d5ICJTcHJpbmcgRGF0YSBSZXBvc2l0b3J5Ig0KICAgICAgICAgICAgICAgIHRhZyAiU3ByaW5nIERhdGEgUmVwb3NpdG9yeSINCiAgICAgICAgICAgIH0NCg0KICAgICAgICAgICAgaHR0cHMgPSAtPiB7DQogICAgICAgICAgICAgICAgdGVjaG5vbG9neSAiSFRUUFMiDQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICBhID0gc29mdHdhcmVTeXN0ZW0gIkEiDQoNCiAgICAgICAgeCA9IHNvZnR3YXJlU3lzdGVtICJYIiB7DQogICAgICAgICAgICBjdXN0b21lclNlcnZpY2UgPSBtaWNyb3NlcnZpY2UgIkN1c3RvbWVyIFNlcnZpY2UiIHsNCiAgICAgICAgICAgICAgICBkYiA9IGRhdGFzdG9yZSAiQ3VzdG9tZXIgZGF0YWJhc2UiDQogICAgICAgICAgICAgICAgYXBpID0gc3ByaW5nQm9vdEFwcGxpY2F0aW9uICJDdXN0b21lciBBUEkiIHsNCiAgICAgICAgICAgICAgICAgICAgY3VzdG9tZXJDb250cm9sbGVyID0gcmVzdENvbnRyb2xsZXIgIkN1c3RvbWVyIENvbnRyb2xsZXIiIHsNCiAgICAgICAgICAgICAgICAgICAgICAgIGEgLS1odHRwcy0+IHRoaXMgIk1ha2VzIEFQSSBjYWxscyB1c2luZyINCiAgICAgICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgICAgICAgICBjdXN0b21lclJlcG9zaXRvcnkgPSByZXBvc2l0b3J5ICJDdXN0b21lciBSZXBvc2l0b3J5IiB7DQogICAgICAgICAgICAgICAgICAgICAgICBjdXN0b21lckNvbnRyb2xsZXIgLT4gdGhpcw0KICAgICAgICAgICAgICAgICAgICAgICAgdGhpcyAtPiBkYg0KICAgICAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQogICAgfQ0KDQp9",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

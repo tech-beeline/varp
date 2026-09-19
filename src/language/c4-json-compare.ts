@@ -70,21 +70,21 @@ const IGNORED_KEYS = new Set([
     '$', 'generatedKey',
     // ID fields — always auto-generated and differ
     'id', 'softwareSystemId', 'containerId', 'parentId', 'sourceId', 'destinationId', 'linkedRelationshipId',
-    // Structurizr adds these, we don't — ignore
+    // Fields the generator does not produce — ignore
     'location', 'documentation',
     // View ordering
     'order', 'key',
-    // Properties with structurizr.dsl.identifier — Structurizr adds, we don't
+    // DSL identifier properties — the generator does not produce them
     'properties',
-    // Structurizr adds empty configuration at root level
+    // Empty configuration at root level — the generator does not produce it
     'configuration',
-    // Structurizr emits this on landscape/context views (we do too) but not on
-    // container/component views — skip to avoid mismatch noise
+    // Emitted on landscape/context views but not on container/component views —
+    // skip to avoid mismatch noise
     'enterpriseBoundaryVisible',
     // Boundary visibility flags are not used by the renderer, so we don't emit them
     'externalContainerBoundariesVisible',
     'externalSoftwareSystemBoundariesVisible',
-    // Our actual adds fields that Structurizr doesn't
+    // Extra fields the generator adds
     'type',
     'automaticLayout',
     // View rendering details — our generator doesn't produce these

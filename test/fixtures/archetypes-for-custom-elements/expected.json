@@ -1,0 +1,53 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "customElements": [
+      {
+        "id": "2",
+        "metadata": "Hardware System",
+        "name": "B",
+        "properties": {
+          "structurizr.dsl.identifier": "b"
+        },
+        "tags": "Element,Hardware System"
+      }
+    ],
+    "softwareSystems": [
+      {
+        "documentation": {},
+        "id": "1",
+        "name": "A",
+        "properties": {
+          "structurizr.dsl.identifier": "a"
+        },
+        "relationships": [
+          {
+            "description": "Gets data from",
+            "destinationId": "2",
+            "id": "3",
+            "sourceId": "1",
+            "tags": "Relationship"
+          }
+        ],
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "6",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgYXJjaGV0eXBlcyB7DQogICAgICAgICAgICBoYXJkd2FyZVN5c3RlbSA9IGVsZW1lbnQgew0KICAgICAgICAgICAgICAgIG1ldGFkYXRhICJIYXJkd2FyZSBTeXN0ZW0iDQogICAgICAgICAgICAgICAgdGFnICJIYXJkd2FyZSBTeXN0ZW0iDQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICBhID0gc29mdHdhcmVTeXN0ZW0gIkEiDQogICAgICAgIGIgPSBoYXJkd2FyZVN5c3RlbSAiQiINCg0KICAgICAgICBhIC0+IGIgIkdldHMgZGF0YSBmcm9tIg0KICAgIH0NCg0KfQ==",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

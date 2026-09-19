@@ -199,7 +199,7 @@ fragment ElementPropertyFeatures:
     | perspectivesBlocks+=PerspectivesBlock
 ;
 
-// Directives available in all element contexts (ElementDslContext in Structurizr)
+// Directives available in all element contexts
 // Provides !elements and !relationships directives
 fragment ElementDirectives:
     elementsDirectives+=ElementsDirective
@@ -207,7 +207,7 @@ fragment ElementDirectives:
 ;
 
 // Directives available in documentable element contexts
-// (SoftwareSystem/Container/Component in Structurizr)
+// (SoftwareSystem/Container/Component)
 // Provides !elements, !relationships, !docs and !decisions directives
 fragment DocumentableElementDirectives:
     elementsDirectives+=ElementsDirective
@@ -216,7 +216,7 @@ fragment DocumentableElementDirectives:
     | adrs+=AdrsDirective
 ;
 
-// Directives for workspace/model level (WorkspaceDslContext in Structurizr)
+// Directives for workspace/model level
 // Provides !identifiers, !docs, !decisions directives
 fragment WorkspaceFeatures:
     identifiers+=IdentifiersProperty
@@ -330,7 +330,7 @@ ConfigurationBlock:
 // users { <username> <read|write> ... }
 // Server-side access configuration that does not affect the generated diagram, so the
 // body is parsed as an opaque block. This keeps any username form (e.g. an email
-// address) valid, matching Structurizr, which accepts an arbitrary token as the username.
+// address) valid.
 UsersBlock returns string:
     USERS_KW '{'
         (IgnoredScriptBody)*
@@ -1021,7 +1021,7 @@ PrimaryViewExpression returns ViewExpression:
     | ElementEqAfferentEfferentExpression
     | SingleElementExpression;
 
-// ─── Explicit expression rules (Structurizr DSL) ───────────────────────────
+// ─── Explicit expression rules ──────────────────────────────────────────────
 
 // element.type==<type> — matches elements with the specified type
 ElementTypeExpression returns ViewExpression:

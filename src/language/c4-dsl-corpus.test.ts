@@ -22,11 +22,11 @@ import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
 
 /**
- * A corpus of DSL files kept from the reference implementation
- * (structurizr-dsl/src/test/resources/dsl, Apache-2.0), limited to the ones its own parser
- * accepts, so that anything valid there keeps parsing here.
+ * A corpus of DSL files from the Structurizr DSL test resources
+ * (structurizr-dsl/src/test/resources/dsl, Apache-2.0), limited to the ones that
+ * parse, so that anything valid there keeps parsing here.
  *
- * The files its parser rejects are not part of the corpus; the constructs they exercise are
+ * Files that do not parse are not part of the corpus; the constructs they exercise are
  * covered by the inline cases below, which check that this parser rejects them as well.
  *
  * Fixtures whose !include/extends points at a resource the corpus does not contain (remote
@@ -44,7 +44,7 @@ function collectFixtures(dir: string, out: string[] = []): string[] {
 }
 
 describe('DSL corpus fixtures', () => {
-    it('parses every fixture the reference parser accepts', async () => {
+    it('parses every accepted corpus fixture', async () => {
         // A real file system lets the builder load local !include/extends targets from the
         // corpus, so those fixtures exercise inheritance instead of being parsed in isolation.
         const services = createC4Services({ connection: undefined as any, ...NodeFileSystem }).C4;
@@ -73,8 +73,8 @@ describe('DSL corpus fixtures', () => {
     }, 180_000);
 });
 
-/** Rejections the reference parser raises at parse time that are reported as diagnostics here. */
-describe('constructs the reference parser rejects', () => {
+/** Constructs rejected at parse time and reported as diagnostics. */
+describe('rejected constructs', () => {
     const cases: Record<string, string> = {
         'multiple workspaces': `workspace {
     model {

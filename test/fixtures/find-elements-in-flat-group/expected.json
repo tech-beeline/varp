@@ -1,0 +1,87 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "people": [
+      {
+        "id": "1",
+        "name": "User",
+        "properties": {
+          "structurizr.dsl.identifier": "user"
+        },
+        "relationships": [
+          {
+            "description": "Uses",
+            "destinationId": "3",
+            "id": "5",
+            "sourceId": "1",
+            "tags": "Relationship"
+          },
+          {
+            "description": "Uses",
+            "destinationId": "4",
+            "id": "6",
+            "sourceId": "1",
+            "tags": "Relationship"
+          },
+          {
+            "description": "Uses",
+            "destinationId": "2",
+            "id": "7",
+            "sourceId": "1",
+            "tags": "Relationship"
+          }
+        ],
+        "tags": "Element,Person"
+      }
+    ],
+    "softwareSystems": [
+      {
+        "documentation": {},
+        "group": "Group",
+        "id": "2",
+        "name": "A",
+        "properties": {
+          "structurizr.dsl.identifier": "e8153bd8-8de5-4a4a-b62f-344f322287f8"
+        },
+        "tags": "Element,Software System"
+      },
+      {
+        "documentation": {},
+        "group": "Group",
+        "id": "3",
+        "name": "B",
+        "properties": {
+          "structurizr.dsl.identifier": "82d62623-f84a-446f-8fe7-0b6ccef99068"
+        },
+        "tags": "Element,Software System"
+      },
+      {
+        "documentation": {},
+        "group": "Group",
+        "id": "4",
+        "name": "C",
+        "properties": {
+          "structurizr.dsl.identifier": "e28ad588-4cfb-4903-a837-0c08f8b454d3"
+        },
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "13",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgdXNlciA9IHBlcnNvbiAiVXNlciINCg0KICAgICAgICBncm91cCA9IGdyb3VwICJHcm91cCIgew0KICAgICAgICAgICAgc29mdHdhcmVTeXN0ZW0gIkEiDQogICAgICAgICAgICBzb2Z0d2FyZVN5c3RlbSAiQiINCiAgICAgICAgICAgIHNvZnR3YXJlU3lzdGVtICJDIg0KICAgICAgICB9DQoNCiAgICAgICAgIWVsZW1lbnRzIGdyb3VwIHsNCiAgICAgICAgICAgIHVzZXIgLT4gdGhpcyAiVXNlcyINCiAgICAgICAgfQ0KICAgIH0NCg0KfQ==",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

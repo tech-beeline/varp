@@ -79,7 +79,7 @@ import { C4Services } from './c4-module';
 import * as includeResolver from './c4-include-resolver';
 import { SHAPE_NORMALIZE, BORDER_NORMALIZE, ROUTING_NORMALIZE, ICON_POSITION_NORMALIZE } from './c4-validator';
 
-// Constants from the original Structurizr Java library
+// Default theme constants
 const DEFAULT_THEME_URL = "https://static.structurizr.com/themes/default/theme.json";
 const DEFAULT_THEME_NAME = "default";
 
@@ -93,7 +93,7 @@ const DEFAULT_ELEMENT_FONT_SIZE = 24;
 // clean straight line, while genuinely routed bends (cross-cluster detours) remain.
 const BEND_DEVIATION_THRESHOLD = 35;
 
-// Webview frame padding replication (structurizr-diagram.js reposition()): a frame
+// Webview frame padding: a frame
 // wraps its content with clusterPadding (50) on every side plus a bottom footer for
 // the name/metadata text - 50 + margin(15) + nameFontSize + metadataFontSize + 15.
 // nameFontSize/metadataFontSize are the element's fontSize (default 24) times the
@@ -127,7 +127,7 @@ class JsonGenerator {
     private readonly relationships: Relationship[] = [];
     /** Index of relationships by resolved source element id (built once per generate call). */
     private readonly relationshipsBySource: Map<string, Relationship[]> = new Map();
-    /** Explicit relationships indexed by their DSL identifier (`r = a -> b`). */
+    /** Explicit relationships indexed by their DSL identifier. */
     private readonly relationshipsByIdentifier: Map<string, Relationship> = new Map();
     /** NoRelationship (`-/>`) directives collected from deployment environments. */
     private readonly noRelationshipNodes: any[] = [];
@@ -175,7 +175,7 @@ class JsonGenerator {
     private readonly elementExtensionsByTarget: Map<NamedElement, ElementExtension[]> = new Map();
 
     /**
-     * Cache for quoted view filters (`include "element.tag==Tag A"`), keyed by filter
+     * Cache for quoted view filters, keyed by filter
      * text. The filter content is re-parsed on demand.
      */
     private readonly quotedFilterExpressions: Map<string, ViewExpression[]> = new Map();
@@ -184,7 +184,7 @@ class JsonGenerator {
 
     /** Terminology overrides for diagram rendering (person, softwareSystem, container, etc.), populated from workspace terminology blocks */
     private terminology: Record<string, string> = {};
-    /** Metadata symbol style (MetadataSymbols enum name), defaulting to SquareBrackets as the reference exporter does. */
+    /** Metadata symbol style (MetadataSymbols enum name), defaulting to SquareBrackets. */
     private metadataSymbols = 'SquareBrackets';
 
     /** Maps the `metadata` directive keyword to its MetadataSymbols enum name. */
@@ -287,8 +287,6 @@ class JsonGenerator {
                 }
             }
         };
-
-        // Diagnostic SYSOUT block (removed after debugging).
 
         // Run Graphviz in the plugin (full model context) and bake the resulting
         // coordinates/sizes directly into the view JSON. The webview then renders
@@ -847,8 +845,8 @@ class JsonGenerator {
                 if (theme && Array.isArray(theme.elements)) {
                     for (const style of theme.elements) this.themeStyles.push(style);
                 }
-                // The webview merges theme.relationships into findRelationshipStyle
-                // (structurizr-ui.js), so collect them too - otherwise themed
+                // The webview merges theme.relationships into the relationship
+                // style lookup, so collect them too - otherwise themed
                 // relationship fontSize/width would not be reflected in the layout.
                 if (theme && Array.isArray(theme.relationships)) {
                     for (const style of theme.relationships) this.themeRelationshipStyles.push(style);
@@ -1095,8 +1093,7 @@ class JsonGenerator {
             destinationId: this.getId(this.resolveTarget(relationship.relationship)),
             description: this.description(relationship.relationship),
             technology: overlay?.technology ?? this.technology(relationship.relationship),
-            // Implied relationships carry no tags in the reference (getDefaultTags
-            // returns an empty set when linkedRelationshipId is set).
+            // Implied relationships carry no tags.
             tags: relationship.linked ? undefined : this.extractTags(relationship.relationship, 'Relationship'),
             linkedRelationshipId: relationship.linked ? this.getId(relationship.linked) : undefined
         };
@@ -1405,8 +1402,8 @@ class JsonGenerator {
                 if (m !== undefined && m !== null && m !== '') metadata = m;
             }
         }
-        // Tags are collected from the outermost archetype inward, matching the
-        // reference order (parent archetype tags before child archetype tags).
+        // Tags are collected from the outermost archetype inward, so parent
+        // archetype tags come before child archetype tags.
         for (const arch of [...chain].reverse()) {
             for (const tp of arch.tagsProps ?? []) {
                 for (const raw of tp.values ?? []) {
@@ -1457,9 +1454,9 @@ class JsonGenerator {
     }
 
     /**
-     * Auto-generated view name, mirroring the reference View.getName() implementations.
-     * Structurizr never stores a view name in the DSL: it is always derived from the
-     * view type and its scope (e.g. "System Context View: <software system>").
+     * Auto-generated view name. A view name is never stored in the DSL: it is
+     * always derived from the view type and its scope
+     * (e.g. "System Context View: <software system>").
      */
     private viewName(view: any): string | undefined {
         if (isSystemLandscapeView(view)) {
@@ -1505,8 +1502,8 @@ class JsonGenerator {
 
     /**
      * Returns the technology text for a node, with constant substitution applied.
-     * Comma-separated unquoted segments (`technology L4,TCP`) are stored as
-     * `technology` + `technologyParts` and rejoined here with commas.
+     * Comma-separated unquoted segments are stored as `technology` +
+     * `technologyParts` and rejoined here with commas.
      */
     private technology(node: any) {
         const parts: string[] = [];
@@ -1519,8 +1516,8 @@ class JsonGenerator {
                 if (s) parts.push(s);
             }
         }
-        // Quoted segments (`""`, `"TCP"`) lose their quotes in substitute(); an
-        // empty result means no technology was declared.
+        // Quoted segments lose their quotes in substitute(); an empty result
+        // means no technology was declared.
         const joined = parts.length > 0 ? this.substitute(parts.join(',')) : undefined;
         return joined ? joined : undefined;
     }
@@ -1562,9 +1559,9 @@ class JsonGenerator {
 
     /**
      * True when a relationship endpoint is the `this` keyword. The grammar consumes
-     * `this` without storing it on the reference, so the reference is either absent
-     * or carries the literal text `this`. An unresolved named reference keeps its
-     * `$refText` and is therefore NOT treated as `this`.
+     * `this` without storing it on the endpoint reference, so the reference is
+     * either absent or carries the literal text `this`. An unresolved named
+     * reference keeps its `$refText` and is therefore NOT treated as `this`.
      */
     private isThisReference(reference: any): boolean {
         return reference === undefined || reference?.$refText?.toLowerCase() === 'this';
@@ -1673,8 +1670,8 @@ class JsonGenerator {
      * projected onto the instances of that environment.
      */
     private addRelationship(rel: any, noRelationship?: any): void {
-        // `r = a -> b` gives the relationship a DSL identifier that view
-        // expressions can reference (`include r` / `exclude r`).
+        // A relationship identifier lets view expressions reference the
+        // relationship by that identifier.
         if (typeof rel?.id === 'string' && rel.id.length > 0) {
             this.relationshipsByIdentifier.set(C4Utils.stripQuotes(rel.id), rel);
         }
@@ -1768,7 +1765,7 @@ class JsonGenerator {
     }
 
     /**
-     * Reference instance relationships are replicated when the instance is created,
+     * Instance relationships are replicated when the instance is created,
      * so a static relationship declared after the instance does not appear on it.
      * Only comparable within the same document.
      */
@@ -1852,8 +1849,8 @@ class JsonGenerator {
             for (const rel of list) {
                 if (rel.linked !== undefined) continue;
                 const pair = this.relationshipPairKey(rel);
-                // Reference semantics: at most one relationship per source/target
-                // pair and description (a second identical one is a parse error).
+                // At most one relationship per source/target pair and description
+                // (a second identical one is a parse error).
                 const key = `${pair}|${this.description(rel.relationship)}`;
                 if (directKeys.has(key)) continue;
                 directKeys.add(key);
@@ -2430,7 +2427,7 @@ class JsonGenerator {
 
         // Project implied relationships from parent Container/Component to ContainerInstance.
         // Relationships are projected regardless of which deployment node the instances
-        // live in - the reference includes cross-node relationships too (e.g. 55->52).
+        // live in - cross-node relationships are included too.
         const env = this.getEnvironment(containerInstance);
         const parentContainer = this.el(containerInstance.container.ref);
         if(parentContainer) {
@@ -2481,8 +2478,8 @@ class JsonGenerator {
      * DeploymentGroupOrTag grammar fragment):
      * - If the value matches a known DeploymentGroup name → it was intended as a
      *   deployment group. The value is cleared and the node is left unchanged
-     *   (the deployment group reference cannot be added programmatically to the
-     *   Reference array, but the value is no longer ambiguous).
+     *   (the deployment group link cannot be added programmatically,
+     *   but the value is no longer ambiguous).
      * - If the value does NOT match any DeploymentGroup → it's a tag. The value
      *   is added to node.tags.
      */
@@ -2626,9 +2623,9 @@ class JsonGenerator {
      * Returns a comma-separated tag string, or undefined if no tags exist.
      */
     /**
-     * Splits a DSL tag value the way the reference tokenizer does: double quotes are
-     * stripped and preserve spaces/commas inside them; everything else is split on
-     * whitespace and commas, and single quotes are kept verbatim.
+     * Splits a DSL tag value: double quotes are stripped and preserve
+     * spaces/commas inside them; everything else is split on whitespace and
+     * commas, and single quotes are kept verbatim.
      */
     private parseDslTagValue(raw: string): string[] {
         const trimmed = raw.trim();
@@ -2641,8 +2638,8 @@ class JsonGenerator {
     }
 
     /**
-     * Default tags the reference assigns to an element by its type. These are used
-     * when matching `element.tag==...` view expressions.
+     * Default tags assigned to an element by its type. These are used when
+     * matching `element.tag==...` view expressions.
      */
     private elementDefaultTags(element: any): [string, string?] {
         if (isPerson(element)) return ['Element', 'Person'];
@@ -3179,9 +3176,8 @@ class JsonGenerator {
             applied: false,
             implementation: "Graphviz",
             rankDirection: direction,
-            // Defaults (see autoLayout DSL docs + the reference structurizr-autolayout):
-            // rankSeparation and nodeSeparation both default to 300px, and the rank
-            // direction defaults to TopBottom.
+            // Defaults: rankSeparation and nodeSeparation both default to 300px,
+            // and the rank direction defaults to TopBottom.
             rankSeparation: autoLayout?.rankSeparation ?? 300,
             nodeSeparation: autoLayout?.nodeSeparation ?? 300,
             edgeSeparation: 50,
@@ -3206,15 +3202,14 @@ class JsonGenerator {
     ): string | undefined {
         if (!autoLayout) return undefined;
 
-        // Replicates the structure/attributes of the reference DOTExporter
-        // (structurizr-autolayout): header, cluster margin=25, node sizes in a
+        // DOT graph structure: header, cluster margin=25, node sizes in a
         // 300dpi inch space, and id= attributes. Identifiers are ours - they do
         // not affect the layout.
         const STRUCTURIZR_DPI = 300; // Structurizr diagrams are sized for 300dpi
         const dir = this.mapGraphvizDirection(autoLayout.rankDirection);
         const rankdir = dir === 'UP' ? 'BT' : dir === 'LEFT' ? 'RL' : dir === 'RIGHT' ? 'LR' : 'TB';
-        // Format like Java's String.format("%s", double) in the reference: whole
-        // inches render as "1.0" rather than "1" (purely cosmetic - same value).
+        // Whole inches render as "1.0" rather than "1" (purely cosmetic -
+        // same value).
         const fmtIn = (v: number) => (Number.isInteger(v) ? `${v}.0` : String(v));
         const ranksep = fmtIn(autoLayout.rankSeparation / STRUCTURIZR_DPI); // inches
         const nodesep = fmtIn(autoLayout.nodeSeparation / STRUCTURIZR_DPI);
@@ -3233,11 +3228,10 @@ class JsonGenerator {
         };
 
         const scopeClusterId = scopeElement && scopeAsFrame ? 'cluster_scope_' + this.getId(scopeElement) : undefined;
-        // The webview (structurizr-diagram.js addElementToBoundary with
-        // includeParentBoundary=true) also draws a boundary for the scope element's
+        // The webview also draws a boundary for the scope element's
         // PARENT: on a component view and a container-scoped dynamic view it renders
         // BOTH the container boundary and the enclosing software system boundary.
-        // The reference DOT export emits both clusters (cluster_<systemId> wrapping
+        // The DOT export emits both clusters (cluster_<systemId> wrapping
         // cluster_<containerId>), so replicate that here - otherwise the webview-drawn
         // system frame is missing from the graphviz bounds, the paper/centring does
         // not account for it, and the rendered diagram is offset by a per-diagram amount.
@@ -3295,8 +3289,8 @@ class JsonGenerator {
         for (const el of elements) {
             const id = this.getId(el);
             const size = this.defaultElementSize(el);
-            // Strip the DSL string quotes from the name for the DOT label (the
-            // reference emits "id: Name" without the surrounding quotes).
+            // Strip the DSL string quotes from the name for the DOT label
+            // ("id: Name" without the surrounding quotes).
             const name = this.dotElementName(el).replace(/^"|"$/g, '');
             sizes[id] = {
                 w: (size.width / STRUCTURIZR_DPI).toFixed(6),
@@ -3324,9 +3318,8 @@ class JsonGenerator {
                 baseCluster = deployCluster[base];
             }
             // A standalone container that belongs to the scope's software system is
-            // written inside the enclosing system boundary (the reference
-            // AbstractDiagramExporter writes same-system containers into the system
-            // boundary cluster).
+            // written inside the enclosing system boundary (same-system
+            // containers go into the system boundary cluster).
             if (baseCluster === undefined && scopeSystemClusterId !== undefined && isContainer(el)) {
                 const sys = this.resolveConatinerParent(el);
                 if (sys && this.getId(sys) === scopeSystemId) {
@@ -3334,8 +3327,8 @@ class JsonGenerator {
                 }
             }
             const group = this.extractGroup(el);
-            // Container/component views: the reference writes external (non-scope)
-            // elements as plain nodes without group clusters - only elements inside
+            // Container/component views: external (non-scope) elements are
+            // written as plain nodes without group clusters - only elements inside
             // the scope frame keep their group clusters.
             const inScope = scopeAsFrame ? baseCluster === scopeClusterId : true;
             const gid = group && group.length > 0 && inScope ? ensureGroupCluster(group, baseCluster) : undefined;
@@ -3364,7 +3357,7 @@ class JsonGenerator {
             }
             lines.push(`${indent}}`);
         };
-        // The reference emits clusters and standalone elements in a view-specific
+        // Clusters and standalone elements are emitted in a view-specific
         // order (it influences graphviz rank/placement):
         // - landscape/context (no scope frame): group clusters first, then standalone;
         // - container/component (scope frame): external elements first, then the
@@ -3374,9 +3367,9 @@ class JsonGenerator {
         for (const child of getChildren('root')) {
             (child.startsWith('cluster_') ? rootClusters : rootNodes).push(child);
         }
-        // Dynamic views (container scope) follow the reference DynamicView export:
-        // the scope boundary cluster is emitted first, then the external elements
-        // (the opposite of container/component views).
+        // Dynamic views (container scope): the scope boundary cluster is emitted
+        // first, then the external elements (the opposite of container/component
+        // views).
         if (scopeAsFrame && !isDynamic) {
             for (const id of rootNodes) emitNode(id, '  ');
             for (const cid of rootClusters) emitCluster(cid, '  ');
@@ -3386,9 +3379,9 @@ class JsonGenerator {
         }
         lines.push('');
 
-        // Edges. Matches the reference DOTExporter: `source -> destination [id=...]`
-        // edges (no labels). Deployment-node endpoints are projected onto a
-        // representative inner instance (reference findElementInside) AND anchored to
+        // Edges: `source -> destination [id=...]` edges (no labels).
+        // Deployment-node endpoints are projected onto a
+        // representative inner instance AND anchored to
         // the deployment node cluster with ltail/lhead=cluster_<deploymentNodeId>, so
         // the arrow terminates at the deployment node frame border instead of routing
         // through the frame to the inner instance (which would otherwise produce
@@ -3707,7 +3700,7 @@ class JsonGenerator {
         // Graphviz -Tjson coordinates are in points (72/inch) with the origin at
         // the bottom-left (y grows UP); the webview paper origin is at the top-left.
         // The DOT sizes are in a 300dpi inch space (STRUCTURIZR_DPI), so points are
-        // converted back with the reference's DPI_RATIO (300/72).
+        // points converted back from the 300dpi graph space (300/72).
         const PT = 300 / 72;
 
         const parsePoint = (s: string): [number, number] => {
@@ -3763,7 +3756,7 @@ class JsonGenerator {
         }
 
         // Build the cluster tree from graphviz bb containment, then reproduce the
-        // webview frame sizes (structurizr-diagram.js reposition()): embedded content
+        // webview frame sizes: embedded content
         // plus clusterPadding (50) on each side, plus a footer at the bottom of
         // 50+15+nameFontSize+metadataFontSize+15 (=122 for boundaries/deployment
         // nodes, =108 for groups). These frames are drawn by the webview (even though
@@ -3839,7 +3832,7 @@ class JsonGenerator {
         // is computed from the relationship's resolved style, mirroring the webview's
         // createArrow (labelSize width = style.width * 1.2, height = description height
         // + technology height). Vertices (real bends) are only written for static views
-        // - dynamic views keep straight lines, matching the reference.
+        // - dynamic views keep straight lines.
         // Lookup the model relationship by id (the DOT edge id is the relationship id)
         // so its style/description can be resolved.
         const relationshipById: Record<string, any> = {};
@@ -3936,8 +3929,8 @@ class JsonGenerator {
         if (minX === Infinity) { minX = margin; minY = margin; maxX = margin; maxY = margin; }
 
         // Paper = the diagram bounds plus the SAME margin on all four sides, with the
-        // diagram strictly centred (the reference SVGReader's deltaX/deltaY used
-        // +minX, which shifted the content by minX - the diagram was never centred).
+        // diagram strictly centred (a +minX shift would offset the content and
+        // leave it off-centre).
         const paperW = Math.max(2 * margin, (maxX - minX) + 2 * margin);
         const paperH = Math.max(2 * margin, (maxY - minY) + 2 * margin);
         const shiftX = margin - minX;
@@ -3971,8 +3964,7 @@ class JsonGenerator {
             }
         } else {
             // Dynamic views keep straight lines, so forward + response steps
-            // between the same pair of elements would overlap. Replicate the
-            // reference renderer's adjustVertices() fan-out: place one
+            // between the same pair of elements would overlap. Fan-out: place one
             // perpendicular vertex at the line midpoint for every overlapping
             // sibling, alternating sides. The coordinates are already in paper
             // space (view.elements[] has the final x/y), so no extra shift is
@@ -3995,12 +3987,10 @@ class JsonGenerator {
     }
 
     /**
-     * Replicates the reference renderer's `adjustVertices()` fan-out for dynamic
-     * views. Forward and response steps between the same pair of elements would
-     * otherwise be drawn as overlapping straight lines; this places a single
-     * perpendicular vertex at the line midpoint for each overlapping sibling,
-     * alternating left/right, so the arrows separate exactly as the original
-     * Structurizr web UI does.
+     * Fan-out for dynamic views: forward and response steps between the same
+     * pair of elements would otherwise be drawn as overlapping straight lines;
+     * this places a single perpendicular vertex at the line midpoint for each
+     * overlapping sibling, alternating left/right, so the arrows separate.
      *
      * The element positions come from `view.elements[]`, which already hold the
      * final paper-space x/y/width/height written by applyGraphvizLayoutToView,
@@ -4382,10 +4372,14 @@ class JsonGenerator {
     /** Resolves a reference text (identifier, name, or qualified path) to a collected element. */
     private findElementByReferenceText(text: string): any {
         const name = C4Utils.stripQuotes(text);
+        // The qualified path only identifies an element that declares its own id;
+        // for id-less children it would degenerate to the parent's identifier and
+        // steal references meant for the parent (e.g. a group).
         const exact = this.elements.find(element =>
             (element as any).id === name
             || C4Utils.stripQuotes((element as any).name ?? '') === name
-            || this.qualifiedIdentifier(element) === name);
+            || (typeof (element as any).id === 'string' && (element as any).id.length > 0
+                && this.qualifiedIdentifier(element) === name));
         if (exact) return exact;
         const lastSegment = name.split('.').pop() ?? name;
         return this.elements.find(element =>
@@ -4421,8 +4415,8 @@ class JsonGenerator {
         isAllowed: (el: NamedElement | undefined) => el is RelationshipMember
     ) : Set<RelationshipMember | Relationship> {
         const res = new Set<RelationshipMember | Relationship>();
-        // Quoted filter (`include "element.tag==Tag A"`): the grammar wraps the whole
-        // filter in a StringLiteralExpression; evaluate the re-parsed content.
+        // Quoted filter: the grammar wraps the whole filter in a
+        // StringLiteralExpression; evaluate the re-parsed content.
         if (isStringLiteralExpression(e)) {
             for (const parsed of this.parseQuotedFilter(e.value)) {
                 this.applyExpression(parsed, elementsAtView, relationshipsAtScope, isAllowed)
@@ -4434,10 +4428,8 @@ class JsonGenerator {
             // Normalise to the materialised element before matching.
             const ref = this.resolveExpressionReference(e.element);
             if (isRelationship(ref)) {
-                // `include r` / `exclude r` where `r = a -> b` is a relationship
-                // identifier: it resolves the relationship and every implied
-                // relationship linked to it (ExpressionParser.parseIdentifier
-                // in the reference CLI).
+                // Relationship identifier: it resolves the relationship and every
+                // implied relationship linked to it.
                 res.add(ref);
                 for (const wrapper of this.collectAllRelationships()) {
                     if (wrapper.linked === ref) res.add(wrapper.relationship);
@@ -6269,7 +6261,7 @@ class JsonGenerator {
      * target and description, only the relationship with the lowest CST offset
      * (declared earliest in source code) is kept; the model parser rejects exact
      * duplicates anyway. Relationships between the same pair with different
-     * descriptions are distinct in the reference and are all kept.
+     * descriptions are distinct and are all kept.
      * @param relationshipsSet The set of relationships to filter for duplicates
      */
     private filterDuplicateRelationships(relationshipsSet: Set<Relationship>): void {
@@ -6499,9 +6491,9 @@ class JsonGenerator {
                     relationships: this.onlyIfNotEmpty(content.relationships),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
-                    // Dynamic views use the scope element as a frame (like the reference
-                    // cluster_<containerId>), so pass scopeAsFrame=true; the scope
-                    // cluster is emitted first (reference DynamicView export order).
+                    // Dynamic views use the scope element as a frame
+                    // (cluster_<containerId>), so pass scopeAsFrame=true; the scope
+                    // cluster is emitted first, then external elements.
                     graphviz: this.buildGraphvizDot(autoLayout, scopeElement, true, content.graphvizElements, content.graphvizEdges, true)
                 };
             });
@@ -6561,7 +6553,33 @@ class JsonGenerator {
                     // Normalise to the materialised elements used by resolveSource/resolveTarget.
                     const source = this.el(member.from?.ref);
                     const target = this.el(member.target?.ref);
-                    if (!source || !target) return;
+                    if (!source || !target) {
+                        // Relationship reference row: the step names an existing model
+                        // relationship instead of both endpoints.
+                        if (source && !target && isRelationship(source)) {
+                            const finalOrder = member.order
+                                ? member.order.toString()
+                                : isParallelBlock ? blockOrder : (globalSequence++).toString();
+                            const stepDescription = this.description(member) ?? this.description(source);
+                            steps.push({
+                                id: this.getId(source),
+                                order: finalOrder,
+                                description: stepDescription
+                            });
+                            const relSource = this.resolveSource(source);
+                            const relTarget = this.resolveTarget(source);
+                            if (relSource) uniqueElements.add(relSource);
+                            if (relTarget) uniqueElements.add(relTarget);
+                            const labelText = stepDescription ? `${finalOrder}: ${stepDescription}` : undefined;
+                            graphvizEdges.push({
+                                id: this.getId(source),
+                                source: { ref: relSource },
+                                target: { ref: relTarget },
+                                description: labelText
+                            });
+                        }
+                        return;
+                    }
 
                     // Register participants on the diagram canvas
                     uniqueElements.add(source);
@@ -6599,9 +6617,8 @@ class JsonGenerator {
                     if (modelRel) {
                         const stepDescription = this.description(member) || (isResponse ? undefined : this.description(modelRel));
                         // `response` is only emitted when the step is a reverse
-                        // (response) relationship - mirrors the original Java
-                        // RelationshipView, where the field is null by default
-                        // and omitted from JSON (NON_NULL).
+                        // (response) relationship; the field is omitted from JSON
+                        // for forward steps.
                         steps.push({
                             id: this.getId(modelRel),
                             order: finalOrder,

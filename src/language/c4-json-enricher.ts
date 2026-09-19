@@ -33,11 +33,10 @@ import {
 } from '../generated/ast';
 
 /**
- * Enriches generated render JSON with the Structurizr-only fields the render
+ * Enriches generated render JSON with the documentation fields the render
  * pipeline does not produce. The render JSON is generated once by C4JsonGenerator
  * and cached; rather than re-generating it, this module takes that cached JSON
- * and injects the missing Structurizr-compatible fields, placing them EXACTLY
- * where the original Structurizr library places them.
+ * and injects the missing fields in the positions the JSON format expects.
  *
  * Currently this covers `documentation` from `!adrs` / `!decisions`:
  *
@@ -45,14 +44,13 @@ import {
  *    `documentation.decisions` (a sibling of `model` / `views`).
  *  - `!adrs` / `!decisions` declared inside a SoftwareSystem / Container /
  *    Component -> a nested `documentation.decisions` on that element in the
- *    model (mirroring the Java `Documentable` interface, where each documentable
- *    carries its own `Documentation`).
+ *    model (each documentable element carries its own `Documentation`).
  *
  * Future additions (e.g. per-element properties/url/perspectives, view order,
  * interactionStyle) should be added here so this stays the single enrichment
  * point. The render pipeline itself is left unchanged.
  *
- * AdrTools format (the default importer in the original Structurizr):
+ * AdrTools decision format:
  *   Filename: {DECISION_ID:0000}-*.md
  *   Content:
  *     # {DECISION_ID}. {DECISION_TITLE}
@@ -72,8 +70,7 @@ export class C4JsonEnricher {
     /**
      * Reads all `!adrs` / `!decisions` directives reachable from the root
      * workspace document and injects `documentation` into the given JSON,
-     * exactly mirroring how the original library scopes documentation to its
-     * documentable (workspace or element owner).
+     * scoping it to its documentable owner (the workspace or an element).
      *
      * The passed JSON is mutated. The caller is expected to hand in a clone of
      * the cached render JSON (see C4GeneratorHandler.getFullContentForUri).
@@ -87,10 +84,8 @@ export class C4JsonEnricher {
         const root = doc.parseResult.value;
         if (!root) return;
 
-        // Workspace-level `dsl` (Structurizr-compatible): base64(UTF-8) of the
-        // FULL DSL text with `!include` expanded, mirroring the original
-        // `StructurizrDslParser` (which inlines include files before parsing)
-        // and `Workspace.toJson()`.
+        // Workspace-level `dsl`: base64(UTF-8) of the FULL DSL text with
+        // `!include` expanded.
         if (json && typeof json.dsl !== 'string') {
             const fullDsl = reconstructFullDsl(this.services, rootUri);
             json.dsl = base64EncodeUtf8(fullDsl);
@@ -177,7 +172,7 @@ export class C4JsonEnricher {
             node.forEach((child) => this.indexModel(child, byId));
             return;
         }
-        // Structurizr-style element object with an id.
+        // Element object with an id.
         if (typeof node.id === 'string' && !byId.has(node.id)) {
             byId.set(node.id, node);
         }
@@ -214,10 +209,10 @@ export class C4JsonEnricher {
             const tech = this.firstPropValue(node.techProps);
             if (tech !== undefined) target.technology = tech;
         }
-        // Structurizr implicitly records the DSL identifier as a property
-        // (element.addProperty("structurizr.dsl.identifier", ...)) for every
-        // element that is registered with an explicit identifier. Merge it into
-        // (or create) the properties map without clobbering other properties.
+        // The DSL identifier is recorded as a `structurizr.dsl.identifier`
+        // property for every element registered with an explicit identifier.
+        // Merge it into (or create) the properties map without clobbering other
+        // properties.
         const identifier = this.astIdentifier(node);
         if (identifier !== undefined) {
             if (target.properties === undefined) target.properties = {};
@@ -257,7 +252,7 @@ export class C4JsonEnricher {
         return Object.keys(props).length > 0 ? props : undefined;
     }
 
-    /** Reads the first PerspectivesBlock items into Structurizr-compatible objects. */
+    /** Reads the first PerspectivesBlock items into plain JSON objects. */
     private collectPerspectives(blocks: any[] | undefined): any[] | undefined {
         const items = blocks?.at(0)?.items;
         if (!Array.isArray(items) || items.length === 0) return undefined;
@@ -280,8 +275,8 @@ export class C4JsonEnricher {
     /**
      * Determines the documentable owner of a directive: the workspace itself,
      * or a SoftwareSystem/Container/Component element (identified by its chain
-     * of names). Mirrors the Java parser, where `!adrs` is only permitted in
-     * Workspace/SoftwareSystem/Container/Component contexts.
+     * of names). `!adrs` is only permitted in Workspace, SoftwareSystem,
+     * Container and Component contexts.
      */
     private resolveOwner(adrs: AdrsDirective): { kind: 'workspace' } | { kind: 'element'; pathKey: string } {
         const names: string[] = [];
@@ -329,8 +324,8 @@ export class C4JsonEnricher {
     }
 
     /**
-     * Returns the child element arrays of a JSON model node, in Structurizr
-     * nesting order: softwareSystems, then containers, then components.
+     * Returns the child element arrays of a JSON model node, in nesting order:
+     * softwareSystems, then containers, then components.
      */
     private jsonChildren(node: any): any[] | undefined {
         if (Array.isArray(node?.softwareSystems)) return node.softwareSystems;
@@ -391,8 +386,8 @@ export class C4JsonEnricher {
             }
         }
 
-        // Resolve inter-decision links and rewrite file references, mirroring
-        // AdrToolsDecisionImporter.
+        // Resolve inter-decision links and rewrite file references to the
+        // AdrTools link syntax.
         for (const decision of decisions) {
             extractDecisionLinks(decision, byFilename);
             // Replace "{NNNN}-{slug}.md" references with "#{NNNN}" links.
@@ -545,7 +540,7 @@ export function extractDecisionLinks(decision: Decision, byFilename: Map<string,
     if (links.length > 0) decision.links = links;
 }
 
-/** A Structurizr-compatible decision record. */
+/** A decision record. */
 export interface Decision {
     id: string;
     title?: string;

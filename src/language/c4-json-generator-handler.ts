@@ -67,7 +67,7 @@ export class C4GeneratorHandler {
      * cached JSON of the other open projects.
      */
     private pendingReset = false;
-    /** Enriches the render JSON with the Structurizr-only fields the render pipeline does not produce. */
+    /** Enriches the render JSON with the documentation fields the render pipeline does not produce. */
     private enricher: C4JsonEnricher;
     /** In-flight generate() promises keyed by root workspace URI. Coalesces the
      *  duplicate generate() calls that a single build cycle produces (one per
@@ -346,7 +346,7 @@ export class C4GeneratorHandler {
      * (currently `documentation.decisions` from `!adrs`/`!decisions`).
      *
      * The render JSON is used as-is for the diagram preview; this method layers
-     * the additional Structurizr-only content on top without re-generating the
+     * the additional documentation content on top without re-generating the
      * model/views, so the enrichment is cheap. Returns undefined when no render
      * JSON is cached yet.
      */

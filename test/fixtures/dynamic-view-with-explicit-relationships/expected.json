@@ -1,0 +1,123 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "documentation" : { },
+      "id" : "1",
+      "name" : "A",
+      "properties" : {
+        "structurizr.dsl.identifier" : "a"
+      },
+      "relationships" : [ {
+        "description" : "Sync",
+        "destinationId" : "2",
+        "id" : "3",
+        "properties" : {
+          "structurizr.dsl.identifier" : "r1"
+        },
+        "sourceId" : "1",
+        "tags" : "Relationship,Sync"
+      }, {
+        "description" : "Async",
+        "destinationId" : "2",
+        "id" : "4",
+        "properties" : {
+          "structurizr.dsl.identifier" : "r2"
+        },
+        "sourceId" : "1",
+        "tags" : "Relationship,Async"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "documentation" : { },
+      "id" : "2",
+      "name" : "B",
+      "properties" : {
+        "structurizr.dsl.identifier" : "b"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "7",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgYSA9IHNvZnR3YXJlU3lzdGVtICJBIg0KICAgICAgICBiID0gc29mdHdhcmVTeXN0ZW0gIkIiDQoNCiAgICAgICAgcjEgPSBhIC0+IGIgIlN5bmMiIHsNCiAgICAgICAgICAgIHRhZ3MgIlN5bmMiDQogICAgICAgIH0NCg0KICAgICAgICByMiA9IGEgLT4gYiAiQXN5bmMiIHsNCiAgICAgICAgICAgIHRhZ3MgIkFzeW5jIg0KICAgICAgICB9DQogICAgfQ0KDQogICAgdmlld3Mgew0KICAgICAgICBzeXN0ZW1MYW5kc2NhcGUgew0KICAgICAgICAgICAgaW5jbHVkZSAqDQogICAgICAgICAgICBhdXRvTGF5b3V0DQogICAgICAgIH0NCg0KICAgICAgICBkeW5hbWljICogew0KICAgICAgICAgICAgcjIgIkFzeW5jIg0KICAgICAgICAgICAgYXV0b0xheW91dA0KICAgICAgICB9DQoNCiAgICAgICAgc3R5bGVzIHsNCiAgICAgICAgICAgIHJlbGF0aW9uc2hpcCAiU3luYyIgew0KICAgICAgICAgICAgICAgIHN0eWxlIHNvbGlkDQogICAgICAgICAgICB9DQogICAgICAgICAgICByZWxhdGlvbnNoaXAgIkFzeW5jIiB7DQogICAgICAgICAgICAgICAgc3R5bGUgZGFzaGVkDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQoNCn0=",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : {
+        "relationships" : [ {
+          "style" : "Dashed",
+          "tag" : "Async"
+        }, {
+          "style" : "Solid",
+          "tag" : "Sync"
+        } ]
+      },
+      "terminology" : { }
+    },
+    "dynamicViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Dynamic-001",
+      "name" : "Dynamic View",
+      "order" : 2,
+      "relationships" : [ {
+        "description" : "Async",
+        "id" : "4",
+        "order" : "1",
+        "response" : false
+      } ]
+    } ],
+    "systemLandscapeViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-001",
+      "name" : "System Landscape View",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "3"
+      }, {
+        "id" : "4"
+      } ]
+    } ]
+  }
+}

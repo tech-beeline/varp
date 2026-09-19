@@ -123,8 +123,7 @@ export function streamIncludes(root: AstNode): Iterable<import('langium').AstNod
 }
 
 /**
- * Encodes a UTF-8 string as base64 exactly like the original library:
- * `Base64.getEncoder().encodeToString(dsl.getBytes(StandardCharsets.UTF_8))`.
+ * Encodes a UTF-8 string as base64.
  * Uses the portable `buffer` package (already in the dependency tree via
  * safe-buffer/crypto-browserify, and Node's native `buffer` in Node builds):
  * `Buffer.from(text, 'utf8').toString('base64')` works in both Node and the

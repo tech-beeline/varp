@@ -1,0 +1,107 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "people": [
+      {
+        "id": "1",
+        "name": "User 1",
+        "properties": {
+          "structurizr.dsl.identifier": "user1"
+        },
+        "relationships": [
+          {
+            "description": "Uses",
+            "destinationId": "4",
+            "id": "6",
+            "sourceId": "1",
+            "tags": "Relationship"
+          },
+          {
+            "description": "Uses",
+            "destinationId": "5",
+            "id": "7",
+            "sourceId": "1",
+            "tags": "Relationship"
+          },
+          {
+            "description": "Uses",
+            "destinationId": "3",
+            "id": "8",
+            "sourceId": "1",
+            "tags": "Relationship"
+          }
+        ],
+        "tags": "Element,Person"
+      },
+      {
+        "id": "2",
+        "name": "User 2",
+        "properties": {
+          "structurizr.dsl.identifier": "user2"
+        },
+        "relationships": [
+          {
+            "description": "Uses",
+            "destinationId": "3",
+            "id": "9",
+            "sourceId": "2",
+            "tags": "Relationship"
+          }
+        ],
+        "tags": "Element,Person"
+      }
+    ],
+    "properties": {
+      "structurizr.groupSeparator": "/"
+    },
+    "softwareSystems": [
+      {
+        "documentation": {},
+        "group": "Department 1/Team 1",
+        "id": "3",
+        "name": "A",
+        "properties": {
+          "structurizr.dsl.identifier": "cdd3bd32-964e-44da-85f4-4d16ce409a45"
+        },
+        "tags": "Element,Software System"
+      },
+      {
+        "documentation": {},
+        "group": "Department 1/Team 2",
+        "id": "4",
+        "name": "B",
+        "properties": {
+          "structurizr.dsl.identifier": "281840e2-aec5-475c-8ef7-482092ce806b"
+        },
+        "tags": "Element,Software System"
+      },
+      {
+        "documentation": {},
+        "group": "Department 1/Team 3",
+        "id": "5",
+        "name": "C",
+        "properties": {
+          "structurizr.dsl.identifier": "4b066fcf-09ac-4ba0-8e08-1862c34807d6"
+        },
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "16",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAic3RydWN0dXJpenIuZ3JvdXBTZXBhcmF0b3IiICIvIg0KICAgICAgICB9DQoNCiAgICAgICAgdXNlcjEgPSBwZXJzb24gIlVzZXIgMSINCiAgICAgICAgdXNlcjIgPSBwZXJzb24gIlVzZXIgMiINCg0KICAgICAgICBkZXBhcnRtZW50MSA9IGdyb3VwICJEZXBhcnRtZW50IDEiIHsNCiAgICAgICAgICAgIHRlYW0xID0gZ3JvdXAgIlRlYW0gMSIgew0KICAgICAgICAgICAgICAgIHNvZnR3YXJlU3lzdGVtICJBIg0KICAgICAgICAgICAgfQ0KDQogICAgICAgICAgICB0ZWFtMiA9IGdyb3VwICJUZWFtIDIiIHsNCiAgICAgICAgICAgICAgICBzb2Z0d2FyZVN5c3RlbSAiQiINCiAgICAgICAgICAgIH0NCg0KICAgICAgICAgICAgdGVhbTMgPSBncm91cCAiVGVhbSAzIiB7DQogICAgICAgICAgICAgICAgc29mdHdhcmVTeXN0ZW0gIkMiDQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICAhZWxlbWVudHMgZGVwYXJ0bWVudDEgew0KICAgICAgICAgICAgdXNlcjEgLT4gdGhpcyAiVXNlcyINCiAgICAgICAgfQ0KDQogICAgICAgICFlbGVtZW50cyB0ZWFtMSB7DQogICAgICAgICAgICB1c2VyMiAtPiB0aGlzICJVc2VzIg0KICAgICAgICB9DQogICAgfQ0KDQp9",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

@@ -182,7 +182,7 @@ describe('-/> body relationships', () => {
     });
 });
 
-describe('reference no-relationship fixture', () => {
+describe('no-relationship fixture', () => {
     const fixturePath = resolve(__dirname, '../../test/fixtures/dsl/no-relationship.dsl');
 
     function containerInstance(json: any, environment: string, namePart: string): any {
@@ -192,7 +192,7 @@ describe('reference no-relationship fixture', () => {
             .find((ci: any) => ci.environment === environment && names.get(ci.containerId)?.includes(namePart));
     }
 
-    it('matches the reference behaviour across all deployment environments', async () => {
+    it('matches expected behaviour across all deployment environments', async () => {
         const json = await generate(readFileSync(fixturePath, 'utf-8'));
         const relationships = allRelationships(json);
 
@@ -215,7 +215,7 @@ describe('reference no-relationship fixture', () => {
             expect(toLb?.technology).toBe('JSON/HTTPS');
             const fromLb = relationships.find(r => r.sourceId === toLb?.destinationId && r.destinationId === backend.id);
             expect(fromLb?.description).toBe('Forwards API requests to');
-            // `""` technology is omitted, matching the reference JSON exporter.
+            // Empty technology is omitted.
             expect(fromLb?.technology).toBeUndefined();
         }
     });

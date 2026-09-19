@@ -1057,6 +1057,7 @@ class JsonGenerator {
                 $refText: ""
             } as Reference<RelationshipMember>,
             description: this.description(linked),
+            technology: this.technology(linked),
         };
         if (linkedDoc) {
             relationship.$document = linkedDoc;

@@ -1,0 +1,33 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "softwareSystems": [
+      {
+        "documentation": {},
+        "id": "1",
+        "name": "Software System",
+        "properties": {
+          "structurizr.dsl.identifier": "softwareSystem"
+        },
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "5",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gPSBcDQogICAgICAgICAgICBzb2Z0d2FyZVN5c3RlbSBcDQogICAgICAgICAgICAiU29mdHdhcmUgXA0KICAgICAgICAgICAgU3lzdGVtIg0KICAgIH0NCiAgICANCn0=",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

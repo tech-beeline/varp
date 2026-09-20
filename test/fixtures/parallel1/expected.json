@@ -1,0 +1,158 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "people" : [ {
+      "id" : "1",
+      "name" : "User",
+      "properties" : {
+        "structurizr.dsl.identifier" : "user"
+      },
+      "relationships" : [ {
+        "description" : "Updates details",
+        "destinationId" : "3",
+        "id" : "7",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Updates details",
+        "destinationId" : "2",
+        "id" : "8",
+        "linkedRelationshipId" : "7",
+        "sourceId" : "1"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "3",
+        "name" : "Web Application",
+        "properties" : {
+          "structurizr.dsl.identifier" : "webapp"
+        },
+        "relationships" : [ {
+          "description" : "Sends update event",
+          "destinationId" : "4",
+          "id" : "9",
+          "sourceId" : "3",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container"
+      }, {
+        "documentation" : { },
+        "id" : "4",
+        "name" : "Message Bus",
+        "properties" : {
+          "structurizr.dsl.identifier" : "bus"
+        },
+        "relationships" : [ {
+          "description" : "Broadcasts update event",
+          "destinationId" : "5",
+          "id" : "10",
+          "sourceId" : "4",
+          "tags" : "Relationship"
+        }, {
+          "description" : "Broadcasts update event",
+          "destinationId" : "6",
+          "id" : "11",
+          "sourceId" : "4",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container"
+      }, {
+        "documentation" : { },
+        "id" : "5",
+        "name" : "App 1",
+        "properties" : {
+          "structurizr.dsl.identifier" : "app1"
+        },
+        "tags" : "Element,Container"
+      }, {
+        "documentation" : { },
+        "id" : "6",
+        "name" : "App 2",
+        "properties" : {
+          "structurizr.dsl.identifier" : "app2"
+        },
+        "tags" : "Element,Container"
+      } ],
+      "documentation" : { },
+      "id" : "2",
+      "name" : "Software System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "softwareSystem"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "20",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgdXNlciA9IHBlcnNvbiAiVXNlciINCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gPSBzb2Z0d2FyZVN5c3RlbSAiU29mdHdhcmUgU3lzdGVtIiB7DQogICAgICAgICAgICB3ZWJhcHAgPSBjb250YWluZXIgIldlYiBBcHBsaWNhdGlvbiINCiAgICAgICAgICAgIGJ1cyA9IGNvbnRhaW5lciAiTWVzc2FnZSBCdXMiDQogICAgICAgICAgICBhcHAxID0gY29udGFpbmVyICJBcHAgMSINCiAgICAgICAgICAgIGFwcDIgPSBjb250YWluZXIgIkFwcCAyIg0KICAgICAgICB9DQoNCiAgICAgICAgdXNlciAtPiB3ZWJhcHAgIlVwZGF0ZXMgZGV0YWlscyINCiAgICAgICAgd2ViYXBwIC0+IGJ1cyAiU2VuZHMgdXBkYXRlIGV2ZW50Ig0KICAgICAgICBidXMgLT4gYXBwMSAiQnJvYWRjYXN0cyB1cGRhdGUgZXZlbnQiDQogICAgICAgIGJ1cyAtPiBhcHAyICJCcm9hZGNhc3RzIHVwZGF0ZSBldmVudCINCiAgICB9DQoNCiAgICB2aWV3cyB7DQogICAgICAgIGR5bmFtaWMgc29mdHdhcmVTeXN0ZW0gew0KICAgICAgICAgICAgdXNlciAtPiB3ZWJhcHANCiAgICAgICAgICAgIHdlYmFwcCAtPiBidXMNCiAgICAgICAgICAgIHsNCiAgICAgICAgICAgICAgICBidXMgLT4gYXBwMQ0KICAgICAgICAgICAgfQ0KICAgICAgICAgICAgew0KICAgICAgICAgICAgICAgIGJ1cyAtPiBhcHAyDQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgIGF1dG9MYXlvdXQNCiAgICAgICAgfQ0KICAgIH0NCg0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "dynamicViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elementId" : "2",
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Dynamic-001",
+      "name" : "Dynamic View: Software System",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "7",
+        "order" : "1",
+        "response" : false
+      }, {
+        "id" : "9",
+        "order" : "2",
+        "response" : false
+      }, {
+        "id" : "10",
+        "order" : "3",
+        "response" : false
+      }, {
+        "id" : "11",
+        "order" : "3",
+        "response" : false
+      } ]
+    } ]
+  }
+}

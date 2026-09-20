@@ -1,0 +1,78 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "deploymentNodes": [
+      {
+        "environment": "Environment",
+        "id": "4",
+        "infrastructureNodes": [
+          {
+            "environment": "Environment",
+            "id": "5",
+            "name": "Infrastructure Node",
+            "properties": {
+              "structurizr.dsl.identifier": "c87444f5-83ee-4e1e-8830-e55b2644cdf7.68181cba-31ee-43c6-94d7-e29df74eaed7.e1733204-7f2c-4f16-a098-474e1ba417e9"
+            },
+            "tags": "Element,Infrastructure Node"
+          }
+        ],
+        "instances": "1",
+        "name": "Deployment Node",
+        "properties": {
+          "structurizr.dsl.identifier": "c87444f5-83ee-4e1e-8830-e55b2644cdf7.68181cba-31ee-43c6-94d7-e29df74eaed7"
+        },
+        "tags": "Element,Deployment Node"
+      }
+    ],
+    "softwareSystems": [
+      {
+        "containers": [
+          {
+            "components": [
+              {
+                "documentation": {},
+                "id": "3",
+                "name": "C",
+                "properties": {
+                  "structurizr.dsl.identifier": "b15bca7b-4703-4352-9479-e7954262497e.223713fd-510b-4246-8bf3-d7744b541879.872b6a4a-1e12-4cdc-90c1-b88b7733746e"
+                },
+                "tags": "Element,Component"
+              }
+            ],
+            "documentation": {},
+            "id": "2",
+            "name": "B",
+            "properties": {
+              "structurizr.dsl.identifier": "b15bca7b-4703-4352-9479-e7954262497e.223713fd-510b-4246-8bf3-d7744b541879"
+            },
+            "tags": "Element,Container"
+          }
+        ],
+        "documentation": {},
+        "id": "1",
+        "name": "A",
+        "properties": {
+          "structurizr.dsl.identifier": "b15bca7b-4703-4352-9479-e7954262497e"
+        },
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "22",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gIkEiIHsNCiAgICAgICAgICAgIGNvbnRhaW5lciAiQiIgew0KICAgICAgICAgICAgICAgIGNvbXBvbmVudCAiQyINCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KDQogICAgICAgIGRlcGxveW1lbnRFbnZpcm9ubWVudCAiRW52aXJvbm1lbnQiIHsNCiAgICAgICAgICAgIGRlcGxveW1lbnROb2RlICJEZXBsb3ltZW50IE5vZGUiIHsNCiAgICAgICAgICAgICAgICBpbmZyYXN0cnVjdHVyZU5vZGUgIkluZnJhc3RydWN0dXJlIE5vZGUiDQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgIH0NCn0=",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

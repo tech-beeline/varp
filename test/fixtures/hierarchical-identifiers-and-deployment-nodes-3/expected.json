@@ -1,0 +1,92 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "deploymentNodes": [
+      {
+        "children": [
+          {
+            "children": [
+              {
+                "containerInstances": [
+                  {
+                    "containerId": "2",
+                    "environment": "Environment",
+                    "id": "6",
+                    "instanceId": 1,
+                    "properties": {
+                      "structurizr.dsl.identifier": "live.dn.ss.c.d93d9e27-09e6-4db6-bc33-dc5806076417"
+                    },
+                    "tags": "Container Instance"
+                  }
+                ],
+                "environment": "Environment",
+                "id": "5",
+                "instances": "1",
+                "name": "DN3",
+                "properties": {
+                  "structurizr.dsl.identifier": "live.dn.ss.c"
+                },
+                "tags": "Element,Deployment Node"
+              }
+            ],
+            "environment": "Environment",
+            "id": "4",
+            "instances": "1",
+            "name": "DN2",
+            "properties": {
+              "structurizr.dsl.identifier": "live.dn.ss"
+            },
+            "tags": "Element,Deployment Node"
+          }
+        ],
+        "environment": "Environment",
+        "id": "3",
+        "instances": "1",
+        "name": "DN1",
+        "properties": {
+          "structurizr.dsl.identifier": "live.dn"
+        },
+        "tags": "Element,Deployment Node"
+      }
+    ],
+    "softwareSystems": [
+      {
+        "containers": [
+          {
+            "documentation": {},
+            "id": "2",
+            "name": "C",
+            "properties": {
+              "structurizr.dsl.identifier": "ss.c"
+            },
+            "tags": "Element,Container"
+          }
+        ],
+        "documentation": {},
+        "id": "1",
+        "name": "SS",
+        "properties": {
+          "structurizr.dsl.identifier": "ss"
+        },
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "22",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgc3MgPSBzb2Z0d2FyZVN5c3RlbSAiU1MiIHsNCiAgICAgICAgICAgIGMgPSBjb250YWluZXIgIkMiDQogICAgICAgIH0NCg0KICAgICAgICBsaXZlID0gZGVwbG95bWVudEVudmlyb25tZW50ICJFbnZpcm9ubWVudCIgew0KICAgICAgICAgICAgZG4gPSBkZXBsb3ltZW50Tm9kZSAiRE4xIiB7DQogICAgICAgICAgICAgICAgc3MgPSBkZXBsb3ltZW50Tm9kZSAiRE4yIiB7DQogICAgICAgICAgICAgICAgICAgIGMgPSBkZXBsb3ltZW50Tm9kZSAiRE4zIiB7DQogICAgICAgICAgICAgICAgICAgICAgICBjb250YWluZXJJbnN0YW5jZSBzcy5jDQogICAgICAgICAgICAgICAgICAgIH0NCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgIH0NCg0KfQ==",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "softwareSystems": [
+      {
+        "description": "Description",
+        "documentation": {},
+        "id": "1",
+        "name": "Name",
+        "properties": {
+          "structurizr.dsl.identifier": "abbb4f92-ee78-48d2-96e3-5932517b4213"
+        },
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "4",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

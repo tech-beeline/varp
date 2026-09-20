@@ -1,0 +1,69 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "deploymentNodes": [
+      {
+        "children": [
+          {
+            "environment": "Environment",
+            "id": "3",
+            "instances": "1",
+            "name": "DN2",
+            "properties": {
+              "structurizr.dsl.identifier": "live.dn.ss"
+            },
+            "softwareSystemInstances": [
+              {
+                "environment": "Environment",
+                "id": "4",
+                "instanceId": 1,
+                "properties": {
+                  "structurizr.dsl.identifier": "live.dn.ss.01ecbe14-eb96-46db-bf5e-32568683b134"
+                },
+                "softwareSystemId": "1",
+                "tags": "Software System Instance"
+              }
+            ],
+            "tags": "Element,Deployment Node"
+          }
+        ],
+        "environment": "Environment",
+        "id": "2",
+        "instances": "1",
+        "name": "DN1",
+        "properties": {
+          "structurizr.dsl.identifier": "live.dn"
+        },
+        "tags": "Element,Deployment Node"
+      }
+    ],
+    "softwareSystems": [
+      {
+        "documentation": {},
+        "id": "1",
+        "name": "SS",
+        "properties": {
+          "structurizr.dsl.identifier": "ss"
+        },
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "13",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgc3MgPSBzb2Z0d2FyZVN5c3RlbSAiU1MiDQoNCiAgICAgICAgbGl2ZSA9IGRlcGxveW1lbnRFbnZpcm9ubWVudCAiRW52aXJvbm1lbnQiIHsNCiAgICAgICAgICAgIGRuID0gZGVwbG95bWVudE5vZGUgIkROMSIgew0KICAgICAgICAgICAgICAgIHNzID0gZGVwbG95bWVudE5vZGUgIkROMiIgew0KICAgICAgICAgICAgICAgICAgICBzb2Z0d2FyZVN5c3RlbUluc3RhbmNlIHNzDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQoNCiAgICB9DQoNCn0=",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

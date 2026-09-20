@@ -1,0 +1,321 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "deploymentNodes": [
+      {
+        "children": [
+          {
+            "containerInstances": [
+              {
+                "containerId": "2",
+                "environment": "One",
+                "id": "7",
+                "instanceId": 1,
+                "properties": {
+                  "structurizr.dsl.identifier": "one.93a356ae-a559-4098-9d98-65dcb01a5ac5.33eb812a-a2bd-4e1a-ab36-36e8d3575e4e.1f138ec0-a59e-4c85-ab66-66bc82c880c4"
+                },
+                "relationships": [
+                  {
+                    "description": "Makes API requests to",
+                    "destinationId": "8",
+                    "id": "9",
+                    "linkedRelationshipId": "4",
+                    "sourceId": "7",
+                    "technology": "JSON/HTTPS"
+                  }
+                ],
+                "tags": "Container Instance"
+              }
+            ],
+            "environment": "One",
+            "id": "6",
+            "instances": "1",
+            "name": "Web Browser",
+            "properties": {
+              "structurizr.dsl.identifier": "one.93a356ae-a559-4098-9d98-65dcb01a5ac5.33eb812a-a2bd-4e1a-ab36-36e8d3575e4e"
+            },
+            "tags": "Element,Deployment Node"
+          }
+        ],
+        "containerInstances": [
+          {
+            "containerId": "3",
+            "environment": "One",
+            "id": "8",
+            "instanceId": 1,
+            "properties": {
+              "structurizr.dsl.identifier": "one.93a356ae-a559-4098-9d98-65dcb01a5ac5.fd618a4a-4d7c-4cca-b69e-624ef6f7869d"
+            },
+            "tags": "Container Instance"
+          }
+        ],
+        "environment": "One",
+        "id": "5",
+        "instances": "1",
+        "name": "Developer's Computer",
+        "properties": {
+          "structurizr.dsl.identifier": "one.93a356ae-a559-4098-9d98-65dcb01a5ac5"
+        },
+        "tags": "Element,Deployment Node"
+      },
+      {
+        "children": [
+          {
+            "containerInstances": [
+              {
+                "containerId": "2",
+                "environment": "Two",
+                "id": "12",
+                "instanceId": 1,
+                "properties": {
+                  "structurizr.dsl.identifier": "two.4d0e7bf2-df23-4df5-bc55-3a297b4857bf.b8e0ac58-9f46-46e2-8b20-a2783a8e212e.78c28380-2df0-42e6-81b4-c610e10ab1bb"
+                },
+                "relationships": [
+                  {
+                    "description": "Makes API requests to",
+                    "destinationId": "14",
+                    "id": "18",
+                    "sourceId": "12",
+                    "tags": "Relationship",
+                    "technology": "JSON/HTTPS"
+                  }
+                ],
+                "tags": "Container Instance"
+              }
+            ],
+            "environment": "Two",
+            "id": "11",
+            "instances": "1",
+            "name": "Web Browser",
+            "properties": {
+              "structurizr.dsl.identifier": "two.4d0e7bf2-df23-4df5-bc55-3a297b4857bf.b8e0ac58-9f46-46e2-8b20-a2783a8e212e"
+            },
+            "tags": "Element,Deployment Node"
+          }
+        ],
+        "environment": "Two",
+        "id": "10",
+        "instances": "1",
+        "name": "User's Computer",
+        "properties": {
+          "structurizr.dsl.identifier": "two.4d0e7bf2-df23-4df5-bc55-3a297b4857bf"
+        },
+        "tags": "Element,Deployment Node"
+      },
+      {
+        "children": [
+          {
+            "containerInstances": [
+              {
+                "containerId": "3",
+                "environment": "Two",
+                "id": "16",
+                "instanceId": 1,
+                "properties": {
+                  "structurizr.dsl.identifier": "two.dc.1dea1300-d153-4894-92a7-40f63802ab7f.426018eb-5ef7-4c9d-b1ea-ba903fb99552"
+                },
+                "tags": "Container Instance"
+              }
+            ],
+            "environment": "Two",
+            "id": "15",
+            "instances": "1",
+            "name": "Server",
+            "properties": {
+              "structurizr.dsl.identifier": "two.dc.1dea1300-d153-4894-92a7-40f63802ab7f"
+            },
+            "tags": "Element,Deployment Node"
+          }
+        ],
+        "environment": "Two",
+        "id": "13",
+        "infrastructureNodes": [
+          {
+            "environment": "Two",
+            "id": "14",
+            "name": "Load Balancer",
+            "properties": {
+              "structurizr.dsl.identifier": "two.dc.loadBalancer"
+            },
+            "relationships": [
+              {
+                "description": "Forwards API requests to",
+                "destinationId": "16",
+                "id": "19",
+                "sourceId": "14",
+                "tags": "Relationship"
+              }
+            ],
+            "tags": "Element,Infrastructure Node"
+          }
+        ],
+        "instances": "1",
+        "name": "Data Center",
+        "properties": {
+          "structurizr.dsl.identifier": "two.dc"
+        },
+        "tags": "Element,Deployment Node"
+      },
+      {
+        "children": [
+          {
+            "containerInstances": [
+              {
+                "containerId": "2",
+                "environment": "Three",
+                "id": "22",
+                "instanceId": 1,
+                "properties": {
+                  "structurizr.dsl.identifier": "three.computer.webbrowser.ui"
+                },
+                "relationships": [
+                  {
+                    "description": "Makes API requests to",
+                    "destinationId": "24",
+                    "id": "28",
+                    "sourceId": "22",
+                    "tags": "Relationship",
+                    "technology": "JSON/HTTPS"
+                  }
+                ],
+                "tags": "Container Instance"
+              }
+            ],
+            "environment": "Three",
+            "id": "21",
+            "instances": "1",
+            "name": "Web Browser",
+            "properties": {
+              "structurizr.dsl.identifier": "three.computer.webbrowser"
+            },
+            "tags": "Element,Deployment Node"
+          }
+        ],
+        "environment": "Three",
+        "id": "20",
+        "instances": "1",
+        "name": "User's Computer",
+        "properties": {
+          "structurizr.dsl.identifier": "three.computer"
+        },
+        "tags": "Element,Deployment Node"
+      },
+      {
+        "children": [
+          {
+            "containerInstances": [
+              {
+                "containerId": "3",
+                "environment": "Three",
+                "id": "26",
+                "instanceId": 1,
+                "properties": {
+                  "structurizr.dsl.identifier": "three.datacenter.server.backend"
+                },
+                "tags": "Container Instance"
+              }
+            ],
+            "environment": "Three",
+            "id": "25",
+            "instances": "1",
+            "name": "Server",
+            "properties": {
+              "structurizr.dsl.identifier": "three.datacenter.server"
+            },
+            "tags": "Element,Deployment Node"
+          }
+        ],
+        "environment": "Three",
+        "id": "23",
+        "infrastructureNodes": [
+          {
+            "environment": "Three",
+            "id": "24",
+            "name": "Load Balancer",
+            "properties": {
+              "structurizr.dsl.identifier": "three.datacenter.loadbalancer"
+            },
+            "relationships": [
+              {
+                "description": "Forwards API requests to",
+                "destinationId": "26",
+                "id": "29",
+                "sourceId": "24",
+                "tags": "Relationship"
+              }
+            ],
+            "tags": "Element,Infrastructure Node"
+          }
+        ],
+        "instances": "1",
+        "name": "Data Center",
+        "properties": {
+          "structurizr.dsl.identifier": "three.datacenter"
+        },
+        "tags": "Element,Deployment Node"
+      }
+    ],
+    "softwareSystems": [
+      {
+        "containers": [
+          {
+            "description": "Description",
+            "documentation": {},
+            "id": "2",
+            "name": "UI",
+            "properties": {
+              "structurizr.dsl.identifier": "ss.ui"
+            },
+            "relationships": [
+              {
+                "description": "Makes API requests to",
+                "destinationId": "3",
+                "id": "4",
+                "sourceId": "2",
+                "tags": "Relationship",
+                "technology": "JSON/HTTPS"
+              }
+            ],
+            "tags": "Element,Container",
+            "technology": "JavaScript and React"
+          },
+          {
+            "description": "Description",
+            "documentation": {},
+            "id": "3",
+            "name": "Backend",
+            "properties": {
+              "structurizr.dsl.identifier": "ss.backend"
+            },
+            "tags": "Element,Container",
+            "technology": "Spring Boot"
+          }
+        ],
+        "documentation": {},
+        "id": "1",
+        "name": "Software System",
+        "properties": {
+          "structurizr.dsl.identifier": "ss"
+        },
+        "tags": "Element,Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "36",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgc3MgPSBzb2Z0d2FyZVN5c3RlbSAiU29mdHdhcmUgU3lzdGVtIiB7DQogICAgICAgICAgICB1aSA9IGNvbnRhaW5lciAiVUkiICJEZXNjcmlwdGlvbiIgIkphdmFTY3JpcHQgYW5kIFJlYWN0Ig0KICAgICAgICAgICAgYmFja2VuZCA9IGNvbnRhaW5lciAiQmFja2VuZCIgIkRlc2NyaXB0aW9uIiAiU3ByaW5nIEJvb3QiDQoNCiAgICAgICAgICAgIHVpIC0+IGJhY2tlbmQgIk1ha2VzIEFQSSByZXF1ZXN0cyB0byIgIkpTT04vSFRUUFMiDQogICAgICAgIH0NCg0KICAgICAgICAvLyB1aSAtPiBiYWNrZW5kDQogICAgICAgIG9uZSA9IGRlcGxveW1lbnRFbnZpcm9ubWVudCAiT25lIiB7DQogICAgICAgICAgICBkZXBsb3ltZW50Tm9kZSAiRGV2ZWxvcGVyJ3MgQ29tcHV0ZXIiIHsNCiAgICAgICAgICAgICAgICBkZXBsb3ltZW50Tm9kZSAiV2ViIEJyb3dzZXIiIHsNCiAgICAgICAgICAgICAgICAgICAgaW5zdGFuY2VPZiBzcy51aQ0KICAgICAgICAgICAgICAgIH0NCiAgICAgICAgICAgICAgICBpbnN0YW5jZU9mIHNzLmJhY2tlbmQNCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KDQogICAgICAgIC8vIHVpIC0+IGxvYWRiYWxhbmNlciAtPiBiYWNrZW5kDQogICAgICAgIC8vIGNvbmZpZ3VyZWQgdmlhIGNvbnRhaW5lciBpZGVudGlmaWVycw0KICAgICAgICB0d28gPSBkZXBsb3ltZW50RW52aXJvbm1lbnQgIlR3byIgew0KICAgICAgICAgICAgZGVwbG95bWVudE5vZGUgIlVzZXIncyBDb21wdXRlciIgew0KICAgICAgICAgICAgICAgIGRlcGxveW1lbnROb2RlICJXZWIgQnJvd3NlciIgew0KICAgICAgICAgICAgICAgICAgICBpbnN0YW5jZU9mIHNzLnVpDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgfQ0KICAgICAgICAgICAgZGMgPSBkZXBsb3ltZW50Tm9kZSAiRGF0YSBDZW50ZXIiIHsNCiAgICAgICAgICAgICAgICBsb2FkQmFsYW5jZXIgPSBpbmZyYXN0cnVjdHVyZU5vZGUgIkxvYWQgQmFsYW5jZXIiDQogICAgICAgICAgICAgICAgZGVwbG95bWVudE5vZGUgIlNlcnZlciIgew0KICAgICAgICAgICAgICAgICAgICBpbnN0YW5jZU9mIHNzLmJhY2tlbmQNCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgIHNzLnVpIC0vPiBzcy5iYWNrZW5kIHsNCiAgICAgICAgICAgICAgICBzcy51aSAtPiBkYy5sb2FkQmFsYW5jZXINCiAgICAgICAgICAgICAgICBkYy5sb2FkQmFsYW5jZXIgLT4gc3MuYmFja2VuZCAiRm9yd2FyZHMgQVBJIHJlcXVlc3RzIHRvIiAiIg0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQoNCiAgICAgICAgLy8gdWkgLT4gbG9hZGJhbGFuY2VyIC0+IGJhY2tlbmQNCiAgICAgICAgLy8gY29uZmlndXJlZCB2aWEgY29udGFpbmVyIGluc3RhbmNlIGlkZW50aWZpZXJzDQogICAgICAgIHRocmVlID0gZGVwbG95bWVudEVudmlyb25tZW50ICJUaHJlZSIgew0KICAgICAgICAgICAgY29tcHV0ZXIgPSBkZXBsb3ltZW50Tm9kZSAiVXNlcidzIENvbXB1dGVyIiB7DQogICAgICAgICAgICAgICAgd2ViYnJvd3NlciA9IGRlcGxveW1lbnROb2RlICJXZWIgQnJvd3NlciIgew0KICAgICAgICAgICAgICAgICAgICB1aSA9IGluc3RhbmNlT2Ygc3MudWkNCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQogICAgICAgICAgICBkYXRhY2VudGVyID0gZGVwbG95bWVudE5vZGUgIkRhdGEgQ2VudGVyIiB7DQogICAgICAgICAgICAgICAgbG9hZGJhbGFuY2VyID0gaW5mcmFzdHJ1Y3R1cmVOb2RlICJMb2FkIEJhbGFuY2VyIg0KICAgICAgICAgICAgICAgIHNlcnZlciA9IGRlcGxveW1lbnROb2RlICJTZXJ2ZXIiIHsNCiAgICAgICAgICAgICAgICAgICAgYmFja2VuZCA9IGluc3RhbmNlT2Ygc3MuYmFja2VuZA0KICAgICAgICAgICAgICAgIH0NCiAgICAgICAgICAgIH0NCg0KICAgICAgICAgICAgY29tcHV0ZXIud2ViYnJvd3Nlci51aSAtLz4gZGF0YWNlbnRlci5zZXJ2ZXIuYmFja2VuZCB7DQogICAgICAgICAgICAgICAgY29tcHV0ZXIud2ViYnJvd3Nlci51aSAtPiBkYXRhY2VudGVyLmxvYWRiYWxhbmNlcg0KICAgICAgICAgICAgICAgIGRhdGFjZW50ZXIubG9hZGJhbGFuY2VyIC0+IGRhdGFjZW50ZXIuc2VydmVyLmJhY2tlbmQgIkZvcndhcmRzIEFQSSByZXF1ZXN0cyB0byIgIiINCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIHZpZXdzIHsNCiAgICAgICAgY29udGFpbmVyIHNzIHsNCiAgICAgICAgICAgIGluY2x1ZGUgKg0KICAgICAgICAgICAgYXV0b2xheW91dCBscg0KICAgICAgICB9DQoNCiAgICAgICAgZGVwbG95bWVudCBzcyBvbmUgew0KICAgICAgICAgICAgaW5jbHVkZSAqDQogICAgICAgICAgICBhdXRvbGF5b3V0IGxyDQogICAgICAgIH0NCg0KICAgICAgICBkZXBsb3ltZW50IHNzIHR3byB7DQogICAgICAgICAgICBpbmNsdWRlICoNCiAgICAgICAgICAgIGF1dG9sYXlvdXQgbHINCiAgICAgICAgfQ0KDQogICAgICAgIGRlcGxveW1lbnQgc3MgdGhyZWUgew0KICAgICAgICAgICAgaW5jbHVkZSAqDQogICAgICAgICAgICBhdXRvbGF5b3V0IGxyDQogICAgICAgIH0NCiAgICB9DQoNCn0=",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

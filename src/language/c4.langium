@@ -1160,7 +1160,7 @@ AnimationProperty:
 
 // Animation step: a set of elements that appear together in an animation frame
 AnimationStep:
-    elements+=NL+ ExpressionElement (','? elements+=ExpressionElement)*;
+    NL+ elements+=ExpressionElement (','? elements+=ExpressionElement)*;
 
 TitleProperty:
     TITLE_KW value=STRING;

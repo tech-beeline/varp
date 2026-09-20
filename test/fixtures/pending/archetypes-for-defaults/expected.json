@@ -1,0 +1,77 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "softwareSystems": [
+      {
+        "description": "Default Description",
+        "documentation": {},
+        "id": "1",
+        "name": "A",
+        "perspectives": [
+          {
+            "description": "Default Perspective Description",
+            "name": "Default Perspective Name"
+          }
+        ],
+        "properties": {
+          "structurizr.dsl.identifier": "a",
+          "Default Property Name": "Default Property Value"
+        },
+        "relationships": [
+          {
+            "description": "Default Description",
+            "destinationId": "2",
+            "id": "3",
+            "perspectives": [
+              {
+                "description": "Default Perspective Description",
+                "name": "Default Perspective Name"
+              }
+            ],
+            "properties": {
+              "Default Property Name": "Default Property Value"
+            },
+            "sourceId": "1",
+            "tags": "Relationship,Default Tag",
+            "technology": "Default Technology"
+          }
+        ],
+        "tags": "Element,Software System,Default Tag"
+      },
+      {
+        "description": "Default Description",
+        "documentation": {},
+        "id": "2",
+        "name": "B",
+        "perspectives": [
+          {
+            "description": "Default Perspective Description",
+            "name": "Default Perspective Name"
+          }
+        ],
+        "properties": {
+          "structurizr.dsl.identifier": "b",
+          "Default Property Name": "Default Property Value"
+        },
+        "tags": "Element,Software System,Default Tag"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "4",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgYXJjaGV0eXBlcyB7DQogICAgICAgICAgICBzb2Z0d2FyZXN5c3RlbSB7DQogICAgICAgICAgICAgICAgZGVzY3JpcHRpb24gIkRlZmF1bHQgRGVzY3JpcHRpb24iDQogICAgICAgICAgICAgICAgdGFnICJEZWZhdWx0IFRhZyINCg0KICAgICAgICAgICAgICAgIHByb3BlcnRpZXMgew0KICAgICAgICAgICAgICAgICAgICAiRGVmYXVsdCBQcm9wZXJ0eSBOYW1lIiAiRGVmYXVsdCBQcm9wZXJ0eSBWYWx1ZSINCiAgICAgICAgICAgICAgICB9DQoNCiAgICAgICAgICAgICAgICBwZXJzcGVjdGl2ZXMgew0KICAgICAgICAgICAgICAgICAgICAiRGVmYXVsdCBQZXJzcGVjdGl2ZSBOYW1lIiAiRGVmYXVsdCBQZXJzcGVjdGl2ZSBEZXNjcmlwdGlvbiINCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgIC0+IHsNCiAgICAgICAgICAgICAgICBkZXNjcmlwdGlvbiAiRGVmYXVsdCBEZXNjcmlwdGlvbiINCiAgICAgICAgICAgICAgICB0ZWNobm9sb2d5ICJEZWZhdWx0IFRlY2hub2xvZ3kiDQogICAgICAgICAgICAgICAgdGFnICJEZWZhdWx0IFRhZyINCg0KICAgICAgICAgICAgICAgIHByb3BlcnRpZXMgew0KICAgICAgICAgICAgICAgICAgICAiRGVmYXVsdCBQcm9wZXJ0eSBOYW1lIiAiRGVmYXVsdCBQcm9wZXJ0eSBWYWx1ZSINCiAgICAgICAgICAgICAgICB9DQoNCiAgICAgICAgICAgICAgICBwZXJzcGVjdGl2ZXMgew0KICAgICAgICAgICAgICAgICAgICAiRGVmYXVsdCBQZXJzcGVjdGl2ZSBOYW1lIiAiRGVmYXVsdCBQZXJzcGVjdGl2ZSBEZXNjcmlwdGlvbiINCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICBhID0gc29mdHdhcmVTeXN0ZW0gIkEiDQogICAgICAgIGIgPSBzb2Z0d2FyZVN5c3RlbSAiQiINCiAgICAgICAgYSAtPiBiDQogICAgfQ0KDQp9",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

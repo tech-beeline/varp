@@ -69,7 +69,7 @@ const IGNORED_KEYS = new Set([
     // Langium internals
     '$', 'generatedKey',
     // ID fields — always auto-generated and differ
-    'id', 'softwareSystemId', 'containerId', 'parentId', 'sourceId', 'destinationId', 'linkedRelationshipId',
+    'id', 'softwareSystemId', 'containerId', 'parentId', 'elementId', 'sourceId', 'destinationId', 'linkedRelationshipId',
     // Fields the generator does not produce — ignore
     'location', 'documentation',
     // View ordering
@@ -134,10 +134,14 @@ function compareObjects(actual: any, expected: any, path: string, diffs: Compare
             compareArrays(actualVal, expectedVal, childPath, diffs);
         } else if (key === 'relationships' && path.includes('model')) {
             compareRelationshipArrays(actualVal, expectedVal, childPath, diffs);
-        } else if (key === 'elements' && (path.includes('view') || path.includes('views'))) {
+        } else if (path.includes('animations') && (key === 'elements' || key === 'relationships')) {
+            // Animation steps reference element/relationship ids that differ between
+            // generators — compare the number of entries per step.
+            compareAnimationIdArrays(actualVal, expectedVal, childPath, diffs);
+        } else if (key === 'elements' && (path.includes('view') || path.includes('views')) && !path.includes('animations')) {
             // View elements are arrays of {id, x, y} — just check count and ID presence
             compareViewElementArrays(actualVal, expectedVal, childPath, diffs);
-        } else if (key === 'relationships' && (path.includes('view') || path.includes('views'))) {
+        } else if (key === 'relationships' && (path.includes('view') || path.includes('views')) && !path.includes('animations')) {
             compareViewRelationshipArrays(actualVal, expectedVal, childPath, diffs);
         } else if (Array.isArray(actualVal) && Array.isArray(expectedVal)) {
             compareArrays(actualVal, expectedVal, childPath, diffs);
@@ -283,6 +287,19 @@ function compareRelationshipArrays(actual: any[], expected: any[], path: string,
  * Compare view element arrays (list of {id, x, y}).
  * Match by ID mapping → name, or just count elements.
  */
+/**
+ * Compare animation step id arrays ({elements}/{relationships}). The ids differ
+ * between generators, so only the number of entries is compared.
+ */
+function compareAnimationIdArrays(actual: any, expected: any, path: string, diffs: CompareResult[]): void {
+    if (actual === undefined && expected === undefined) return;
+    if (!Array.isArray(actual)) { diffs.push({ path, message: 'Expected array', expected: 'array', actual }); return; }
+    if (!Array.isArray(expected)) { diffs.push({ path, message: 'Expected array', actual: 'array', expected }); return; }
+    if (actual.length !== expected.length) {
+        diffs.push({ path, message: 'Animation step count mismatch', expected: expected.length, actual: actual.length });
+    }
+}
+
 function compareViewElementArrays(actual: any[], expected: any[], path: string, diffs: CompareResult[]): void {
     if (!Array.isArray(actual)) { diffs.push({ path, message: 'Expected array', expected: 'array', actual }); return; }
     if (!Array.isArray(expected)) { diffs.push({ path, message: 'Expected array', actual: 'array', expected }); return; }

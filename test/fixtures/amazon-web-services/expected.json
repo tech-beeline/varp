@@ -1,0 +1,272 @@
+{
+  "configuration" : { },
+  "description" : "An example AWS deployment architecture.",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "deploymentNodes" : [ {
+      "children" : [ {
+        "children" : [ {
+          "children" : [ {
+            "containerInstances" : [ {
+              "containerId" : "2",
+              "environment" : "Live",
+              "id" : "11",
+              "instanceId" : 1,
+              "properties" : {
+                "structurizr.dsl.identifier" : "webApplicationInstance"
+              },
+              "relationships" : [ {
+                "description" : "Reads from and writes to",
+                "destinationId" : "14",
+                "id" : "15",
+                "linkedRelationshipId" : "4",
+                "sourceId" : "11",
+                "technology" : "MySQL Protocol/SSL"
+              } ],
+              "tags" : "Container Instance"
+            } ],
+            "environment" : "Live",
+            "id" : "10",
+            "instances" : "1",
+            "name" : "Amazon EC2",
+            "properties" : {
+              "structurizr.dsl.identifier" : "b507bd3e-849d-4d0a-b787-74f81c83f5a9"
+            },
+            "tags" : "Element,Deployment Node,Amazon Web Services - EC2"
+          } ],
+          "environment" : "Live",
+          "id" : "9",
+          "instances" : "1",
+          "name" : "Autoscaling group",
+          "properties" : {
+            "structurizr.dsl.identifier" : "a29154c2-5f7c-4775-a545-2dcfdb7b3f74"
+          },
+          "tags" : "Element,Deployment Node,Amazon Web Services - Auto Scaling"
+        }, {
+          "children" : [ {
+            "containerInstances" : [ {
+              "containerId" : "3",
+              "environment" : "Live",
+              "id" : "14",
+              "instanceId" : 1,
+              "properties" : {
+                "structurizr.dsl.identifier" : "databaseInstance"
+              },
+              "tags" : "Container Instance"
+            } ],
+            "environment" : "Live",
+            "id" : "13",
+            "instances" : "1",
+            "name" : "MySQL",
+            "properties" : {
+              "structurizr.dsl.identifier" : "19100ee0-d617-4940-b194-6b378c1c13e2"
+            },
+            "tags" : "Element,Deployment Node,Amazon Web Services - RDS MySQL instance"
+          } ],
+          "environment" : "Live",
+          "id" : "12",
+          "instances" : "1",
+          "name" : "Amazon RDS",
+          "properties" : {
+            "structurizr.dsl.identifier" : "5b65257c-16d8-4343-90b8-8f2a846f162e"
+          },
+          "tags" : "Element,Deployment Node,Amazon Web Services - RDS"
+        } ],
+        "environment" : "Live",
+        "id" : "6",
+        "infrastructureNodes" : [ {
+          "environment" : "Live",
+          "id" : "7",
+          "name" : "Route 53",
+          "properties" : {
+            "structurizr.dsl.identifier" : "route53"
+          },
+          "relationships" : [ {
+            "description" : "Forwards requests to",
+            "destinationId" : "8",
+            "id" : "16",
+            "sourceId" : "7",
+            "tags" : "Relationship",
+            "technology" : "HTTPS"
+          } ],
+          "tags" : "Element,Infrastructure Node,Amazon Web Services - Route 53"
+        }, {
+          "environment" : "Live",
+          "id" : "8",
+          "name" : "Elastic Load Balancer",
+          "properties" : {
+            "structurizr.dsl.identifier" : "elb"
+          },
+          "relationships" : [ {
+            "description" : "Forwards requests to",
+            "destinationId" : "11",
+            "id" : "17",
+            "sourceId" : "8",
+            "tags" : "Relationship",
+            "technology" : "HTTPS"
+          } ],
+          "tags" : "Element,Infrastructure Node,Amazon Web Services - Elastic Load Balancing"
+        } ],
+        "instances" : "1",
+        "name" : "US-East-1",
+        "properties" : {
+          "structurizr.dsl.identifier" : "region"
+        },
+        "tags" : "Element,Deployment Node,Amazon Web Services - Region"
+      } ],
+      "environment" : "Live",
+      "id" : "5",
+      "instances" : "1",
+      "name" : "Amazon Web Services",
+      "properties" : {
+        "structurizr.dsl.identifier" : "dc3df0fb-4c0d-40f5-85a3-b3ab02a55e3a"
+      },
+      "tags" : "Element,Deployment Node,Amazon Web Services - Cloud"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "description" : "Allows employees to view and manage information regarding the veterinarians, the clients, and their pets.",
+        "documentation" : { },
+        "id" : "2",
+        "name" : "Web Application",
+        "properties" : {
+          "structurizr.dsl.identifier" : "webApplication"
+        },
+        "relationships" : [ {
+          "description" : "Reads from and writes to",
+          "destinationId" : "3",
+          "id" : "4",
+          "sourceId" : "2",
+          "tags" : "Relationship",
+          "technology" : "MySQL Protocol/SSL"
+        } ],
+        "tags" : "Element,Container",
+        "technology" : "Java and Spring Boot"
+      }, {
+        "description" : "Stores information regarding the veterinarians, the clients, and their pets.",
+        "documentation" : { },
+        "id" : "3",
+        "name" : "Database",
+        "properties" : {
+          "structurizr.dsl.identifier" : "database"
+        },
+        "tags" : "Element,Container,Database",
+        "technology" : "Relational database schema"
+      } ],
+      "description" : "Allows employees to view and manage information regarding the veterinarians, the clients, and their pets.",
+      "documentation" : { },
+      "id" : "1",
+      "name" : "Spring PetClinic",
+      "properties" : {
+        "structurizr.dsl.identifier" : "springPetClinic"
+      },
+      "tags" : "Element,Software System,Spring Boot Application"
+    } ]
+  },
+  "name" : "Amazon Web Services Example",
+  "properties" : {
+    "structurizr.inspection.error" : "23",
+    "structurizr.dsl" : "d29ya3NwYWNlICJBbWF6b24gV2ViIFNlcnZpY2VzIEV4YW1wbGUiICJBbiBleGFtcGxlIEFXUyBkZXBsb3ltZW50IGFyY2hpdGVjdHVyZS4iIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgc3ByaW5nUGV0Q2xpbmljID0gc29mdHdhcmVzeXN0ZW0gIlNwcmluZyBQZXRDbGluaWMiICJBbGxvd3MgZW1wbG95ZWVzIHRvIHZpZXcgYW5kIG1hbmFnZSBpbmZvcm1hdGlvbiByZWdhcmRpbmcgdGhlIHZldGVyaW5hcmlhbnMsIHRoZSBjbGllbnRzLCBhbmQgdGhlaXIgcGV0cy4iICJTcHJpbmcgQm9vdCBBcHBsaWNhdGlvbiIgew0KICAgICAgICAgICAgd2ViQXBwbGljYXRpb24gPSBjb250YWluZXIgIldlYiBBcHBsaWNhdGlvbiIgIkFsbG93cyBlbXBsb3llZXMgdG8gdmlldyBhbmQgbWFuYWdlIGluZm9ybWF0aW9uIHJlZ2FyZGluZyB0aGUgdmV0ZXJpbmFyaWFucywgdGhlIGNsaWVudHMsIGFuZCB0aGVpciBwZXRzLiIgIkphdmEgYW5kIFNwcmluZyBCb290Ig0KICAgICAgICAgICAgZGF0YWJhc2UgPSBjb250YWluZXIgIkRhdGFiYXNlIiAiU3RvcmVzIGluZm9ybWF0aW9uIHJlZ2FyZGluZyB0aGUgdmV0ZXJpbmFyaWFucywgdGhlIGNsaWVudHMsIGFuZCB0aGVpciBwZXRzLiIgIlJlbGF0aW9uYWwgZGF0YWJhc2Ugc2NoZW1hIiAiRGF0YWJhc2UiDQogICAgICAgIH0NCg0KICAgICAgICB3ZWJBcHBsaWNhdGlvbiAtPiBkYXRhYmFzZSAiUmVhZHMgZnJvbSBhbmQgd3JpdGVzIHRvIiAiTXlTUUwgUHJvdG9jb2wvU1NMIg0KDQogICAgICAgIGxpdmUgPSBkZXBsb3ltZW50RW52aXJvbm1lbnQgIkxpdmUiIHsNCg0KICAgICAgICAgICAgZGVwbG95bWVudE5vZGUgIkFtYXpvbiBXZWIgU2VydmljZXMiIHsNCiAgICAgICAgICAgICAgICB0YWdzICJBbWF6b24gV2ViIFNlcnZpY2VzIC0gQ2xvdWQiDQoNCiAgICAgICAgICAgICAgICByZWdpb24gPSBkZXBsb3ltZW50Tm9kZSAiVVMtRWFzdC0xIiB7DQogICAgICAgICAgICAgICAgICAgIHRhZ3MgIkFtYXpvbiBXZWIgU2VydmljZXMgLSBSZWdpb24iDQoNCiAgICAgICAgICAgICAgICAgICAgcm91dGU1MyA9IGluZnJhc3RydWN0dXJlTm9kZSAiUm91dGUgNTMiIHsNCiAgICAgICAgICAgICAgICAgICAgICAgIHRhZ3MgIkFtYXpvbiBXZWIgU2VydmljZXMgLSBSb3V0ZSA1MyINCiAgICAgICAgICAgICAgICAgICAgfQ0KDQogICAgICAgICAgICAgICAgICAgIGVsYiA9IGluZnJhc3RydWN0dXJlTm9kZSAiRWxhc3RpYyBMb2FkIEJhbGFuY2VyIiB7DQogICAgICAgICAgICAgICAgICAgICAgICB0YWdzICJBbWF6b24gV2ViIFNlcnZpY2VzIC0gRWxhc3RpYyBMb2FkIEJhbGFuY2luZyINCiAgICAgICAgICAgICAgICAgICAgfQ0KDQogICAgICAgICAgICAgICAgICAgIGRlcGxveW1lbnROb2RlICJBdXRvc2NhbGluZyBncm91cCIgew0KICAgICAgICAgICAgICAgICAgICAgICAgdGFncyAiQW1hem9uIFdlYiBTZXJ2aWNlcyAtIEF1dG8gU2NhbGluZyINCg0KICAgICAgICAgICAgICAgICAgICAgICAgZGVwbG95bWVudE5vZGUgIkFtYXpvbiBFQzIiIHsNCiAgICAgICAgICAgICAgICAgICAgICAgICAgICB0YWdzICJBbWF6b24gV2ViIFNlcnZpY2VzIC0gRUMyIg0KDQogICAgICAgICAgICAgICAgICAgICAgICAgICAgd2ViQXBwbGljYXRpb25JbnN0YW5jZSA9IGNvbnRhaW5lckluc3RhbmNlIHdlYkFwcGxpY2F0aW9uDQogICAgICAgICAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICAgICAgICAgIH0NCg0KICAgICAgICAgICAgICAgICAgICBkZXBsb3ltZW50Tm9kZSAiQW1hem9uIFJEUyIgew0KICAgICAgICAgICAgICAgICAgICAgICAgdGFncyAiQW1hem9uIFdlYiBTZXJ2aWNlcyAtIFJEUyINCg0KICAgICAgICAgICAgICAgICAgICAgICAgZGVwbG95bWVudE5vZGUgIk15U1FMIiB7DQogICAgICAgICAgICAgICAgICAgICAgICAgICAgdGFncyAiQW1hem9uIFdlYiBTZXJ2aWNlcyAtIFJEUyBNeVNRTCBpbnN0YW5jZSINCg0KICAgICAgICAgICAgICAgICAgICAgICAgICAgIGRhdGFiYXNlSW5zdGFuY2UgPSBjb250YWluZXJJbnN0YW5jZSBkYXRhYmFzZQ0KICAgICAgICAgICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgICAgICAgICB9DQoNCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgIHJvdXRlNTMgLT4gZWxiICJGb3J3YXJkcyByZXF1ZXN0cyB0byIgIkhUVFBTIg0KICAgICAgICAgICAgZWxiIC0+IHdlYkFwcGxpY2F0aW9uSW5zdGFuY2UgIkZvcndhcmRzIHJlcXVlc3RzIHRvIiAiSFRUUFMiDQogICAgICAgIH0NCiAgICB9DQogICAgICAgICANCiAgICB2aWV3cyB7DQogICAgICAgIGRlcGxveW1lbnQgc3ByaW5nUGV0Q2xpbmljICJMaXZlIiAiQW1hem9uV2ViU2VydmljZXNEZXBsb3ltZW50IiB7DQogICAgICAgICAgICBpbmNsdWRlICoNCiAgICAgICAgICAgIGF1dG9sYXlvdXQgbHINCg0KICAgICAgICAgICAgYW5pbWF0aW9uIHsNCiAgICAgICAgICAgICAgICByb3V0ZTUzDQogICAgICAgICAgICAgICAgZWxiDQogICAgICAgICAgICAgICAgd2ViQXBwbGljYXRpb25JbnN0YW5jZQ0KICAgICAgICAgICAgICAgIGRhdGFiYXNlSW5zdGFuY2UNCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KDQogICAgICAgIHN0eWxlcyB7DQogICAgICAgICAgICBlbGVtZW50ICJFbGVtZW50IiB7DQogICAgICAgICAgICAgICAgc2hhcGUgcm91bmRlZGJveA0KICAgICAgICAgICAgICAgIGJhY2tncm91bmQgI2ZmZmZmZg0KICAgICAgICAgICAgfQ0KICAgICAgICAgICAgZWxlbWVudCAiRGF0YWJhc2UiIHsNCiAgICAgICAgICAgICAgICBzaGFwZSBjeWxpbmRlcg0KICAgICAgICAgICAgfQ0KICAgICAgICAgICAgZWxlbWVudCAiSW5mcmFzdHJ1Y3R1cmUgTm9kZSIgew0KICAgICAgICAgICAgICAgIHNoYXBlIHJvdW5kZWRib3gNCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KDQogICAgICAgIHRoZW1lcyBodHRwczovL3N0YXRpYy5zdHJ1Y3R1cml6ci5jb20vdGhlbWVzL2FtYXpvbi13ZWItc2VydmljZXMtMjAyMC4wNC4zMC90aGVtZS5qc29uDQogICAgfQ0KDQp9",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : {
+        "elements" : [ {
+          "shape" : "Cylinder",
+          "tag" : "Database"
+        }, {
+          "background" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Element"
+        }, {
+          "shape" : "RoundedBox",
+          "tag" : "Infrastructure Node"
+        } ]
+      },
+      "terminology" : { },
+      "themes" : [ "https://static.structurizr.com/themes/amazon-web-services-2020.04.30/theme.json" ]
+    },
+    "deploymentViews" : [ {
+      "animations" : [ {
+        "elements" : [ "5", "6", "7" ],
+        "order" : 1
+      }, {
+        "elements" : [ "8" ],
+        "order" : 2,
+        "relationships" : [ "16" ]
+      }, {
+        "elements" : [ "10", "11", "9" ],
+        "order" : 3,
+        "relationships" : [ "17" ]
+      }, {
+        "elements" : [ "12", "13", "14" ],
+        "order" : 4,
+        "relationships" : [ "15" ]
+      } ],
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "8",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "9",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "10",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "11",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "12",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "13",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "14",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "Live",
+      "key" : "AmazonWebServicesDeployment",
+      "name" : "Deployment View: Spring PetClinic - Live",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "15"
+      }, {
+        "id" : "16"
+      }, {
+        "id" : "17"
+      } ],
+      "softwareSystemId" : "1"
+    } ]
+  }
+}

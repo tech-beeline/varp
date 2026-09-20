@@ -1,0 +1,76 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "softwareSystems": [
+      {
+        "description": "Default Description",
+        "documentation": {},
+        "id": "1",
+        "name": "A",
+        "perspectives": [
+          {
+            "description": "Default Perspective Description",
+            "name": "Default Perspective Name"
+          }
+        ],
+        "properties": {
+          "structurizr.dsl.identifier": "a",
+          "Default Property Name": "Default Property Value"
+        },
+        "relationships": [
+          {
+            "description": "Default Description",
+            "destinationId": "2",
+            "id": "3",
+            "perspectives": [
+              {
+                "description": "Default Perspective Description",
+                "name": "Default Perspective Name"
+              }
+            ],
+            "properties": {
+              "Default Property Name": "Default Property Value"
+            },
+            "sourceId": "1",
+            "tags": "Relationship,Default Tag",
+            "technology": "Default Technology"
+          }
+        ],
+        "tags": "Element,Software System,Default Tag"
+      },
+      {
+        "description": "Default Description",
+        "documentation": {},
+        "id": "2",
+        "name": "B",
+        "perspectives": [
+          {
+            "description": "Default Perspective Description",
+            "name": "Default Perspective Name"
+          }
+        ],
+        "properties": {
+          "structurizr.dsl.identifier": "b",
+          "Default Property Name": "Default Property Value"
+        },
+        "tags": "Element,Software System,Default Tag"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "4",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

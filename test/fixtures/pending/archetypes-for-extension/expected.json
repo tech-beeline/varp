@@ -1,0 +1,54 @@
+{
+  "configuration": {},
+  "description": "Description",
+  "documentation": {},
+  "id": 0,
+  "model": {
+    "softwareSystems": [
+      {
+        "description": "Description of A.",
+        "documentation": {},
+        "id": "1",
+        "name": "A",
+        "properties": {
+          "structurizr.dsl.identifier": "a"
+        },
+        "relationships": [
+          {
+            "description": "Makes API calls to",
+            "destinationId": "2",
+            "id": "3",
+            "sourceId": "1",
+            "tags": "Relationship,Default Tag,Synchronous,HTTPS",
+            "technology": "HTTPS"
+          }
+        ],
+        "tags": "Element,Software System,Default Tag"
+      },
+      {
+        "description": "Description of B.",
+        "documentation": {},
+        "id": "2",
+        "name": "B",
+        "properties": {
+          "structurizr.dsl.identifier": "b"
+        },
+        "tags": "Element,Software System,Default Tag,External Software System"
+      }
+    ]
+  },
+  "name": "Name",
+  "properties": {
+    "structurizr.inspection.error": "4",
+    "structurizr.dsl": "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgYXJjaGV0eXBlcyB7DQogICAgICAgICAgICBzb2Z0d2FyZXN5c3RlbSB7DQogICAgICAgICAgICAgICAgdGFnICJEZWZhdWx0IFRhZyINCiAgICAgICAgICAgIH0NCg0KICAgICAgICAgICAgZXh0ZXJuYWxTb2Z0d2FyZVN5c3RlbSA9IHNvZnR3YXJlU3lzdGVtIHsNCiAgICAgICAgICAgICAgICB0YWcgIkV4dGVybmFsIFNvZnR3YXJlIFN5c3RlbSINCiAgICAgICAgICAgIH0NCg0KICAgICAgICAgICAgLT4gew0KICAgICAgICAgICAgICAgIHRlY2hub2xvZ3kgIkRlZmF1bHQgVGVjaG5vbG9neSINCiAgICAgICAgICAgICAgICB0YWcgIkRlZmF1bHQgVGFnIg0KICAgICAgICAgICAgfQ0KDQogICAgICAgICAgICBzeW5jID0gLT4gew0KICAgICAgICAgICAgICAgIHRhZyAiU3luY2hyb25vdXMiDQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgIGh0dHBzID0gLS1zeW5jLT4gew0KICAgICAgICAgICAgICAgIHRlY2hub2xvZ3kgIkhUVFBTIg0KICAgICAgICAgICAgICAgIHRhZyAiSFRUUFMiDQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICBhID0gc29mdHdhcmVTeXN0ZW0gIkEiICJEZXNjcmlwdGlvbiBvZiBBLiINCiAgICAgICAgYiA9IGV4dGVybmFsU29mdHdhcmVTeXN0ZW0gIkIiICJEZXNjcmlwdGlvbiBvZiBCLiINCiAgICAgICAgYSAtLWh0dHBzLT4gYiAiTWFrZXMgQVBJIGNhbGxzIHRvIg0KICAgIH0NCg0KfQ==",
+    "structurizr.inspection.info": "0",
+    "structurizr.inspection.ignore": "0",
+    "structurizr.inspection.warning": "0"
+  },
+  "views": {
+    "configuration": {
+      "styles": {},
+      "terminology": {}
+    }
+  }
+}

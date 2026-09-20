@@ -3124,7 +3124,8 @@ class JsonGenerator {
                     relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
-                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships)
+                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships),
+                    animations: this.resolveAnimations(view, elements, relationships, 'custom'),
                 };
             });
         return views && views.length > 0 ? views : undefined;
@@ -3150,7 +3151,8 @@ class JsonGenerator {
                     enterpriseBoundaryVisible: true,
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
-                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships)
+                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships),
+                    animations: this.resolveAnimations(view, elements, relationships, 'static'),
                 };
             });
         return views && views.length > 0 ? views : undefined;
@@ -6291,6 +6293,105 @@ class JsonGenerator {
     }
 
     /**
+     * Resolves a view's animation steps. Each step lists the elements that become
+     * visible in that frame; a relationship is included when one endpoint appears
+     * in the step and the other is already visible. Steps are emitted in
+     * declaration order, starting at 1.
+     */
+    private resolveAnimations(
+        view: any,
+        elementsAtView: Set<RelationshipMember>,
+        relationshipsAtView: Set<Relationship>,
+        kind: 'static' | 'custom' | 'deployment'
+    ): any[] | undefined {
+        const steps = (view.animationProps ?? []).flatMap((prop: any) => prop.steps ?? []);
+        if (steps.length === 0) return undefined;
+
+        const shown = new Set<string>();
+        const animations: any[] = [];
+        let order = 0;
+
+        for (const step of steps) {
+            const introduced = new Set<RelationshipMember>();
+            for (const wrapper of step.elements ?? []) {
+                const expression = wrapper?.expression ?? wrapper;
+                const resolved = this.resolveElementsFromExpression(expression);
+                const candidates = kind === 'deployment'
+                    ? resolved.flatMap(element => this.expandDeploymentAnimationElement(element))
+                    : resolved;
+                for (const element of candidates) {
+                    if (!this.animationAccepts(kind, element)) continue;
+                    if (!elementsAtView.has(element as RelationshipMember)) continue;
+                    const id = this.getId(element);
+                    if (shown.has(id)) continue;
+                    introduced.add(element as RelationshipMember);
+                    // A deployment step also reveals the enclosing deployment nodes.
+                    if (kind === 'deployment') {
+                        let node = this.resolveDeploymentNodeParent(element as AstNode);
+                        while (node) {
+                            if (elementsAtView.has(node as RelationshipMember) && !shown.has(this.getId(node))) {
+                                introduced.add(node as RelationshipMember);
+                            }
+                            node = this.resolveDeploymentNodeParent(node);
+                        }
+                    }
+                }
+            }
+
+            const introducedIds = new Set(Array.from(introduced).map(element => this.getId(element)));
+            const relationshipIds = new Set<string>();
+            for (const relationship of relationshipsAtView) {
+                const source = this.resolveSource(relationship);
+                const target = this.resolveTarget(relationship);
+                if (!source || !target) continue;
+                const sourceId = this.getId(source);
+                const targetId = this.getId(target);
+                const sourceVisible = introducedIds.has(sourceId) || shown.has(sourceId);
+                const targetVisible = introducedIds.has(targetId) || shown.has(targetId);
+                if (sourceVisible && targetVisible && (introducedIds.has(sourceId) || introducedIds.has(targetId))) {
+                    relationshipIds.add(this.getId(relationship));
+                }
+            }
+
+            order += 1;
+            animations.push({
+                order,
+                elements: Array.from(introducedIds).sort(),
+                relationships: relationshipIds.size > 0 ? Array.from(relationshipIds).sort() : undefined
+            });
+
+            for (const id of introducedIds) shown.add(id);
+        }
+
+        return animations;
+    }
+
+    /** Whether an element can take part in an animation step of the given view kind. */
+    private animationAccepts(kind: 'static' | 'custom' | 'deployment', element: any): boolean {
+        if (kind === 'custom') return isCustomElement(element);
+        if (kind === 'deployment') {
+            return isSoftwareSystemInstance(element) || isContainerInstance(element) || isInfrastructureNode(element);
+        }
+        return isPerson(element) || isSoftwareSystem(element) || isContainer(element) || isComponent(element);
+    }
+
+    /**
+     * In a deployment view an animation step naming a software system or container
+     * stands for its instances.
+     */
+    private expandDeploymentAnimationElement(element: NamedElement): NamedElement[] {
+        if (isSoftwareSystem(element)) {
+            return this.elements.filter(el =>
+                isSoftwareSystemInstance(el) && this.el((el as any).softwareSystem?.ref) === element) as NamedElement[];
+        }
+        if (isContainer(element)) {
+            return this.elements.filter(el =>
+                isContainerInstance(el) && this.el((el as any).container?.ref) === element) as NamedElement[];
+        }
+        return [element];
+    }
+
+    /**
      * Removes duplicate relationships from a set. For pairs sharing the same source,
      * target and description, only the relationship with the lowest CST offset
      * (declared earliest in source code) is kept; the model parser rejects exact
@@ -6366,7 +6467,8 @@ class JsonGenerator {
                 enterpriseBoundaryVisible: true,
                 automaticLayout: this.transformAutoLayout(view),
                 // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
-                graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeSystem, false, elements, relationships)
+                graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeSystem, false, elements, relationships),
+                animations: this.resolveAnimations(view, elements, relationships, 'static'),
             };
         });
         return views && views?.length > 0 ? views : undefined; 
@@ -6394,7 +6496,8 @@ class JsonGenerator {
                     relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
-                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeSystem, true, elements, relationships)
+                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeSystem, true, elements, relationships),
+                    animations: this.resolveAnimations(view, elements, relationships, 'static'),
                 }
             });
         return views && views.length > 0 ? views : undefined;
@@ -6422,7 +6525,8 @@ class JsonGenerator {
                     relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
-                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeContainer, true, elements, relationships)
+                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeContainer, true, elements, relationships),
+                    animations: this.resolveAnimations(view, elements, relationships, 'static'),
                 };
             });
         return views && views.length > 0 ? views : undefined;
@@ -6502,7 +6606,8 @@ class JsonGenerator {
                     relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
-                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships)
+                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships),
+                    animations: this.resolveAnimations(view, elements, relationships, 'deployment'),
                 };
             });
         return views && views.length > 0 ? views : undefined;

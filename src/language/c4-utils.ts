@@ -69,15 +69,19 @@ export class C4Utils {
     }
 
     /**
-     * Removes surrounding quotes (single, double, or triple-double) and trims whitespace.
-     * Handles: `"value"`, `'value'`, `"""value"""`, and partial trimming.
-     * Returns empty string for undefined/null input.
-     * 
+     * Removes surrounding quotes (single, double, or triple-double), unescapes
+     * `\"` and `\n`, and trims whitespace. Returns empty string for
+     * undefined/null input.
+     *
      * @param value The raw DSL string value, possibly with quotes
      * @returns Cleaned string without surrounding quotes
      */
     static stripQuotes(value: string | undefined): string {
-        return value?.trim().replace(/^("""|'|")([\s\S]*?)\1$/, '$2').trim() ?? '';
+        const trimmed = value?.trim();
+        if (!trimmed) return '';
+        const match = trimmed.match(/^("""|'|")([\s\S]*?)\1$/);
+        const inner = match ? match[2] : trimmed;
+        return inner.replace(/\\"/g, '"').replace(/\\n/g, '\n').trim();
     }
 }
 

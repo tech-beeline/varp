@@ -5238,6 +5238,18 @@ class JsonGenerator {
                     });
                     if (found) key = found as NamedElement;
                 }
+                // Deployment environments, deployment nodes and groups are not part
+                // of this.elements, so resolve those identifiers against the AST.
+                if (!key && !(ext.target as any) && ext.id) {
+                    const raw = C4Utils.stripQuotes(String(ext.id));
+                    const root = AstUtils.getDocument(ext)?.parseResult.value;
+                    if (root) {
+                        const astTarget = AstUtils.streamAllContents(root).find((node: any) =>
+                            node !== ext && node.id === raw
+                            && (isDeploymentEnvironment(node) || isDeploymentNode(node) || isGroup(node)));
+                        if (astTarget) key = astTarget as NamedElement;
+                    }
+                }
                 if (!key) continue;
                 const list = this.elementExtensionsByTarget.get(key);
                 if (list) {
@@ -5600,7 +5612,7 @@ class JsonGenerator {
                         if (isRelationshipMember(e)) {
                             isInclude ? elementsAtView.add(e) : elementsAtView.delete(e);
                         } else if (isRelationship(e)) {
-                            isInclude ? relationshipsAtView.add(e) : relationshipsAtView.delete(e);
+                            this.applyRelationshipVisibility(e, isInclude, elementsAtView, relationshipsAtView);
                         }
                     });
                 }
@@ -5690,7 +5702,7 @@ class JsonGenerator {
                         if (isRelationshipMember(e)) {
                             isInclude ? elementsAtView.add(e) : elementsAtView.delete(e);
                         } else if (isRelationship(e)) {
-                            isInclude ? relationshipsAtView.add(e) : relationshipsAtView.delete(e);
+                            this.applyRelationshipVisibility(e, isInclude, elementsAtView, relationshipsAtView);
                         }
                     });
                 }
@@ -5768,7 +5780,7 @@ class JsonGenerator {
                         if(isRelationshipMember(e)) {
                             isInclude ? elementsAtView.add(e) : elementsAtView.delete(e);
                         } else if(isRelationship(e)) {
-                            isInclude ? relationshipsAtView.add(e) : relationshipsAtView.delete(e);
+                            this.applyRelationshipVisibility(e, isInclude, elementsAtView, relationshipsAtView);
                         }
                     });
                 }
@@ -5849,7 +5861,7 @@ class JsonGenerator {
                         if (isRelationshipMember(e)) {
                             isInclude ? elementsAtView.add(e) : elementsAtView.delete(e);
                         } else if (isRelationship(e)) {
-                            isInclude ? relationshipsAtView.add(e) : relationshipsAtView.delete(e);
+                            this.applyRelationshipVisibility(e, isInclude, elementsAtView, relationshipsAtView);
                         }
                     });
                 }
@@ -5998,7 +6010,7 @@ class JsonGenerator {
                         if(isRelationshipMember(e)) {
                             isInclude ? elementsAtView.add(e) : elementsAtView.delete(e);
                         } else if(isRelationship(e)) {
-                            isInclude ? relationshipsAtView.add(e) : relationshipsAtView.delete(e);
+                            this.applyRelationshipVisibility(e, isInclude, elementsAtView, relationshipsAtView);
                         }
                     });
                 }
@@ -6159,7 +6171,7 @@ class JsonGenerator {
                         if(isRelationshipMember(e)) {
                             isInclude ? elementsAtView.add(e) : elementsAtView.delete(e);
                         } else if(isRelationship(e)) {
-                            isInclude ? relationshipsAtView.add(e) : relationshipsAtView.delete(e);
+                            this.applyRelationshipVisibility(e, isInclude, elementsAtView, relationshipsAtView);
                         }
                     });
                 }
@@ -6257,6 +6269,28 @@ class JsonGenerator {
     }
 
     /**
+     * Applies an explicitly included/excluded relationship to the view. An
+     * included relationship is added only when both resolved endpoints are
+     * visible; an excluded relationship is removed unconditionally.
+     */
+    private applyRelationshipVisibility(
+        relationship: Relationship,
+        isInclude: boolean,
+        elementsAtView: Set<RelationshipMember>,
+        relationshipsAtView: Set<Relationship>
+    ): void {
+        if (!isInclude) {
+            relationshipsAtView.delete(relationship);
+            return;
+        }
+        const source = this.resolveSource(relationship);
+        const target = this.resolveTarget(relationship);
+        if (source && target && elementsAtView.has(source) && elementsAtView.has(target)) {
+            relationshipsAtView.add(relationship);
+        }
+    }
+
+    /**
      * Removes duplicate relationships from a set. For pairs sharing the same source,
      * target and description, only the relationship with the lowest CST offset
      * (declared earliest in source code) is kept; the model parser rejects exact
@@ -6326,6 +6360,7 @@ class JsonGenerator {
                 name: this.viewName(view),
                 key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                 title: this.substitute(view.titleProps?.at(0)?.value),
+                description: this.description(view),
                 elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),
                 relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
                 enterpriseBoundaryVisible: true,
@@ -6406,6 +6441,17 @@ class JsonGenerator {
             }
             if(isDeploymentNode(parent) || isSoftwareSystemInstance(parent) || isContainerInstance(parent) || isInfrastructureNode(parent) || isGroup(parent)) {
                 return this.getEnvironment(parent);
+            }
+            // A node contributed by `!element` is parented by the ElementExtension;
+            // continue from the extended element to inherit its environment.
+            if (isElementExtension(parent)) {
+                const target = this.resolveElementExtensionTarget(parent);
+                if (target && target !== deploymentNode) {
+                    if (isDeploymentEnvironment(target)) {
+                        return C4Utils.stripQuotes((target as any).name);
+                    }
+                    return this.getEnvironment(target as any);
+                }
             }
         }
         

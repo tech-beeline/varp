@@ -65,10 +65,11 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
     }
     refreshNotificationRegistered = true;
 
-    client.onNotification('custom/contentUpdated', async (params: { uri: string; json: any; generation?: number }) => {
+    client.onNotification('custom/contentUpdated', async (params: { uri: string; json: any; generation?: number; textMeasurements?: Record<string, any> }) => {
         const uri = params?.uri;
         const json = params?.json;
         const generation = params?.generation;
+        const textMeasurements = params?.textMeasurements;
         if (!uri || !json) {
             return;
         }
@@ -79,7 +80,7 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
 
         if (preview.getCurrentDocUri() === uri) {
             // Fast path: the notification belongs to the bound document.
-            renderPreviewIfApplicable(uri, json, generation, preview);
+            renderPreviewIfApplicable(uri, json, generation, preview, textMeasurements);
             return;
         }
 
@@ -94,7 +95,7 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
         try {
             const res: any = await languageClient.sendRequest('custom/getRootUri', { uri: preview.getCurrentDocUri() });
             if (res?.rootUri === uri) {
-                renderPreviewIfApplicable(uri, json, generation, preview);
+                renderPreviewIfApplicable(uri, json, generation, preview, textMeasurements);
             }
         } catch {
             // unrelated / transient failure - ignore the notification
@@ -120,12 +121,12 @@ function isDocumentDirty(uri: string): boolean {
  * update while onSave only renders when the document is clean (saved). Renders
  * are coalesced via scheduleRefresh so bursts produce one webview update.
  */
-function renderPreviewIfApplicable(uri: string, json: any, generation: number | undefined, preview: DiagramPreview): void {
+function renderPreviewIfApplicable(uri: string, json: any, generation: number | undefined, preview: DiagramPreview, textMeasurements?: Record<string, any>): void {
     const mode = getAutoRefreshMode();
     const dirty = isDocumentDirty(uri);
     const pending = preview.isPendingJson();
     if (pending || mode === 'onChange' || !dirty) {
-        scheduleRefresh(uri, json, generation);
+        scheduleRefresh(uri, json, generation, textMeasurements);
     }
 }
 
@@ -133,11 +134,11 @@ function renderPreviewIfApplicable(uri: string, json: any, generation: number | 
 // flush is scheduled on the next microtask, so notifications delivered within the
 // same tick (a burst of contentUpdated) only produce ONE postMessage + webview
 // re-render with the freshest payload - intermediate versions are skipped.
-let pendingRefresh: { uri: string; json: any; generation?: number } | undefined;
+let pendingRefresh: { uri: string; json: any; generation?: number; textMeasurements?: Record<string, any> } | undefined;
 let refreshQueued = false;
 
-function scheduleRefresh(uri: string, json: any, generation?: number): void {
-    pendingRefresh = { uri, json, generation };
+function scheduleRefresh(uri: string, json: any, generation?: number, textMeasurements?: Record<string, any>): void {
+    pendingRefresh = { uri, json, generation, textMeasurements };
     if (refreshQueued) {
         return;
     }
@@ -147,7 +148,7 @@ function scheduleRefresh(uri: string, json: any, generation?: number): void {
         const pending = pendingRefresh;
         pendingRefresh = undefined;
         if (pending) {
-            void refreshDiagram(pending.uri, pending.json, pending.generation);
+            void refreshDiagram(pending.uri, pending.json, pending.generation, pending.textMeasurements);
         }
     });
 }
@@ -181,7 +182,7 @@ function resolveFreshViewKey(json: any, currentKey: string | undefined): string 
 }
 
 /** Renders fresh JSON into the open preview bound to the given root document URI. */
-async function refreshDiagram(uri: string, json: any, generation?: number): Promise<void> {
+async function refreshDiagram(uri: string, json: any, generation?: number, textMeasurements?: Record<string, any>): Promise<void> {
     const preview = diagramPreview;
     if (!preview || !preview.isOpen()) {
         return;
@@ -196,7 +197,7 @@ async function refreshDiagram(uri: string, json: any, generation?: number): Prom
     // Themes are fetched once when the preview is opened and are already stored
     // on the preview (included in every postMessage), so re-rendering the same
     // diagram must not block on re-fetching theme files.
-    await preview.updateWebView(json, viewKey, uri, undefined, generation);
+    await preview.deliver(json, viewKey, uri, generation, textMeasurements, getThemesForPreview);
 }
 
 
@@ -240,6 +241,26 @@ export function init(context: ExtensionContext): void {
     new PatternProvider(context);
 
     diagramPreview = new DiagramPreview(context);
+    // Second layout pass: the webview measures the frame texts it draws and reports
+    // the widths, the language server re-runs the auto-layout with that space
+    // reserved, and the webview re-renders the returned coordinates.
+    diagramPreview.requestRelayout = async (widths, measuredUri, measuredGeneration) => {
+        // Prefer the (uri, generation) the webview reported with the measurement:
+        // they identify the exact build the widths belong to, while the preview's
+        // stored values may not be updated yet on the very first render.
+        const uri = measuredUri ?? diagramPreview?.getCurrentDocUri();
+        const generation = measuredGeneration ?? diagramPreview?.getRenderedGeneration();
+        if (!languageClient || !uri || generation === undefined) {
+            return undefined;
+        }
+        try {
+            const res: any = await languageClient.sendRequest('custom/applyTextMeasurements', { uri, generation, widths });
+            return res?.views;
+        } catch (err) {
+            console.warn('[C4 Preview] Text measurement layout failed:', err);
+            return undefined;
+        }
+    };
     // Local, non-undefined alias used by the command handlers below.
     const preview = diagramPreview;
 
@@ -267,7 +288,7 @@ export function init(context: ExtensionContext): void {
             try {
                 const response: any = await languageClient?.sendRequest('custom/getContentForUri', { uri });
                 if (response?.json) {
-                    await refreshDiagram(uri, response.json, response.generation);
+                    await refreshDiagram(uri, response.json, response.generation, response.textMeasurements);
                     return;
                 }
             } catch (err) {
@@ -304,11 +325,13 @@ export function init(context: ExtensionContext): void {
             // (custom/contentUpdated) delivers the JSON once generation completes.
             let payload: any;
             let generation: number | undefined;
+            let textMeasurements: Record<string, any> | undefined;
             if (languageClient) {
                 try {
                     const res = await languageClient.sendRequest('custom/getContentForUri', { uri: docUri ?? '' });
                     payload = res?.json;
                     generation = res?.generation;
+                    textMeasurements = res?.textMeasurements;
                 } catch (err) {
                     console.warn('[C4 Preview] fresh JSON fetch failed:', err);
                 }
@@ -316,25 +339,18 @@ export function init(context: ExtensionContext): void {
 
             if (payload) {
                 try {
-                    // Kick off the theme download asynchronously NOW (while the
-                    // webview renders the diagram with default styles), then
-                    // render immediately. When the theme arrives it is applied
-                    // on top via refresh() without blocking the initial paint.
-                    const themePromise = getThemesForPreview(payload?.views?.configuration?.themes);
-                    await preview.updateWebView(payload, viewKey, docUri, undefined, generation);
-                    const themes = await themePromise;
-                    if (themes !== undefined) {
-                        preview.updateWebView(payload, viewKey, docUri, themes, generation);
-                    }
+                    // Render immediately without styles, then apply the workspace's
+                    // themes in a second pass (see DiagramPreview.deliver).
+                    await preview.deliver(payload, viewKey, docUri, generation, textMeasurements, getThemesForPreview);
 
                     // Open a side-panel with the raw JSON for debugging
-                    // const content = JSON.stringify(payload, null, 2);
-                    // const doc = await workspace.openTextDocument({ content, language: 'json' });
+                    const content = JSON.stringify(payload, null, 2);
+                    const doc = await workspace.openTextDocument({ content, language: 'json' });
                     
-                    // await window.showTextDocument(doc, {
-                    //     viewColumn: ViewColumn.Beside,
-                    //     preview: true
-                    // });
+                    await window.showTextDocument(doc, {
+                        viewColumn: ViewColumn.Beside,
+                        preview: true
+                    });
                     
                 } catch (err) {
                     console.error(`[C4 Preview] webview update FAILED for view ${viewKey}:`, err);

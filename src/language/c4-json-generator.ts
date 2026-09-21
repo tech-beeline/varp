@@ -103,6 +103,12 @@ const BEND_DEVIATION_THRESHOLD = 35;
 // 24*1.4 = 33.6 -> 33 and 24*0.7 = 16.8 -> 16). Groups have no metadata footer.
 const WEBVIEW_CLUSTER_PADDING = 50;
 const WEBVIEW_FRAME_MARGIN = 15;
+// Structurizr diagrams are laid out for 300dpi, so one graphviz point is 300/72px.
+const GRAPHVIZ_POINTS_PER_PX = 72 / 300;
+// Visual gap between two frames the default cluster margin already produces: the
+// graphviz separation is max(nodesep, 2 * margin) points while each frame extends
+// 50px beyond its content on every side (2 * 25pt - 2 * 50px in this space).
+const DOT_FRAME_GAP_PX = 108;
 const NAME_FONT_SIZE_DIFFERENCE_RATIO = 1.4;
 const METADATA_FONT_SIZE_DIFFERENCE_RATIO = 0.7;
 
@@ -116,6 +122,41 @@ interface ImpliedRelationship {
     linked: Relationship | undefined;
     source: RelationshipMember;
     target: RelationshipMember;
+}
+
+/**
+ * A text the renderer draws inside a frame and measures to size it. The frame of a
+ * software system, container, group or deployment node is sized from its name and
+ * metadata, so the auto-layout has to know those widths before it can place
+ * neighbouring elements without an overlap.
+ */
+interface TextMeasurementCandidate {
+    /** Unique across the workspace: view key, cluster id and text kind. */
+    key: string;
+    kind: 'element-name' | 'element-metadata' | 'group-name' | 'leaf-name' | 'leaf-metadata' | 'leaf-description';
+    /** Element whose name/metadata is drawn (element-* kinds). */
+    elementId?: string;
+    /** Metadata candidates: whether the renderer appends the element technology. */
+    withTechnology?: boolean;
+    /** Group path segment drawn as the frame name (group-name kind). */
+    groupName?: string;
+}
+
+/** Measurement candidates of one view plus the cluster structure needed to apply them. */
+interface ViewTextMeasurements {
+    candidates: TextMeasurementCandidate[];
+    /** Cluster id → keys of the texts drawn inside that cluster. */
+    clusters: Record<string, string[]>;
+    /**
+     * Node id → keys of the texts drawn inside that element box. The renderer wraps
+     * name, metadata and description to the box width, so a box only has to fit the
+     * longest unbreakable word; the webview reports the required box width directly.
+     */
+    nodeTexts: Record<string, string[]>;
+    /** Cluster/node id → child ids (the cluster tree of the DOT graph). */
+    children: Record<string, string[]>;
+    /** Node id → rendered width in px (lower bound for a frame's content width). */
+    nodeWidths: Record<string, number>;
 }
 
 class JsonGenerator {
@@ -190,6 +231,13 @@ class JsonGenerator {
     private terminology: Record<string, string> = {};
     /** Metadata symbol style (MetadataSymbols enum name), defaulting to SquareBrackets. */
     private metadataSymbols = 'SquareBrackets';
+
+    /**
+     * DOT graph and measurement candidates of every auto-laid-out view. Kept after the
+     * first layout so applyTextMeasurements can re-run the layout with the widths the
+     * renderer measured, without rebuilding the DOT from the AST.
+     */
+    private readonly viewLayouts: Map<string, { dot: string; measurements: ViewTextMeasurements }> = new Map();
 
     /** Maps the `metadata` directive keyword to its MetadataSymbols enum name. */
     private static readonly METADATA_SYMBOLS: Record<string, string> = {
@@ -3490,6 +3538,16 @@ class JsonGenerator {
     }
 
     /**
+     * Internal padding (points) of a graphviz cluster: the view property wins over the
+     * views block property, and both default to 25.
+     */
+    private dotClusterPadding(view: any, name: string): number {
+        const value = this.viewProperty(view, name);
+        const parsed = value !== undefined ? Number.parseInt(value, 10) : Number.NaN;
+        return Number.isFinite(parsed) ? parsed : 25;
+    }
+
+    /**
      * Extracts custom views from the workspace and resolves their elements and relationships.
      * Each custom view includes a key, title, description, element/relationship references,
      * and automatic layout settings.
@@ -3509,7 +3567,7 @@ class JsonGenerator {
                     relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
-                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships),
+                    ...this.graphvizFields(view, this.transformAutoLayout(view), undefined, false, elements, relationships),
                     animations: this.resolveAnimations(view, elements, relationships, 'custom'),
                 };
             });
@@ -3536,7 +3594,7 @@ class JsonGenerator {
                     enterpriseBoundaryVisible: true,
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
-                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships),
+                    ...this.graphvizFields(view, this.transformAutoLayout(view), undefined, false, elements, relationships),
                     animations: this.resolveAnimations(view, elements, relationships, 'static'),
                 };
             });
@@ -3579,14 +3637,35 @@ class JsonGenerator {
      * their children together; edges carry no labels (the webview draws the
      * description at the relationship midpoint).
      */
-    private buildGraphvizDot(
+    /**
+     * DOT graph of a view plus the texts the renderer will measure to size its frames.
+     * Both are transient fields on the view object: applyGraphvizAutoLayouts consumes
+     * them for the first layout and keeps them for the text measurement pass.
+     */
+    private graphvizFields(
+        view: any,
         autoLayout: any,
         scopeElement: NamedElement | undefined,
         scopeAsFrame: boolean,
         elements: Iterable<any>,
         relationships: Iterable<any>,
         isDynamic = false
-    ): string | undefined {
+    ): { graphviz?: string; textMeasurements?: ViewTextMeasurements } {
+        const viewKey = this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)) ?? '';
+        const built = this.buildGraphvizDot(autoLayout, view, viewKey, scopeElement, scopeAsFrame, elements, relationships, isDynamic);
+        return built ? { graphviz: built.dot, textMeasurements: built.measurements } : {};
+    }
+
+    private buildGraphvizDot(
+        autoLayout: any,
+        viewNode: any,
+        viewKey: string,
+        scopeElement: NamedElement | undefined,
+        scopeAsFrame: boolean,
+        elements: Iterable<any>,
+        relationships: Iterable<any>,
+        isDynamic = false
+    ): { dot: string; measurements: ViewTextMeasurements } | undefined {
         if (!autoLayout) return undefined;
 
         // DOT graph structure: header, cluster margin=25, node sizes in a
@@ -3600,10 +3679,20 @@ class JsonGenerator {
         const fmtIn = (v: number) => (Number.isInteger(v) ? `${v}.0` : String(v));
         const ranksep = fmtIn(autoLayout.rankSeparation / STRUCTURIZR_DPI); // inches
         const nodesep = fmtIn(autoLayout.nodeSeparation / STRUCTURIZR_DPI);
+        // Cluster internal padding, in points: a view property overrides the viewset
+        // (views block) property, which overrides the default of 25.
+        const groupPadding = this.dotClusterPadding(viewNode, 'structurizr.groupPadding');
+        const boundaryPadding = this.dotClusterPadding(viewNode, 'structurizr.boundaryPadding');
+        const deploymentPadding = this.dotClusterPadding(viewNode, 'structurizr.deploymentNodePadding');
+        const clusterPadding = (clusterId: string): number => {
+            if (clusterId.startsWith('cluster_deploy_')) return deploymentPadding;
+            if (clusterId.startsWith('cluster_group_')) return groupPadding;
+            return boundaryPadding;
+        };
         const q = (s: string) => '"' + String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
         // Our identifiers are alphanumeric + underscore - safe unquoted like the
         // reference's numeric ids. Anything else is quoted.
-        const idToken = (s: string) => (/^[A-Za-z0-9_]+$/.test(s) ? s : q(s));
+        const idToken = (s: string) => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(s) ? s : q(s));
 
         // Cluster tree: clusterId -> list of children (element ids / sub-cluster ids).
         const childrenOf: Record<string, string[]> = {};
@@ -3614,7 +3703,47 @@ class JsonGenerator {
             getChildren(parent).push(child);
         };
 
-        const scopeClusterId = scopeElement && scopeAsFrame ? 'cluster_scope_' + this.getId(scopeElement) : undefined;
+        // Texts the renderer draws inside each frame and measures to size it. Every
+        // frame shows a name; element frames also show a metadata line.
+        const candidates: TextMeasurementCandidate[] = [];
+        const clusters: Record<string, string[]> = {};
+        const nodeTexts: Record<string, string[]> = {};
+        const nodeWidths: Record<string, number> = {};
+        const addElementTexts = (clusterId: string, element: NamedElement, withTechnology = false) => {
+            const elementId = this.getId(element);
+            const nameKey = `${viewKey}|${clusterId}|name`;
+            const metadataKey = `${viewKey}|${clusterId}|metadata`;
+            clusters[clusterId] = [nameKey, metadataKey];
+            candidates.push({ key: nameKey, kind: 'element-name', elementId });
+            candidates.push({ key: metadataKey, kind: 'element-metadata', elementId, withTechnology });
+        };
+        const addGroupText = (clusterId: string, groupName: string) => {
+            const key = `${viewKey}|${clusterId}|group`;
+            clusters[clusterId] = [key];
+            candidates.push({ key, kind: 'group-name', groupName });
+        };
+
+        // Software system and container frames. A container frame is always nested
+        // inside the frame of the software system that owns it; every container that
+        // frames visible elements (the scope container, and each container owning a
+        // visible component) gets its own cluster.
+        const ensureSystemCluster = (system: NamedElement): string => {
+            const sid = 'cluster_scope_' + this.getId(system);
+            if (owningCluster[sid] === undefined) {
+                addChild('root', sid);
+                addElementTexts(sid, system);
+            }
+            return sid;
+        };
+        const ensureContainerCluster = (container: NamedElement): string => {
+            const cid = 'cluster_scope_' + this.getId(container);
+            if (owningCluster[cid] === undefined) {
+                const system = this.resolveConatinerParent(container as Container);
+                addChild(system ? ensureSystemCluster(system) : 'root', cid);
+                addElementTexts(cid, container);
+            }
+            return cid;
+        };
         // The webview also draws a boundary for the scope element's
         // PARENT: on a component view and a container-scoped dynamic view it renders
         // BOTH the container boundary and the enclosing software system boundary.
@@ -3626,28 +3755,32 @@ class JsonGenerator {
         // clusterPadding (50) on each side plus the name/metadata footer at the bottom;
         // graphviz's cluster margin (25pt = 104px) covers that padding, so emitting the
         // cluster is sufficient to reserve the space.
+        const scopeClusterId = !scopeElement || !scopeAsFrame
+            ? undefined
+            : isContainer(scopeElement) ? ensureContainerCluster(scopeElement) : ensureSystemCluster(scopeElement);
         let scopeSystemId: string | undefined;
         let scopeSystemClusterId: string | undefined;
         if (scopeClusterId && isContainer(scopeElement)) {
             const scopeSystem = this.resolveConatinerParent(scopeElement);
             if (scopeSystem) {
                 scopeSystemId = this.getId(scopeSystem);
-                scopeSystemClusterId = 'cluster_scope_' + scopeSystemId;
-                addChild('root', scopeSystemClusterId);
-                addChild(scopeSystemClusterId, scopeClusterId);
-            } else {
-                addChild('root', scopeClusterId);
+                scopeSystemClusterId = ensureSystemCluster(scopeSystem);
             }
-        } else if (scopeClusterId) {
-            addChild('root', scopeClusterId);
         }
 
         // Creates a (possibly nested) group cluster under `parent` and returns its id.
+        // The path is split on the workspace's group separator (`structurizr.groupSeparator`),
+        // the same one used to build the path, so custom separators nest correctly.
+        const groupSeparator = this.groupSeparator && this.groupSeparator.length > 0 ? this.groupSeparator : undefined;
         const ensureGroupCluster = (groupPath: string, parent: string | undefined): string => {
             let current = parent;
-            for (const seg of groupPath.split('/').filter(s => s.length > 0)) {
+            const segments = groupSeparator ? groupPath.split(groupSeparator) : [groupPath];
+            for (const seg of segments.filter(s => s.length > 0)) {
                 const cid = 'cluster_group_' + (current ?? 'root') + '_' + seg;
-                if (owningCluster[cid] === undefined) addChild(current ?? 'root', cid);
+                if (owningCluster[cid] === undefined) {
+                    addChild(current ?? 'root', cid);
+                    addGroupText(cid, seg);
+                }
                 current = cid;
             }
             return current!;
@@ -3665,9 +3798,11 @@ class JsonGenerator {
             const group = this.extractGroup(el);
             const gid = group && group.length > 0 ? ensureGroupCluster(group, base) : undefined;
             addChild(gid ?? base ?? 'root', cid);
+            addElementTexts(cid, el, true);
         }
 
-        // Sizes (in inches at 300dpi) and cluster assignment for all elements.
+        // Sizes (in inches at 300dpi) and cluster assignment for the elements that are
+        // rendered as nodes (compound elements become clusters instead).
         const sizes: Record<string, { w: string; h: string; label: string }> = {};
         // deployment node id -> a representative inner instance, so edges that
         // reference a deployment node are projected onto its content (like the
@@ -3675,6 +3810,7 @@ class JsonGenerator {
         const innerOf: Record<string, string> = {};
         for (const el of elements) {
             const id = this.getId(el);
+            if (this.isCompound(el)) continue; // rendered as a cluster
             const size = this.defaultElementSize(el);
             // Strip the DSL string quotes from the name for the DOT label
             // ("id: Name" without the surrounding quotes).
@@ -3684,25 +3820,32 @@ class JsonGenerator {
                 h: (size.height / STRUCTURIZR_DPI).toFixed(6),
                 label: `${id}: ${name}`
             };
-            if (this.isCompound(el)) continue; // rendered as a cluster
-            if (deployCluster[id] === undefined) {
-                let parent = this.resolveDeploymentNodeParent(el);
-                while (parent) {
-                    const pid = this.getId(parent);
-                    if (deployCluster[pid] !== undefined && innerOf[pid] === undefined) innerOf[pid] = id;
-                    parent = this.resolveDeploymentNodeParent(parent);
-                }
-            }
-            const base = this.resolveFrameParentId(el, scopeElement);
+            nodeWidths[id] = size.width;
+            // The renderer wraps a box's name and metadata to the box width, so only
+            // an unbreakable word wider than the box can overflow it - the webview
+            // measures the longest word of both texts.
+            const nameKey = `${viewKey}|${id}|leaf-name`;
+            const metadataKey = `${viewKey}|${id}|leaf-metadata`;
+            const descriptionKey = `${viewKey}|${id}|leaf-description`;
+            nodeTexts[id] = [nameKey, metadataKey, descriptionKey];
+            candidates.push({ key: nameKey, kind: 'leaf-name', elementId: id });
+            candidates.push({ key: metadataKey, kind: 'leaf-metadata', elementId: id, withTechnology: true });
+            candidates.push({ key: descriptionKey, kind: 'leaf-description', elementId: id });
+            const frameParent = this.resolveFrameParent(el, scopeElement);
+            const base = frameParent ? this.getId(frameParent) : undefined;
             const scopeId = scopeElement ? this.getId(scopeElement) : undefined;
             // A direct child of the scope frame (container/component) goes inside
-            // the scope cluster; a child of a deployment node goes inside that
-            // deployment cluster; anything else (external element) is a root node.
+            // the scope cluster; a component goes inside the frame of its own
+            // container (and that container's software system); a child of a
+            // deployment node goes inside that deployment cluster; anything else
+            // (external element) is a root node.
             let baseCluster: string | undefined;
             if (scopeAsFrame && base !== undefined && base === scopeId) {
                 baseCluster = scopeClusterId;
-            } else if (base !== undefined) {
+            } else if (base !== undefined && deployCluster[base] !== undefined) {
                 baseCluster = deployCluster[base];
+            } else if (frameParent !== undefined && isContainer(frameParent)) {
+                baseCluster = ensureContainerCluster(frameParent);
             }
             // A standalone container that belongs to the scope's software system is
             // written inside the enclosing system boundary (same-system
@@ -3714,12 +3857,52 @@ class JsonGenerator {
                 }
             }
             const group = this.extractGroup(el);
-            // Container/component views: external (non-scope) elements are
-            // written as plain nodes without group clusters - only elements inside
-            // the scope frame keep their group clusters.
-            const inScope = scopeAsFrame ? baseCluster === scopeClusterId : true;
+            // Container/component views: external (non-scope) elements are written
+            // as plain nodes without group clusters - grouped elements inside a
+            // frame (the scope frame or their own container frame) keep them.
+            const framed = baseCluster === scopeClusterId || (frameParent !== undefined && isContainer(frameParent));
+            const inScope = scopeAsFrame ? framed : true;
             const gid = group && group.length > 0 && inScope ? ensureGroupCluster(group, baseCluster) : undefined;
             addChild(gid ?? baseCluster ?? 'root', id);
+        }
+
+        // Representative inner element per deployment node, so that an edge referencing
+        // the node is projected onto its content. The reference prefers direct software
+        // system instances, then container instances, then infrastructure nodes, and
+        // only then recurses into child deployment nodes.
+        const deployChildren: Record<string, string[]> = {};
+        const deployDirect: Record<string, Array<{ rank: number; id: string }>> = {};
+        for (const el of elements) {
+            const id = this.getId(el);
+            if (this.isCompound(el)) {
+                const parent = this.resolveDeploymentNodeParent(el);
+                const pid = parent ? this.getId(parent) : undefined;
+                if (pid !== undefined && deployCluster[pid] !== undefined) (deployChildren[pid] ||= []).push(id);
+                continue;
+            }
+            const rank = isSoftwareSystemInstance(el) ? 0 : isContainerInstance(el) ? 1 : isInfrastructureNode(el) ? 2 : -1;
+            if (rank < 0) continue;
+            const parent = this.resolveDeploymentNodeParent(el);
+            const pid = parent ? this.getId(parent) : undefined;
+            if (pid !== undefined && deployCluster[pid] !== undefined) (deployDirect[pid] ||= []).push({ rank, id });
+        }
+        const findElementInside = (nodeId: string): string | undefined => {
+            const direct = deployDirect[nodeId];
+            if (direct) {
+                for (const rank of [0, 1, 2]) {
+                    const found = direct.find(candidate => candidate.rank === rank);
+                    if (found) return found.id;
+                }
+            }
+            for (const childId of deployChildren[nodeId] ?? []) {
+                const inner = findElementInside(childId);
+                if (inner !== undefined) return inner;
+            }
+            return undefined;
+        };
+        for (const nodeId of Object.keys(deployCluster)) {
+            const inner = findElementInside(nodeId);
+            if (inner !== undefined) innerOf[nodeId] = inner;
         }
 
         const lines: string[] = [];
@@ -3731,13 +3914,14 @@ class JsonGenerator {
         lines.push('');
 
         const emitNode = (id: string, indent: string) => {
-            const s = sizes[id] || { w: '1.500000', h: '1.000000', label: id };
+            const s = sizes[id];
+            if (s === undefined) throw new Error(`graphviz export: no size for element ${id}`);
             lines.push(`${indent}${idToken(id)} [width=${s.w},height=${s.h},fixedsize=true,id=${idToken(id)},label=${q(s.label)}]`);
         };
         const emitCluster = (cid: string, indent: string) => {
             const pad = indent + '  ';
             lines.push(`${indent}subgraph ${q(cid)} {`);
-            lines.push(`${pad}margin=25`);
+            lines.push(`${pad}margin=${clusterPadding(cid)}`);
             for (const child of getChildren(cid)) {
                 if (child.startsWith('cluster_')) emitCluster(child, pad);
                 else emitNode(child, pad);
@@ -3780,9 +3964,12 @@ class JsonGenerator {
             const rawSourceId = this.getId(this.resolveSource(relationship));
             const rawTargetId = this.getId(this.resolveTarget(relationship));
             // Project deployment-node endpoints onto a representative inner instance
-            // (reference findElementInside); the edge id stays unchanged.
-            const sourceId = deployCluster[rawSourceId] !== undefined ? (innerOf[rawSourceId] ?? rawSourceId) : rawSourceId;
-            const targetId = deployCluster[rawTargetId] !== undefined ? (innerOf[rawTargetId] ?? rawTargetId) : rawTargetId;
+            // (reference findElementInside); the edge id stays unchanged. A deployment
+            // node with no visible content inside has no projection, and the reference
+            // omits such an edge entirely.
+            const sourceId = deployCluster[rawSourceId] !== undefined ? innerOf[rawSourceId] : rawSourceId;
+            const targetId = deployCluster[rawTargetId] !== undefined ? innerOf[rawTargetId] : rawTargetId;
+            if (sourceId === undefined || targetId === undefined) continue;
             if (sizes[sourceId] === undefined || sizes[targetId] === undefined) continue;
             const edgeId = (item as any)?.id ?? this.getId(item);
             const dedupeKey = `${edgeId}\u0000${sourceId}\u0000${targetId}`;
@@ -3795,7 +3982,10 @@ class JsonGenerator {
         }
 
         lines.push('}');
-        return lines.join('\n');
+        return {
+            dot: lines.join('\n'),
+            measurements: { candidates, clusters, nodeTexts, children: childrenOf, nodeWidths }
+        };
     }
 
     /** Resolves the frame (compound) parent id of a view element, if any. */
@@ -3954,9 +4144,10 @@ class JsonGenerator {
         if (isContainer(el) && scopeElement && isSoftwareSystem(scopeElement)) {
             return scopeElement;
         }
-        // Component view: components live inside the container frame.
-        if (isComponent(el) && scopeElement && isContainer(scopeElement)) {
-            return scopeElement;
+        // Component view: components live inside the frame of the container they
+        // belong to (not necessarily the view's scope container).
+        if (isComponent(el)) {
+            return this.resolveComponentParent(el);
         }
         // Deployment hierarchy: deployment nodes nest inside parent deployment nodes.
         if (isDeploymentNode(el)) {
@@ -4042,22 +4233,18 @@ class JsonGenerator {
     *
     * The transient `graphviz` field holds the DOT string and is cleared after layout.
     */
-   private async applyGraphvizAutoLayouts(jsonOutput: any): Promise<void> {
-        const viewArrays: { views: any[]; dynamic: boolean }[] = [
-            { views: jsonOutput.views?.systemLandscapeViews, dynamic: false },
-            { views: jsonOutput.views?.systemContextViews, dynamic: false },
-            { views: jsonOutput.views?.containerViews, dynamic: false },
-            { views: jsonOutput.views?.componentViews, dynamic: false },
-            { views: jsonOutput.views?.deploymentViews, dynamic: false },
-            { views: jsonOutput.views?.dynamicViews, dynamic: true },
-            { views: jsonOutput.views?.customViews, dynamic: false }
-        ];
-        for (const { views, dynamic } of viewArrays) {
+    private async applyGraphvizAutoLayouts(jsonOutput: any): Promise<void> {
+        for (const { views, dynamic } of this.viewArrays(jsonOutput)) {
             if (!Array.isArray(views)) continue;
             for (const view of views) {
                 // Some extractors return undefined for views that fail their scope
                 // guard - skip those entries.
                 if (!view || !view.graphviz) continue;
+                // Keep the DOT and the measurement candidates so the webview-measured
+                // text widths can re-run this layout without rebuilding the DOT.
+                if (view.textMeasurements) {
+                    this.viewLayouts.set(view.key, { dot: view.graphviz, measurements: view.textMeasurements });
+                }
                 try {
                     await this.applyGraphvizLayoutToView(view, dynamic);
                 } catch (err) {
@@ -4066,6 +4253,184 @@ class JsonGenerator {
             }
         }
     }
+
+    /** The view collections of the generated JSON, with their dynamic-view flag. */
+    private viewArrays(jsonOutput: any): { views: any[] | undefined; dynamic: boolean }[] {
+        return [
+            { views: jsonOutput.views?.systemLandscapeViews, dynamic: false },
+            { views: jsonOutput.views?.systemContextViews, dynamic: false },
+            { views: jsonOutput.views?.containerViews, dynamic: false },
+            { views: jsonOutput.views?.componentViews, dynamic: false },
+            { views: jsonOutput.views?.deploymentViews, dynamic: false },
+            { views: jsonOutput.views?.dynamicViews, dynamic: true },
+            { views: jsonOutput.views?.customViews, dynamic: false }
+        ];
+    }
+
+    /**
+     * Measurement candidates of every auto-laid-out view, keyed by view key. The
+     * webview measures these texts after rendering and returns the widths, which
+     * applyTextMeasurements then feeds back into the layout.
+     */
+    public getTextMeasurements(): Record<string, ViewTextMeasurements> {
+        const out: Record<string, ViewTextMeasurements> = {};
+        for (const [viewKey, layout] of this.viewLayouts) {
+            out[viewKey] = layout.measurements;
+        }
+        return out;
+    }
+
+    /**
+     * Re-runs the auto-layout of the views whose frames show measured texts wider than
+     * their content. The renderer sizes such a frame from the measured name/metadata,
+     * so the space the frame (or its text) takes beyond the content has to be reserved
+     * in the graph, otherwise the frame overlaps its right-hand neighbour.
+     *
+     * Returns the views that were re-laid out, so the client can re-render them.
+     */
+    public async applyTextMeasurements(json: any, widths: Record<string, number>): Promise<any[]> {
+        const updated: any[] = [];
+        for (const { views, dynamic } of this.viewArrays(json)) {
+            if (!Array.isArray(views)) continue;
+            for (const view of views) {
+                const layout = view?.key !== undefined ? this.viewLayouts.get(view.key) : undefined;
+                if (!layout) continue;
+                const margins = this.clusterMargins(layout.measurements, widths);
+                const nodeWidths = this.elementWidths(layout.measurements, widths);
+                if (margins === undefined && nodeWidths === undefined) continue;
+                let dot = layout.dot;
+                if (margins !== undefined) dot = this.withClusterMargins(dot, margins);
+                if (nodeWidths !== undefined) dot = this.withNodeWidths(dot, nodeWidths);
+                // Nothing needs more room than the DOT already reserves: the view was
+                // re-laid out by an earlier measurement pass, so return it as-is. A
+                // rebuild that raced with that pass (e.g. the themes arriving) still
+                // has to receive the reserved coordinates, otherwise it would keep
+                // rendering the layout from before the measurement.
+                if (dot === layout.dot) {
+                    updated.push(view);
+                    continue;
+                }
+                view.graphviz = dot;
+                try {
+                    await this.applyGraphvizLayoutToView(view, dynamic);
+                    // Keep the re-laid-out DOT so a repeated measurement pass (same
+                    // widths, e.g. after the themes arrived) does not re-render again.
+                    this.viewLayouts.set(view.key, { dot, measurements: layout.measurements });
+                    updated.push(view);
+                } catch (err) {
+                    console.error(`[C4 Graphviz] Measured layout failed for view ${view.key}:`, err);
+                }
+            }
+        }
+        return updated;
+    }
+
+    /**
+     * Extra cluster margins (in points) needed to keep the measured frame text clear
+     * of the next node. The renderer sizes a frame as
+     * max(content + 2 * clusterPadding, text + 2 * margin) and draws the text 15px
+     * inside the frame's left edge, so the gap to the neighbour must cover the text
+     * that reaches beyond the content.
+     *
+     * A cluster margin is applied on every side (graphviz ignores the "x,y" pair
+     * form, verified against the bundled build), so this also adds vertical space
+     * around the frame.
+     */
+    private clusterMargins(measurements: ViewTextMeasurements, widths: Record<string, number>): Record<string, number> | undefined {
+        const margins: Record<string, number> = {};
+        const contentWidth = (clusterId: string): number => {
+            let width = 0;
+            for (const child of measurements.children[clusterId] ?? []) {
+                width = Math.max(width, measurements.nodeWidths[child] ?? contentWidth(child));
+            }
+            return width;
+        };
+        for (const clusterId of Object.keys(measurements.clusters)) {
+            let textWidth = 0;
+            for (const key of measurements.clusters[clusterId]) {
+                const measured = widths[key];
+                if (measured !== undefined) textWidth = Math.max(textWidth, measured);
+            }
+            if (textWidth === 0) continue;
+            // `textWidth` is the frame width the renderer enforces. A frame extends
+            // 50px beyond its content on each side, so the separation between the
+            // content boxes must cover the frame plus the visual gap the default
+            // margin leaves between frames.
+            const content = contentWidth(clusterId);
+            const requiredGapPx = Math.max(50, textWidth - content) + DOT_FRAME_GAP_PX;
+            // Graphviz keeps the neighbour at max(nodesep, 2 * margin) points away, so
+            // half of the required gap is enough. Points are 300/72 of a px here.
+            const marginPoints = Math.round(requiredGapPx * GRAPHVIZ_POINTS_PER_PX / 2);
+            if (marginPoints > 0) margins[clusterId] = marginPoints;
+        }
+        return Object.keys(margins).length > 0 ? margins : undefined;
+    }
+
+    /**
+     * Extra widths (in px) for element boxes whose text contains a word wider than
+     * the box: the renderer wraps that text to the box width, so an unbreakable word
+     * would otherwise be drawn across the neighbouring element. The measured value
+     * already includes the renderer's padding and icon allowance.
+     * Returns undefined when every box already fits its text.
+     */
+    private elementWidths(measurements: ViewTextMeasurements, widths: Record<string, number>): Record<string, number> | undefined {
+        const required: Record<string, number> = {};
+        for (const nodeId of Object.keys(measurements.nodeTexts)) {
+            let textWidth = 0;
+            for (const key of measurements.nodeTexts[nodeId]) {
+                const measured = widths[key];
+                if (measured !== undefined) textWidth = Math.max(textWidth, measured);
+            }
+            if (textWidth === 0) continue;
+            if (textWidth > (measurements.nodeWidths[nodeId] ?? 0)) required[nodeId] = textWidth;
+        }
+        return Object.keys(required).length > 0 ? required : undefined;
+    }
+
+    /**
+     * Returns the DOT with the width of the given element boxes raised to the
+     * requested value (in px), keeping every other attribute untouched.
+     */
+    private withNodeWidths(dot: string, widths: Record<string, number>): string {
+        const lines = dot.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+            const node = /^(\s*)([A-Za-z_][A-Za-z0-9_]*|"[^"]+") \[width=([\d.]+),height=/.exec(lines[i]);
+            if (!node) continue;
+            const requested = widths[node[2]];
+            if (requested === undefined) continue;
+            const inches = (requested / 300).toFixed(6);
+            if (parseFloat(inches) <= parseFloat(node[3])) continue;
+            lines[i] = lines[i].replace(/\[width=[\d.]+,/, `[width=${inches},`);
+        }
+        return lines.join('\n');
+    }
+
+    /**
+     * Returns the DOT with the margin of the given clusters raised to at least the
+     * requested value, keeping every other attribute untouched.
+     */
+    private withClusterMargins(dot: string, margins: Record<string, number>): string {
+        const lines = dot.split('\n');
+        let current: string | undefined;
+        for (let i = 0; i < lines.length; i++) {
+            const subgraph = /^\s*subgraph "([^"]+)" \{\s*$/.exec(lines[i]);
+            if (subgraph) {
+                current = subgraph[1];
+                continue;
+            }
+            const margin = /^(\s*)margin=(?:"?([\d.]+)(?:,([\d.]+))?"?)\s*$/.exec(lines[i]);
+            if (margin && current !== undefined) {
+                const requested = margins[current];
+                if (requested !== undefined) {
+                    const currentMargin = Math.max(parseFloat(margin[2]), margin[3] !== undefined ? parseFloat(margin[3]) : 0);
+                    lines[i] = `${margin[1]}margin=${Math.max(currentMargin, requested)}`;
+                }
+                current = undefined;
+            }
+        }
+        return lines.join('\n');
+    }
+
 
     /**
      * Runs Graphviz on a single view's DOT graph and writes normalized
@@ -4368,9 +4733,11 @@ class JsonGenerator {
         // coordinates instead of re-running its own auto-layout.
         view.automaticLayout = undefined;
 
-        // The DOT string was only an intermediate layout input - drop it from the
-        // generated JSON so no transitive graphviz artifact leaks into the output.
+        // The DOT string and the measurement candidates were only layout inputs -
+        // drop them from the generated JSON so no transitive graphviz artifact
+        // leaks into the output.
         delete view.graphviz;
+        delete view.textMeasurements;
     }
 
     /**
@@ -6873,7 +7240,7 @@ class JsonGenerator {
                 enterpriseBoundaryVisible: true,
                 automaticLayout: this.transformAutoLayout(view),
                 // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
-                graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeSystem, false, elements, relationships),
+                ...this.graphvizFields(view, this.transformAutoLayout(view), scopeSystem, false, elements, relationships),
                 animations: this.resolveAnimations(view, elements, relationships, 'static'),
             };
         });
@@ -6902,7 +7269,7 @@ class JsonGenerator {
                     relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
-                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeSystem, true, elements, relationships),
+                    ...this.graphvizFields(view, this.transformAutoLayout(view), scopeSystem, true, elements, relationships),
                     animations: this.resolveAnimations(view, elements, relationships, 'static'),
                 }
             });
@@ -6931,7 +7298,7 @@ class JsonGenerator {
                     relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
-                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), scopeContainer, true, elements, relationships),
+                    ...this.graphvizFields(view, this.transformAutoLayout(view), scopeContainer, true, elements, relationships),
                     animations: this.resolveAnimations(view, elements, relationships, 'static'),
                 };
             });
@@ -7012,7 +7379,7 @@ class JsonGenerator {
                     relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
-                    graphviz: this.buildGraphvizDot(this.transformAutoLayout(view), undefined, false, elements, relationships),
+                    ...this.graphvizFields(view, this.transformAutoLayout(view), undefined, false, elements, relationships),
                     animations: this.resolveAnimations(view, elements, relationships, 'deployment'),
                 };
             });
@@ -7051,7 +7418,7 @@ class JsonGenerator {
                     // Dynamic views use the scope element as a frame
                     // (cluster_<containerId>), so pass scopeAsFrame=true; the scope
                     // cluster is emitted first, then external elements.
-                    graphviz: this.buildGraphvizDot(autoLayout, scopeElement, true, content.graphvizElements, content.graphvizEdges, true)
+                    ...this.graphvizFields(view, autoLayout, scopeElement, true, content.graphvizElements, content.graphvizEdges, true)
                 };
             });
 
@@ -7235,6 +7602,13 @@ class JsonGenerator {
 export class C4JsonGenerator {
 
     private readonly services: C4Services;
+    /**
+     * Inner generator of the last generate() call per workspace URI. Kept so the
+     * text measurement pass can re-run the auto-layout with the widths the renderer
+     * measured, without rebuilding the DOT graph from the AST.
+     */
+    private readonly generators = new Map<string, JsonGenerator>();
+
     constructor(services: C4Services) {
         this.services = services;
     }
@@ -7242,10 +7616,29 @@ export class C4JsonGenerator {
     /**
      * Generates a Structurizr-compatible JSON representation of the given workspace.
      * @param workspace The workspace AST node to generate JSON for
+     * @param uri Root workspace URI, used to keep the layout state per workspace
      * @returns A JSON object matching the Structurizr output format
      */
-    public async generate(workspace: Workspace): Promise<any> {
-        let jsonGenerator : JsonGenerator = new JsonGenerator(this.services);
+    public async generate(workspace: Workspace, uri?: string): Promise<any> {
+        const jsonGenerator : JsonGenerator = new JsonGenerator(this.services);
+        this.generators.set(uri ?? '', jsonGenerator);
         return await jsonGenerator.generate(workspace);
+    }
+
+    /**
+     * Texts the renderer measures to size frames, keyed by view key, for the last
+     * generated JSON of the given workspace URI.
+     */
+    public getTextMeasurements(uri?: string): Record<string, ViewTextMeasurements> {
+        return this.generators.get(uri ?? '')?.getTextMeasurements() ?? {};
+    }
+
+    /**
+     * Re-runs the auto-layout of the given JSON with the measured text widths.
+     * Returns the views whose coordinates changed.
+     */
+    public async applyTextMeasurements(uri: string | undefined, json: any, widths: Record<string, number>): Promise<any[]> {
+        const generator = this.generators.get(uri ?? '');
+        return generator ? await generator.applyTextMeasurements(json, widths) : [];
     }
 }

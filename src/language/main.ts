@@ -86,7 +86,12 @@ const { shared, C4 } = createC4Services({
 // avoids the race where the client pulls JSON on save before the language
 // server has finished rebuilding/generating.
 C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json, generation) => {
-    connection.sendNotification('custom/contentUpdated', { uri, json, generation });
+    connection.sendNotification('custom/contentUpdated', {
+        uri,
+        json,
+        generation,
+        textMeasurements: C4.generation.C4GeneratorHandler.getTextMeasurements(uri)
+    });
 };
 
 // ─── Custom LSP Request Handler ────────────────────────────────────────────
@@ -97,7 +102,17 @@ connection.onRequest('custom/getContentForUri', (params: { uri: string }) => {
     // Returns { json, generation } so the client can tell "same cached build,
     // just changeView" from a fresh/different build (which needs a full rebuild).
     const content = C4.generation.C4GeneratorHandler.getContentForUri(params.uri);
-    return content ? { json: content.json, generation: content.generation } : null;
+    return content
+        ? { json: content.json, generation: content.generation, textMeasurements: C4.generation.C4GeneratorHandler.getTextMeasurements(params.uri) }
+        : null;
+});
+
+// Re-runs the auto-layout of the cached workspace with the text widths the webview
+// measured after the first render. The renderer sizes a frame from its measured
+// name/metadata, so the layout has to reserve that space - otherwise the frame
+// overlaps its right-hand neighbour. Returns the views to re-render.
+connection.onRequest('custom/applyTextMeasurements', async (params: { uri: string; generation: number; widths: Record<string, number> }) => {
+    return await C4.generation.C4GeneratorHandler.applyTextMeasurements(params.uri, params.generation, params.widths);
 });
 
 // Returns the FULL Structurizr-compatible JSON for the given URI: the cached

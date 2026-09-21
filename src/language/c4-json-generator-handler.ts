@@ -238,7 +238,7 @@ export class C4GeneratorHandler {
     private async doGenerateAndCache(uri: string, workspace: any): Promise<void> {
         try {
             const generator = (this.services as any).generation.C4JsonGenerator;
-            const json = await generator.generate(workspace);
+            const json = await generator.generate(workspace, uri);
             // Cache the json WITHOUT mutating it. The generation identifies this
             // build and stays stable across every delivery of the same payload.
             jsonGeneration += 1;
@@ -338,6 +338,32 @@ export class C4GeneratorHandler {
     public getCachedContentForUri(uri: string): any {
         const rootUri = this.getRootUri(uri);
         return this.jsonCache.get(rootUri)?.json;
+    }
+
+    /**
+     * Texts the renderer measures to size frames, for the cached workspace of the
+     * given URI, keyed by view key. Empty when the workspace has no auto-laid-out
+     * view or no JSON cached yet.
+     */
+    public getTextMeasurements(uri: string): Record<string, any> {
+        const rootUri = this.getRootUri(uri);
+        if (!this.jsonCache.get(rootUri)) return {};
+        return (this.services as any).generation.C4JsonGenerator.getTextMeasurements(rootUri);
+    }
+
+    /**
+     * Re-runs the auto-layout of the cached workspace with the text widths the
+     * renderer measured, and returns the views to re-render (elements, relationship
+     * vertices and dimensions). Returns undefined when the generation does not match
+     * the cached build, so a stale measurement pass can never overwrite a newer
+     * layout.
+     */
+    public async applyTextMeasurements(uri: string, generation: number, widths: Record<string, number>): Promise<{ views: any[] } | undefined> {
+        const rootUri = this.getRootUri(uri);
+        const entry = this.jsonCache.get(rootUri);
+        if (!entry || entry.generation !== generation) return undefined;
+        const views = await (this.services as any).generation.C4JsonGenerator.applyTextMeasurements(rootUri, entry.json, widths ?? {});
+        return { views };
     }
 
     /**

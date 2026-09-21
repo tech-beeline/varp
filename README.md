@@ -6,9 +6,9 @@
 architecture diagrams directly from code. Powered by [Langium](https://langium.org/).
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![VS Code Marketplace](https://img.shields.io/badge/VS%20Code%20Marketplace-2.0.1-0078D4.svg)](https://marketplace.visualstudio.com/items?itemName=vimpelcom.c4-varp)
+[![VS Code Marketplace](https://img.shields.io/badge/VS%20Code%20Marketplace-2.0.5-0078D4.svg)](https://marketplace.visualstudio.com/items?itemName=vimpelcom.c4-varp)
 [![Open VSX](https://img.shields.io/open-vsx/v/vimpelcom/c4-varp.svg?label=Open%20VSX)](https://open-vsx.org/extension/vimpelcom/c4-varp)
-[![Node.js LTS](https://img.shields.io/badge/Node.js-%3E%3D%2020-339933.svg)](package.json)
+[![Node.js 24.18.0](https://img.shields.io/badge/Node.js-24.18.0-339933.svg)](package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6.svg)](package.json)
 
 </div>
@@ -151,7 +151,7 @@ These views require the `archops.api.*` configuration settings to be reachable.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) ≥ 20 (LTS recommended)
+- [Node.js](https://nodejs.org/) 24.18.0
 - npm
 
 ### Setup

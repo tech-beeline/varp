@@ -31,7 +31,7 @@
             "instances" : "1",
             "name" : "Amazon EC2",
             "properties" : {
-              "structurizr.dsl.identifier" : "43c3ec22-5661-46b3-8bd1-b898c4872242"
+              "structurizr.dsl.identifier" : "fbb44e5a-72b8-4c57-a201-83e86ac7d9d6"
             },
             "tags" : "Element,Deployment Node,Amazon Web Services - EC2"
           } ],
@@ -40,7 +40,7 @@
           "instances" : "1",
           "name" : "Autoscaling group",
           "properties" : {
-            "structurizr.dsl.identifier" : "ed832f0a-9067-4df6-a07c-f7e176115b68"
+            "structurizr.dsl.identifier" : "b520b564-f54b-4b62-b747-21f8b9a60143"
           },
           "tags" : "Element,Deployment Node,Amazon Web Services - Auto Scaling"
         }, {
@@ -60,7 +60,7 @@
             "instances" : "1",
             "name" : "MySQL",
             "properties" : {
-              "structurizr.dsl.identifier" : "295e340c-6856-4dbe-a3e3-d96b92f436bc"
+              "structurizr.dsl.identifier" : "6d23ef09-c0ad-4e67-aaa1-2dcf5d9a4165"
             },
             "tags" : "Element,Deployment Node,Amazon Web Services - RDS MySQL instance"
           } ],
@@ -69,7 +69,7 @@
           "instances" : "1",
           "name" : "Amazon RDS",
           "properties" : {
-            "structurizr.dsl.identifier" : "7f912eca-0561-4b27-bfa8-4f8670a5b1d9"
+            "structurizr.dsl.identifier" : "bc9d3ee0-87d1-4219-897c-07b7bfc2b31b"
           },
           "tags" : "Element,Deployment Node,Amazon Web Services - RDS"
         }, {
@@ -80,7 +80,7 @@
             "id" : "22",
             "name" : "New infrastructure node 1",
             "properties" : {
-              "structurizr.dsl.identifier" : "149b006b-8691-4a8c-9b9b-784e1c62bc6b"
+              "structurizr.dsl.identifier" : "c3aa6d32-4412-4ba7-a90b-0d0c8d4bbbfe"
             },
             "relationships" : [ {
               "destinationId" : "7",
@@ -93,7 +93,7 @@
           "instances" : "1",
           "name" : "New deployment node 1",
           "properties" : {
-            "structurizr.dsl.identifier" : "e233ba2f-aca3-4489-82e3-555baeaafb54"
+            "structurizr.dsl.identifier" : "4e717e30-8df5-48b2-9e90-8a64bc740890"
           },
           "tags" : "Element,Deployment Node"
         }, {
@@ -104,7 +104,7 @@
             "id" : "25",
             "name" : "New infrastructure node 2",
             "properties" : {
-              "structurizr.dsl.identifier" : "c1504f32-d1d6-498f-8129-913020101f81"
+              "structurizr.dsl.identifier" : "b97521a0-e69c-42a6-acaf-26dc4b7c117a"
             },
             "relationships" : [ {
               "destinationId" : "7",
@@ -117,7 +117,7 @@
           "instances" : "1",
           "name" : "New deployment node 2",
           "properties" : {
-            "structurizr.dsl.identifier" : "c06412ed-af22-4749-9fe9-d174e2e7515e"
+            "structurizr.dsl.identifier" : "53db16ae-8026-4893-aff8-4ccf15c4d8c6"
           },
           "tags" : "Element,Deployment Node"
         } ],
@@ -170,7 +170,7 @@
           "id" : "19",
           "name" : "New infrastructure node",
           "properties" : {
-            "structurizr.dsl.identifier" : "20db3045-23f4-4d5e-9f07-10df53923ea0"
+            "structurizr.dsl.identifier" : "c0aee23c-64d6-44e8-880d-40aa2e7e4f15"
           },
           "relationships" : [ {
             "destinationId" : "7",
@@ -183,7 +183,7 @@
         "instances" : "1",
         "name" : "New deployment node",
         "properties" : {
-          "structurizr.dsl.identifier" : "18341a2e-23e2-4c6a-b810-25c1165e6cd3"
+          "structurizr.dsl.identifier" : "24b4c21a-ff40-446a-b79a-dd557db074b4"
         },
         "tags" : "Element,Deployment Node"
       } ],
@@ -192,7 +192,7 @@
       "instances" : "1",
       "name" : "Amazon Web Services",
       "properties" : {
-        "structurizr.dsl.identifier" : "804de64d-1e30-4f1e-be83-e25fd6773ac4"
+        "structurizr.dsl.identifier" : "dfab2552-6520-4baf-b4d7-5d380a32f942"
       },
       "tags" : "Element,Deployment Node,Amazon Web Services - Cloud"
     }, {
@@ -203,7 +203,7 @@
         "id" : "28",
         "name" : "New infrastructure node 3",
         "properties" : {
-          "structurizr.dsl.identifier" : "f30d189a-5f4c-4b65-9b25-1c8f88473b49"
+          "structurizr.dsl.identifier" : "26b0bb4d-f9b3-434e-9d77-9b57e6b4e08b"
         },
         "relationships" : [ {
           "destinationId" : "7",
@@ -216,7 +216,7 @@
       "instances" : "1",
       "name" : "New deployment node 3",
       "properties" : {
-        "structurizr.dsl.identifier" : "c71f7cc6-9563-4e32-8038-113ca95f6d6c"
+        "structurizr.dsl.identifier" : "0997ed96-5ef4-45a3-9cf8-08d8e8944266"
       },
       "tags" : "Element,Deployment Node"
     } ],

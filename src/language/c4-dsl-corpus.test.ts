@@ -36,6 +36,8 @@ const FIXTURES = resolve(__dirname, '../../test/fixtures/dsl');
 
 function collectFixtures(dir: string, out: string[] = []): string[] {
     for (const entry of readdirSync(dir)) {
+        // Skip tooling and VCS directories (e.g. a nested Agent Manager worktree).
+        if (entry.startsWith('.')) continue;
         const full = join(dir, entry);
         if (statSync(full).isDirectory()) collectFixtures(full, out);
         else if (entry.endsWith('.dsl')) out.push(full);

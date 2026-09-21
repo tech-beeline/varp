@@ -328,13 +328,13 @@ export function init(context: ExtensionContext): void {
                     }
 
                     // Open a side-panel with the raw JSON for debugging
-                    const content = JSON.stringify(payload, null, 2);
-                    const doc = await workspace.openTextDocument({ content, language: 'json' });
+                    // const content = JSON.stringify(payload, null, 2);
+                    // const doc = await workspace.openTextDocument({ content, language: 'json' });
                     
-                    await window.showTextDocument(doc, {
-                        viewColumn: ViewColumn.Beside,
-                        preview: true
-                    });
+                    // await window.showTextDocument(doc, {
+                    //     viewColumn: ViewColumn.Beside,
+                    //     preview: true
+                    // });
                     
                 } catch (err) {
                     console.error(`[C4 Preview] webview update FAILED for view ${viewKey}:`, err);

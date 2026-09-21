@@ -17,6 +17,7 @@
 import { AstNode, AstUtils, Reference } from 'langium';
 import { URI } from 'vscode-uri';
 import { flatId, C4Utils, archetypeChain, archetypeInstanceType, type FlatIdResolvers } from './c4-utils';
+import { encodePlantUml } from './plantuml-encoder';
 import { Graphviz } from '@hpcc-js/wasm-graphviz';
 
 import {
@@ -41,6 +42,7 @@ import {
     ViewsBlock, SystemContextView, isWorkspace, isC4Document,
     isViewsBlock, ElementStyle, RelationshipStyle, isStylesBlock,
     StylesBlock, isModelBlock, isConstant, Include, isInclude, isGroup, isDeploymentNode,
+    isArchetypesBlock, isArchetypeInstance, isImageView, isPlantUMLSource, isImageSource,
     isDeploymentView, DynamicMember, isDynamicStep, isParallelStepBlock,
     DynamicView, isContainerView,
     isSystemLandscapeView, isSystemContextView,
@@ -129,6 +131,8 @@ class JsonGenerator {
     private readonly relationshipsBySource: Map<string, Relationship[]> = new Map();
     /** Explicit relationships indexed by their DSL identifier. */
     private readonly relationshipsByIdentifier: Map<string, Relationship> = new Map();
+    /** Unnamed archetypes keyed by base type keyword (or '->' for relationships). */
+    private readonly defaultArchetypes: Map<string, any> = new Map();
     /** NoRelationship (`-/>`) directives collected from deployment environments. */
     private readonly noRelationshipNodes: any[] = [];
     /** Relationships declared directly in a deployment environment/node (or a `-/>` body) before instance projection. */
@@ -224,6 +228,7 @@ class JsonGenerator {
         await this.collectThemeStyles();
         this.collectProperties(workspace);
         this.collectTerminology(workspace);
+        this.collectDefaultArchetypes(workspace);
 
         // Read group separator from model properties, default is "/"
         this.groupSeparator = this.propertiesModel["structurizr.groupSeparator"]
@@ -266,8 +271,8 @@ class JsonGenerator {
 
         // Assemble the final JSON output object in Structurizr-compatible format
         const jsonOutput = {
-            name: this.substitute(workspace.name) || "Name",
-            description: this.description(workspace) || "Description",
+            name: this.substitute(this.inheritedWorkspaceValue(workspace, ws => ws.name)) || "Name",
+            description: this.substitute(this.inheritedWorkspaceValue(workspace, ws => this.description(ws))) || "Description",
             model: model,
             views: {
                 systemLandscapeViews: this.extractSystemLandscapeViews(workspace, model),
@@ -278,6 +283,7 @@ class JsonGenerator {
                 dynamicViews: this.extractDynamicViews(workspace),
                 filteredViews: this.extractFilteredViews(workspace),
                 customViews:  this.extractCustomViews(workspace),
+                imageViews: this.extractImageViews(workspace),
                 configuration: {
                     properties: this.propertiesViews,
                     themes: themesArray.length > 0 ? themesArray : undefined,
@@ -569,7 +575,9 @@ class JsonGenerator {
         AstUtils.streamAllContents(root).filter(isConstant).forEach((c) => {
             const name = (c.name ?? '').toString().replace(/['"]/g, '');
             const rawValue = (c.value ?? '').toString();
-            const value = typeof rawValue === 'string' ? rawValue.replace(/^['"]|['"]$/g, '') : rawValue;
+            const value = rawValue.trimStart().startsWith('"""')
+                ? C4Utils.textBlockValue(rawValue)
+                : (typeof rawValue === 'string' ? rawValue.replace(/^['"]|['"]$/g, '') : rawValue);
             if (name && !this.constants.has(name)) this.constants.set(name, value);
         });
 
@@ -581,6 +589,13 @@ class JsonGenerator {
                 if (includedRoot) this.collectConstants(includedRoot, visited);
             }
         });
+
+        // Constants and variables are inherited from an extended workspace.
+        const workspace = isWorkspace(root) ? root : (root as any).workspaces?.find(isWorkspace);
+        if (workspace?.extendsUri) {
+            const parent = this.resolveParentWorkspace(workspace, workspace.extendsUri);
+            if (parent) this.collectConstants(parent, visited);
+        }
     }
 
     /**
@@ -602,6 +617,113 @@ class JsonGenerator {
     }
 
     /**
+     * Collects unnamed archetype definitions, which act as defaults for every
+     * element/relationship declared with the matching type keyword. Included and
+     * extended documents are searched too; the extending workspace wins.
+     */
+    private collectDefaultArchetypes(node: AstNode | undefined, visited: Set<string> = new Set<string>()): void {
+        if (!node) return;
+        const docUri = AstUtils.getDocument(node)?.uri.toString();
+        if (docUri && visited.has(docUri)) return;
+        if (docUri) visited.add(docUri);
+
+        for (const content of AstUtils.streamAllContents(node)) {
+            if (!isArchetypesBlock(content)) continue;
+            for (const definition of content.definitions ?? []) {
+                if ((definition as any).name !== undefined) continue;
+                const key = this.archetypeTypeKey(definition);
+                if (key && !this.defaultArchetypes.has(key)) {
+                    this.defaultArchetypes.set(key, definition);
+                }
+            }
+        }
+
+        for (const content of AstUtils.streamAllContents(node)) {
+            if (!isInclude(content) || !content.file) continue;
+            const includedRoot = this.resolveIncludedRoot(node, content.file);
+            if (includedRoot) this.collectDefaultArchetypes(includedRoot, visited);
+        }
+
+        if (isWorkspace(node) && node.extendsUri) {
+            const parent = this.resolveParentWorkspace(node, node.extendsUri);
+            if (parent) this.collectDefaultArchetypes(parent, visited);
+        }
+    }
+
+    /** Base type keyword ('softwaresystem', ...) or '->' an unnamed archetype applies to. */
+    private archetypeTypeKey(definition: any): string | undefined {
+        if (typeof definition?.baseType === 'string' && definition.baseType) {
+            return definition.baseType.toLowerCase();
+        }
+        if (definition?.baseArrow) return '->';
+        return undefined;
+    }
+
+    /** Effective type keyword of a node, used to look up its default archetype. */
+    private effectiveArchetypeType(node: any): string | undefined {
+        if (isRelationship(node) || isImplicitRelationship(node)) return '->';
+        if (isArchetypeInstance(node)) {
+            const type = archetypeInstanceType(node);
+            return type === 'Relationship' ? '->' : type?.toLowerCase();
+        }
+        if (isPerson(node)) return 'person';
+        if (isSoftwareSystem(node)) return 'softwaresystem';
+        if (isContainer(node)) return 'container';
+        if (isComponent(node)) return 'component';
+        if (isGroup(node)) return 'group';
+        if (isCustomElement(node)) return 'element';
+        if (isDeploymentNode(node)) return 'deploymentnode';
+        if (isInfrastructureNode(node)) return 'infrastructurenode';
+        return undefined;
+    }
+
+    /**
+     * Archetypes applying to a node: its own archetype chain from the nearest
+     * definition outward, followed by the type's default archetype when that
+     * default was declared before the chain's outermost definition.
+     */
+    private archetypeChainFor(node: any): any[] {
+        const chain = archetypeChain(node);
+        const key = this.effectiveArchetypeType(node);
+        const fallback = key ? this.defaultArchetypes.get(key) : undefined;
+        if (fallback && !chain.includes(fallback)) {
+            const anchor = chain.length > 0 ? chain[chain.length - 1] : node;
+            if (this.archetypePrecedes(fallback, anchor)) chain.push(fallback);
+        }
+        return chain;
+    }
+
+    /** Whether an archetype definition appears before another node in the same document. */
+    private archetypePrecedes(archetype: any, node: any): boolean {
+        const archetypeDoc = AstUtils.getDocument(archetype)?.uri.toString();
+        const nodeDoc = AstUtils.getDocument(node)?.uri.toString();
+        if (!archetypeDoc || !nodeDoc || archetypeDoc !== nodeDoc) return true;
+        const archetypeOffset = archetype.$cstNode?.offset ?? -1;
+        const nodeOffset = node.$cstNode?.offset ?? -1;
+        return archetypeOffset < nodeOffset;
+    }
+
+    /** Perspectives contributed by the node's nearest archetype. */
+    private archetypePerspectives(node: any): any[] | undefined {
+        const archetype = this.archetypeChainFor(node)[0];
+        return archetype ? this.perspectivesToJson(archetype.perspectivesBlocks) : undefined;
+    }
+
+    /** Properties contributed by the node's nearest archetype. */
+    private archetypeProperties(node: any): Record<string, string> | undefined {
+        const archetype = this.archetypeChainFor(node)[0];
+        if (!archetype) return undefined;
+        const properties: Record<string, string> = {};
+        for (const block of archetype.properties ?? []) {
+            for (const item of block?.items ?? []) {
+                const name = C4Utils.stripQuotes(String(item?.name ?? ''));
+                if (name) properties[name] = C4Utils.stripQuotes(String(item?.value ?? ''));
+            }
+        }
+        return Object.keys(properties).length > 0 ? properties : undefined;
+    }
+
+    /**
      * Collects element and relationship styles from workspace, views, and C4Document nodes.
      * Recursively processes styles from included files.
      */
@@ -610,6 +732,11 @@ class JsonGenerator {
         const docUri = AstUtils.getDocument(node)?.uri.toString();
         if (docUri && visited.has(docUri)) return;
         if (docUri) visited.add(docUri);
+        // Styles of an extended workspace come before the extending workspace's own.
+        if (isWorkspace(node) && node.extendsUri) {
+            const parent = this.resolveParentWorkspace(node, node.extendsUri);
+            if (parent) this.collectStyles(parent, visited);
+        }
         if (isStylesBlock(node)) {
             this.processStylesBlock(node, visited);
         } else if (isViewsBlock(node)) {
@@ -1097,6 +1224,15 @@ class JsonGenerator {
             tags: relationship.linked ? undefined : this.extractTags(relationship.relationship, 'Relationship'),
             linkedRelationshipId: relationship.linked ? this.getId(relationship.linked) : undefined
         };
+        // Perspectives and properties contributed by the relationship's archetype.
+        const archetypePerspectives = this.archetypePerspectives(relationship.relationship);
+        if (archetypePerspectives) {
+            result.perspectives = archetypePerspectives;
+        }
+        const archetypeProperties = this.archetypeProperties(relationship.relationship);
+        if (archetypeProperties) {
+            result.properties = archetypeProperties;
+        }
         // Apply overlay URL
         if (overlay?.url) {
             result.url = overlay.url;
@@ -1350,6 +1486,16 @@ class JsonGenerator {
      * to the element JSON output object. Tags are handled separately in extractTags().
      */
     private applyElementOverlay(result: any, node: any): void {
+        // Perspectives and properties contributed by the element's archetype.
+        const archetypePerspectives = this.archetypePerspectives(node);
+        if (archetypePerspectives) {
+            result.perspectives = result.perspectives ?? archetypePerspectives;
+        }
+        const archetypeProperties = this.archetypeProperties(node);
+        if (archetypeProperties) {
+            result.properties = { ...archetypeProperties, ...(result.properties ?? {}) };
+        }
+
         const nodeId = this.getId(node);
         const overlay = this.elementOverlays.get(nodeId);
         if (!overlay) return;
@@ -1379,7 +1525,7 @@ class JsonGenerator {
      * nodes yield empty defaults.
      */
     private archetypeDefaults(node: any): { description?: string; technology?: string; metadata?: string; tags: string[] } {
-        const chain = archetypeChain(node);
+        const chain = this.archetypeChainFor(node);
         if (chain.length === 0) {
             return { tags: [] };
         }
@@ -2512,16 +2658,150 @@ class JsonGenerator {
             if (deploymentGroupNames.has(val)) {
                 // Value matches a known DeploymentGroup → it's a group reference
                 // Nothing more to do: the group reference was already consumed by the grammar
-            } else {
-                // Value does not match any DeploymentGroup → treat as tag
+            } else if (isGenericInstance(el)) {
+                // GenericInstance is an extension: a single value is a tag.
                 if (!node.tags) node.tags = [];
                 if (!node.tags.includes(val)) {
                     node.tags.push(val);
                 }
+            } else {
+                // The value occupies the deployment group slot of a container/software
+                // system instance; a reference to no known group is ignored.
             }
             // Clear value after resolution
             node.value = undefined;
         }
+    }
+
+    /**
+     * Documents visible to a view: its own document plus every document it
+     * extends or includes. Elements declared in workspaces that extend the view's
+     * workspace are not visible, because the reference resolves views while parsing.
+     */
+    private allowedViewDocuments(view: any, visited: Set<string> = new Set<string>()): Set<string> {
+        const documents = new Set<string>();
+        const root = AstUtils.getDocument(view)?.parseResult?.value;
+        if (root) this.collectViewSourceDocuments(root, documents, visited);
+        return documents;
+    }
+
+    private collectViewSourceDocuments(node: AstNode, documents: Set<string>, visited: Set<string>): void {
+        const uri = AstUtils.getDocument(node)?.uri.toString();
+        if (uri) {
+            if (visited.has(uri)) return;
+            visited.add(uri);
+            documents.add(uri);
+        }
+        for (const content of AstUtils.streamAllContents(node)) {
+            if (!isInclude(content) || !content.file) continue;
+            const includedRoot = this.resolveIncludedRoot(node, content.file);
+            if (includedRoot) this.collectViewSourceDocuments(includedRoot, documents, visited);
+        }
+        if (isWorkspace(node) || (node as any).workspaces?.length > 0) {
+            const workspace = isWorkspace(node) ? node : (node as any).workspaces.find(isWorkspace);
+            if (workspace?.extendsUri) {
+                const parent = this.resolveParentWorkspace(workspace, workspace.extendsUri);
+                if (parent) this.collectViewSourceDocuments(parent, documents, visited);
+            }
+        }
+    }
+
+    /** Whether an element belongs to one of the documents visible to a view. */
+    private isInAllowedDocuments(element: NamedElement | undefined, documents: Set<string>): boolean {
+        if (!element) return false;
+        const uri = AstUtils.getDocument(element)?.uri.toString();
+        return !!uri && documents.has(uri);
+    }
+
+    /**
+     * All views visible to a workspace: the extended workspaces' views first, then
+     * the workspace's own, in declaration order.
+     */
+    private workspaceViews(workspace: Workspace, visited: Set<string> = new Set<string>()): any[] {
+        const views: any[] = [];
+        const docUri = AstUtils.getDocument(workspace)?.uri.toString();
+        if (docUri) {
+            if (visited.has(docUri)) return views;
+            visited.add(docUri);
+        }
+        if (workspace.extendsUri) {
+            const parent = this.resolveParentWorkspace(workspace, workspace.extendsUri);
+            if (parent) views.push(...this.workspaceViews(parent, visited));
+        }
+        for (const block of workspace.viewsBlocks ?? []) {
+            views.push(...(block.views ?? []));
+        }
+        return views;
+    }
+
+    /**
+     * Value of a workspace field, falling back to the extended workspace when the
+     * extending workspace does not define it.
+     */
+    private inheritedWorkspaceValue(
+        workspace: Workspace,
+        pick: (ws: Workspace) => string | undefined,
+        visited: Set<string> = new Set<string>()
+    ): string | undefined {
+        const own = pick(workspace);
+        if (own !== undefined && own !== '') return own;
+        if (!workspace.extendsUri) return undefined;
+        const docUri = AstUtils.getDocument(workspace)?.uri.toString();
+        if (docUri) {
+            if (visited.has(docUri)) return undefined;
+            visited.add(docUri);
+        }
+        const parent = this.resolveParentWorkspace(workspace, workspace.extendsUri);
+        return parent ? this.inheritedWorkspaceValue(parent, pick, visited) : undefined;
+    }
+
+    /**
+     * Canonical name of an element (`<Type>://<path>`), used to resolve
+     * `!element "<canonical name>"` references. Dots and slashes are removed from
+     * every name segment so the separator stays unambiguous.
+     */
+    private canonicalName(node: any): string | undefined {
+        const clean = (name: string | undefined) => C4Utils.stripQuotes(name ?? '').replace(/[./]/g, '');
+        const deploymentNodePath = (deploymentNode: any): string => {
+            const parents: string[] = [];
+            let parent = this.resolveDeploymentNodeParent(deploymentNode);
+            while (parent) {
+                parents.unshift(clean(parent.name));
+                parent = this.resolveDeploymentNodeParent(parent);
+            }
+            const prefix = parents.length > 0 ? parents.join('/') + '/' : '';
+            return `${clean(this.getEnvironment(deploymentNode))}/${prefix}${clean(deploymentNode.name)}`;
+        };
+
+        if (isCustomElement(node)) return `Custom://${clean(node.name)}`;
+        if (isPerson(node)) return `Person://${clean(node.name)}`;
+        if (isSoftwareSystem(node)) return `SoftwareSystem://${clean(node.name)}`;
+        if (isContainer(node)) {
+            const softwareSystem = (node as any).$container;
+            return `Container://${clean(softwareSystem?.name)}.${clean(node.name)}`;
+        }
+        if (isComponent(node)) {
+            const container = (node as any).$container;
+            const softwareSystem = container?.$container;
+            return `Component://${clean(softwareSystem?.name)}.${clean(container?.name)}.${clean(node.name)}`;
+        }
+        if (isDeploymentNode(node)) return `DeploymentNode://${deploymentNodePath(node)}`;
+        if (isInfrastructureNode(node)) {
+            const parent = this.resolveDeploymentNodeParent(node);
+            return parent ? `InfrastructureNode://${deploymentNodePath(parent)}/${clean(node.name)}` : undefined;
+        }
+        if (isSoftwareSystemInstance(node)) {
+            const parent = this.resolveDeploymentNodeParent(node);
+            const softwareSystem = this.el(node.softwareSystem?.ref);
+            return parent ? `SoftwareSystemInstance://${deploymentNodePath(parent)}/${clean(softwareSystem?.name)}[${this.instanceId(node)}]` : undefined;
+        }
+        if (isContainerInstance(node)) {
+            const parent = this.resolveDeploymentNodeParent(node);
+            const container = this.el(node.container?.ref);
+            const softwareSystem = (container as any)?.$container;
+            return parent ? `ContainerInstance://${deploymentNodePath(parent)}/${clean(softwareSystem?.name)}.${clean(container?.name)}[${this.instanceId(node)}]` : undefined;
+        }
+        return undefined;
     }
 
     /**
@@ -2632,7 +2912,9 @@ class JsonGenerator {
         if (trimmed.length === 0) return [];
         if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
             const inner = trimmed.replace(/^"([\s\S]*)"$/, '$1');
-            return inner.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+            // Quoted values are split on commas; empty segments are kept because an
+            // explicitly empty tag stays in the emitted tag list.
+            return inner.split(',').map(tag => tag.trim());
         }
         return trimmed.split(/[\s,]+/).filter(tag => tag.length > 0);
     }
@@ -2849,11 +3131,7 @@ class JsonGenerator {
      * - All relationships (direct + implied) extracted via extractRelationshipsForSoftwareSystem
      */
     private extractSystems() {
-        // Diagnostic: list every collected element that IS a software system and the
-        // ids of the ones that pass the model filter, to localize id mismatches
-        // between the emitted model and the view scopes.
-        const systemCandidates = this.elements.filter(isSoftwareSystem);
-        const systems = systemCandidates
+        const systems = this.elements.filter(isSoftwareSystem)
             .map(s => {
                 const result: any = {
                     id: this.getId(s),
@@ -3057,6 +3335,11 @@ class JsonGenerator {
             if (isDeploymentEnvironment(current)) {
                 return true;
             }
+            // A node contributed by `!element` is nested under the extended element:
+            // it is a root node only when that element is a deployment environment.
+            if (isElementExtension(current)) {
+                return isDeploymentEnvironment(this.resolveElementExtensionTarget(current));
+            }
             // Continue climbing up (passing through groups or other intermediate AST containers)
             current = current.$container;
         }
@@ -3105,12 +3388,114 @@ class JsonGenerator {
     }
 
     /**
+     * Extracts image views. A `plantuml` source is encoded into the PlantUML server
+     * URL the renderer loads; an `image` source is used as-is. Light and dark
+     * scheme blocks populate `contentLight`/`contentDark`.
+     */
+    private extractImageViews(workspace: Workspace) {
+        const views = this.workspaceViews(workspace).filter(isImageView);
+        if (views.length === 0) return undefined;
+
+        const list = views.map(view => {
+            const json: any = {
+                key: this.substitute(view.key) ?? this.services.workspace.ViewKeyProvider.getKey(view),
+                elementId: view.element?.ref ? this.getId(this.el(view.element.ref)) : undefined,
+                title: this.substitute(view.titleProps?.at(0)?.value),
+                description: this.description(view)
+            };
+
+            const content = this.resolveImageSources(view.sources, view);
+            if (content) {
+                json.content = content.content;
+                json.contentType = content.contentType;
+                if (content.title) json.title = content.title;
+            }
+            const light = this.resolveImageSources(view.lightBlocks?.flatMap(block => block.sources ?? []), view);
+            if (light) {
+                json.contentLight = light.content;
+                json.contentType = light.contentType ?? json.contentType;
+            }
+            const dark = this.resolveImageSources(view.darkBlocks?.flatMap(block => block.sources ?? []), view);
+            if (dark) {
+                json.contentDark = dark.content;
+                json.contentType = dark.contentType ?? json.contentType;
+            }
+            return json;
+        });
+
+        return list;
+    }
+
+    /** Resolves the first supported source of an image view to content and content type. */
+    private resolveImageSources(sources: any[] | undefined, view: any): { content?: string; contentType?: string; title?: string } | undefined {
+        for (const source of sources ?? []) {
+            if (isPlantUMLSource(source)) {
+                const text = this.diagramSourceText(source.value);
+                const server = this.viewProperty(view, 'plantuml.url') ?? '';
+                const format = (this.viewProperty(view, 'plantuml.format') ?? 'svg').toLowerCase();
+                return {
+                    content: `${server}/${format}/${encodePlantUml(text)}`,
+                    contentType: format === 'png' ? 'image/png' : 'image/svg+xml',
+                    title: this.plantUmlTitle(text)
+                };
+            }
+            if (isImageSource(source)) {
+                const value = this.diagramSourceText(source.value);
+                return { content: value, contentType: this.imageContentType(value) };
+            }
+        }
+        return undefined;
+    }
+
+    /** Text of a diagram source: text blocks are normalised, then constants substituted. */
+    private diagramSourceText(raw: string | undefined): string {
+        if (raw === undefined) return '';
+        const text = raw.trimStart().startsWith('"""') ? C4Utils.textBlockValue(raw) : C4Utils.stripQuotes(raw);
+        return text.replace(/\$\{([^}]+)\}/g, (match, name) => this.constants.get(name) ?? match);
+    }
+
+    /** Title declared by a `title ...` line inside a PlantUML definition. */
+    private plantUmlTitle(source: string): string | undefined {
+        for (const line of source.split('\n')) {
+            if (!line.startsWith('title ')) continue;
+            let title = line.substring('title '.length);
+            if (title.startsWith('<size:')) {
+                title = title.substring(title.indexOf('>') + 1);
+                if (title.endsWith('</size>')) title = title.substring(0, title.indexOf('</size>'));
+            }
+            return title;
+        }
+        return undefined;
+    }
+
+    /** Content type of an image referenced by URL or path. */
+    private imageContentType(source: string): string {
+        const extension = source.split('?')[0].split('.').pop()?.toLowerCase();
+        if (extension === 'svg') return 'image/svg+xml';
+        if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg';
+        if (extension === 'gif') return 'image/gif';
+        return 'image/png';
+    }
+
+    /** A view property, falling back to the views block properties. */
+    private viewProperty(view: any, name: string): string | undefined {
+        for (const block of view.properties ?? []) {
+            for (const item of block?.items ?? []) {
+                if (C4Utils.stripQuotes(String(item?.name ?? '')) === name) {
+                    return C4Utils.stripQuotes(String(item?.value ?? ''));
+                }
+            }
+        }
+        return this.propertiesViews[name];
+    }
+
+    /**
      * Extracts custom views from the workspace and resolves their elements and relationships.
      * Each custom view includes a key, title, description, element/relationship references,
      * and automatic layout settings.
      */
     private extractCustomViews(workspace: Workspace) {
-        const views = workspace.viewsBlocks?.at(0)?.views.filter(view => isCustomView(view))
+        const views = this.workspaceViews(workspace).filter(view => isCustomView(view))
             .map(view => {
                 const elements = new Set<RelationshipMember>();
                 const relationships = new Set<Relationship>();
@@ -3136,7 +3521,7 @@ class JsonGenerator {
      * and relationships visible at the landscape level (all elements in the model).
      */
     private extractSystemLandscapeViews(workspace: Workspace, model: any) {
-        const views = workspace.viewsBlocks?.at(0)?.views.filter(view => isSystemLandscapeView(view))
+        const views = this.workspaceViews(workspace).filter(view => isSystemLandscapeView(view))
             .map(view => {
                 const elements = new Set<RelationshipMember>();
                 const relationships = new Set<Relationship>();
@@ -5252,6 +5637,21 @@ class JsonGenerator {
                         if (astTarget) key = astTarget as NamedElement;
                     }
                 }
+                // Canonical name form (`!element "DeploymentNode://Live/..."`).
+                if (!key && !(ext.target as any) && ext.id) {
+                    const raw = C4Utils.stripQuotes(String(ext.id));
+                    if (raw.includes('://')) {
+                        const root = AstUtils.getDocument(ext)?.parseResult.value;
+                        const candidates: any[] = [...this.elements];
+                        if (root) {
+                            for (const content of AstUtils.streamAllContents(root)) {
+                                if (isDeploymentEnvironment(content) || isDeploymentNode(content)) candidates.push(content);
+                            }
+                        }
+                        const canonical = candidates.find(candidate => this.canonicalName(candidate) === raw);
+                        if (canonical) key = canonical as NamedElement;
+                    }
+                }
                 if (!key) continue;
                 const list = this.elementExtensionsByTarget.get(key);
                 if (list) {
@@ -6104,7 +6504,12 @@ class JsonGenerator {
         });
 
         // scope guard: only deployment elements matching the environment (and optionally softwareSystem) are allowed
+        const allowedDocuments = this.allowedViewDocuments(view);
         const isAllowed = (el: NamedElement | undefined) : el is (DeploymentNode | InfrastructureNode | SoftwareSystemInstance | ContainerInstance | CustomElement) => {
+            // Elements contributed by a workspace that extends the view's workspace are
+            // not visible: the reference resolves views while parsing, so a view only
+            // sees the model of its own document and the documents it extends/includes.
+            if (!this.isInAllowedDocuments(el, allowedDocuments)) return false;
             // DeploymentNode and InfrastructureNode must match the environment
             if(isDeploymentNode(el) || isInfrastructureNode(el)) {
                 return (!environment || environment === this.getEnvironment(el));
@@ -6131,6 +6536,7 @@ class JsonGenerator {
             if (isInclude && prop.all === '*') {
                 // add all deployment elements matching the environment
                 this.elements.forEach(el => {
+                    if (!this.isInAllowedDocuments(el, allowedDocuments)) return;
                     if(isDeploymentNode(el) || isInfrastructureNode(el)) {
                         if(!environment || environment === this.getEnvironment(el)) elementsAtView.add(el);
                     }
@@ -6448,7 +6854,7 @@ class JsonGenerator {
      * and includes that system, its direct relationships, and related people/systems.
      */
     private extractSystemContextViews(workspace: Workspace, model: any) {
-        const views = workspace.viewsBlocks?.at(0)?.views.filter(isSystemContextView)
+        const views = this.workspaceViews(workspace).filter(isSystemContextView)
         .map(view => {
             // Normalise the scope to the materialised element.
             const scopeSystem = this.el(view.softwareSystem?.ref);
@@ -6479,7 +6885,7 @@ class JsonGenerator {
      * Resolves all container-level elements and their relationships within the system.
      */
     private extractContainerViews(workspace: Workspace, model: any) {
-        const views = workspace.viewsBlocks?.at(0)?.views.filter(isContainerView)
+        const views = this.workspaceViews(workspace).filter(isContainerView)
             .map(view => {
                 const scopeSystem = this.el(view.softwareSystem?.ref);
                 if(scopeSystem === undefined) return undefined;
@@ -6508,7 +6914,7 @@ class JsonGenerator {
      * Shows the components within a container, their relationships, and related people/systems.
      */
     private extractComponentViews(workspace: Workspace, model: any) {
-        const views = workspace.viewsBlocks?.at(0)?.views.filter(isComponentView)
+        const views = this.workspaceViews(workspace).filter(isComponentView)
             .map(view => {
                 const scopeContainer = this.el(view.container?.ref);
                 if(scopeContainer === undefined) return undefined;
@@ -6588,7 +6994,7 @@ class JsonGenerator {
      * Optionally scoped to a SoftwareSystem for targeted deployment visualization.
      */
     private extractDeploymentViews(workspace: Workspace, model: any) {
-        const views = workspace.viewsBlocks?.at(0)?.views.filter(isDeploymentView)
+        const views = this.workspaceViews(workspace).filter(isDeploymentView)
             .map(view => {
                 const scopeSystem = this.el(view.softwareSystem?.ref);
                 const environment = view.environment?.ref ? C4Utils.stripQuotes(view.environment.ref.name) : undefined;
@@ -6618,7 +7024,7 @@ class JsonGenerator {
      * between elements with ordering and optional parallel block grouping.
      */
     private extractDynamicViews(workspace: Workspace) {
-        const viewsList = workspace.viewsBlocks?.[0]?.views;
+        const viewsList = this.workspaceViews(workspace);
         if (!Array.isArray(viewsList)) return undefined;
         const views = viewsList
             .filter(isDynamicView)
@@ -6657,7 +7063,7 @@ class JsonGenerator {
      * and filters its elements by tags using either Include or Exclude mode.
      */
     private extractFilteredViews(workspace: Workspace) {
-        const allViews = workspace.viewsBlocks?.at(0)?.views ?? [];
+        const allViews = this.workspaceViews(workspace);
         const views = allViews.filter(isFilteredView)
             .map(view => {
                 const baseKey = this.substitute(view.baseKey);

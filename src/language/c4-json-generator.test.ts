@@ -26,13 +26,23 @@ import { isWorkspace } from '../generated/ast';
 
 async function loadDSL(filePath: string): Promise<any> {
     const dir = dirname(filePath);
-    // Discover all .dsl files in the fixture directory so multi-file workspaces
-    // (extends/includes chains) can resolve their parent/included documents. A
-    // fresh service container per fixture avoids cross-fixture doc accumulation.
-    const dslNames = readdirSync(dir).filter(f => f.endsWith('.dsl'));
+    // Discover all .dsl files in the fixture directory (recursively) so multi-file
+    // workspaces (extends/includes chains) can resolve their parent/included
+    // documents. A fresh service container per fixture avoids cross-fixture doc
+    // accumulation.
+    const dslFiles: string[] = [];
+    const collectDslFiles = (current: string) => {
+        for (const entry of readdirSync(current, { withFileTypes: true })) {
+            // Skip tooling and VCS directories (e.g. a nested Agent Manager worktree).
+            if (entry.name.startsWith('.')) continue;
+            const full = resolve(current, entry.name);
+            if (entry.isDirectory()) collectDslFiles(full);
+            else if (entry.name.endsWith('.dsl')) dslFiles.push(full);
+        }
+    };
+    collectDslFiles(dir);
     const services = createC4Services({ connection: undefined as any, ...EmptyFileSystem }).C4;
-    const docs = dslNames.map(name => {
-        const file = resolve(dir, name);
+    const docs = dslFiles.map(file => {
         const content = readFileSync(file, 'utf-8');
         return services.shared.workspace.LangiumDocumentFactory.fromString(content, URI.file(file));
     });

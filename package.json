@@ -2,7 +2,7 @@
   "name": "c4-varp",
   "displayName": "C4 Architecture As A Code",
   "description": "Extension for working with Architecture As A Code in the C4 model. Includes syntax highlighting, diagram preview, and tools for working with IaaC.",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "publisher": "vimpelcom",
   "repository": {
     "type": "git",
@@ -11,7 +11,7 @@
   "license": "Apache-2.0",
   "icon": "images/logo.png",
   "engines": {
-    "vscode": "^1.99.0"
+    "vscode": "^1.101.0"
   },
   "categories": [
     "Programming Languages"
@@ -218,20 +218,21 @@
   "dependencies": {
     "@hpcc-js/wasm-graphviz": "^1.28.0",
     "@modelcontextprotocol/sdk": "^1.9.0",
-    "langium": "~4.3.1",
-    "vscode-languageclient": "~10.0.0",
-    "vscode-languageserver": "~10.0.1"
+    "fflate": "^0.8.3",
+    "langium": "~4.4.0",
+    "vscode-languageclient": "~10.1.0",
+    "vscode-languageserver": "~10.1.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/vscode": "^1.99.0",
+    "@types/node": "^22.0.0",
+    "@types/vscode": "1.101.0",
     "@vscode/test-web": "^0.0.80",
     "@vscode/vsce": "^3.0.0",
     "@xmldom/xmldom": "^0.9.10",
     "crypto-browserify": "3.12.1",
     "esbuild": "^0.28.0",
     "events": "^3.3.0",
-    "langium-cli": "~4.3.0",
+    "langium-cli": "~4.4.0",
     "ovsx": "^0.10.0",
     "stream-browserify": "^3.0.0",
     "typescript": "~5.5.4",

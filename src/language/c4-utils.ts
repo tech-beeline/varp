@@ -69,9 +69,32 @@ export class C4Utils {
     }
 
     /**
-     * Removes surrounding quotes (single, double, or triple-double), unescapes
-     * `\"` and `\n`, and trims whitespace. Returns empty string for
-     * undefined/null input.
+     * Normalises the value of a triple-quoted text block: the delimiter lines are
+     * dropped, every line is dedented by the first line's indentation, and the
+     * final line break is removed. Line endings become `\n`.
+     *
+     * @param raw the raw text block including the `"""` delimiters
+     * @returns the text block content
+     */
+    static textBlockValue(raw: string): string {
+        let inner = raw;
+        const open = inner.indexOf('"""');
+        if (open >= 0) inner = inner.slice(open + 3);
+        const close = inner.lastIndexOf('"""');
+        if (close >= 0) inner = inner.slice(0, close);
+        const lines = inner.split(/\r?\n/);
+        // The opening delimiter is followed by a line break.
+        if (lines.length > 0 && lines[0].trim() === '') lines.shift();
+        // The closing delimiter sits on its own line, indented like the block.
+        while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
+        const indent = lines.length > 0 ? (lines[0].match(/^[ \t]*/)?.[0].length ?? 0) : 0;
+        return lines.map(line => (line.trim() === '' ? '' : line.slice(indent))).join('\n');
+    }
+
+    /**
+     * Removes surrounding quotes (single, double, or triple-double), joins
+     * backslash line continuations, unescapes `\"` and `\n`, and trims
+     * whitespace. Returns empty string for undefined/null input.
      *
      * @param value The raw DSL string value, possibly with quotes
      * @returns Cleaned string without surrounding quotes
@@ -81,7 +104,9 @@ export class C4Utils {
         if (!trimmed) return '';
         const match = trimmed.match(/^("""|'|")([\s\S]*?)\1$/);
         const inner = match ? match[2] : trimmed;
-        return inner.replace(/\\"/g, '"').replace(/\\n/g, '\n').trim();
+        // A trailing backslash continues the value on the next line; the leading
+        // whitespace of that line is not part of the value.
+        return inner.replace(/\\\r?\n[ \t]*/g, '').replace(/\\"/g, '"').replace(/\\n/g, '\n').trim();
     }
 }
 

@@ -36,7 +36,7 @@
       "varp-sidebar": [
         {
           "id": "s4-snippets",
-          "name": "C4 DSL Snippents",
+          "name": "C4 DSL Snippets",
           "when": "extension:c4",
           "icon": "$(book)"
         },
@@ -192,7 +192,7 @@
         },
         "varp.mcp.autoStart": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "scope": "window",
           "description": "Automatically start the built-in MCP server (Model Context Protocol) on extension activation, so AI assistants can query the resolved C4 model via streamable HTTP on 127.0.0.1."
         }

@@ -1270,6 +1270,7 @@ class JsonGenerator {
             technology: overlay?.technology ?? this.technology(relationship.relationship),
             // Implied relationships carry no tags.
             tags: relationship.linked ? undefined : this.extractTags(relationship.relationship, 'Relationship'),
+            url: this.url(relationship.relationship),
             linkedRelationshipId: relationship.linked ? this.getId(relationship.linked) : undefined
         };
         // Perspectives and properties contributed by the relationship's archetype.
@@ -1648,6 +1649,19 @@ class JsonGenerator {
     }
 
     /**
+     * URL declared by a `url ...` line, if any. Elements, relationships and dynamic
+     * view steps accept one; a group does not, as in the reference parser.
+     * Overlay URLs (`!elements`, `!relationships`) are applied separately.
+     */
+    private url(node: any): string | undefined {
+        // DynamicStep declares `urlProp`, every other rule declares `urlProps`.
+        const props = node?.urlProps ?? node?.urlProp;
+        const value = Array.isArray(props) ? props[0]?.value : props?.value;
+        const substituted = this.substitute(value);
+        return substituted === '' ? undefined : substituted;
+    }
+
+    /**
      * Auto-generated view name. A view name is never stored in the DSL: it is
      * always derived from the view type and its scope
      * (e.g. "System Context View: <software system>").
@@ -1735,6 +1749,7 @@ class JsonGenerator {
                     group: this.extractGroup(p),
                     description: this.description(p),
                     tags: this.extractTags(p, 'Element', 'Person'),
+                    url: this.url(p),
                     relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(p).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(result, p);
@@ -3121,6 +3136,7 @@ class JsonGenerator {
                 group: this.extractGroup(container),
                 tags: this.extractTags(container, 'Element', 'Container'),
                 technology: this.technology(container),
+                url: this.url(container),
             components: this.onlyIfNotEmpty(this.collectNested(container, isComponent)?.map(comp => {
                 // Get base group path (e.g., "a-api.jar")
                 let compGroup = this.extractGroup(comp);
@@ -3140,6 +3156,7 @@ class JsonGenerator {
                     technology: this.technology(comp),
                     group: compGroup || undefined,
                     tags: this.extractTags(comp, 'Element', 'Component'),
+                    url: this.url(comp),
                     relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(comp).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(compResult, comp);
@@ -3162,7 +3179,8 @@ class JsonGenerator {
                     name: this.substitute(ce.name),
                     metadata: this.metadata(ce),
                     relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(ce).map(el => this.relationshipToJson(el))),
-                    tags: this.extractTags(ce, 'Element')
+                    tags: this.extractTags(ce, 'Element'),
+                    url: this.url(ce)
                 };
                 this.applyElementOverlay(result, ce);
                 return result;
@@ -3187,6 +3205,7 @@ class JsonGenerator {
                     description: this.description(s),
                     group: this.extractGroup(s),
                     tags: this.extractTags(s, 'Element', 'Software System'),
+                    url: this.url(s),
                     containers: this.onlyIfNotEmpty(this.collectNested(s, isContainer)?.map(c => this.transformContainer(c))),
                     relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(s).map(el => this.relationshipToJson(el)))
                 };
@@ -3246,6 +3265,7 @@ class JsonGenerator {
             tags: this.extractTags(node, 'Element', 'Deployment Node'),
             description: this.description(node),
             technology: this.technology(node),
+            url: this.url(node),
             environment: this.getEnvironment(node),
             instances: String(node.instances || "1"),
             deploymentGroups: this.deploymentGroupNames(node),
@@ -3264,6 +3284,7 @@ class JsonGenerator {
                     tags: this.extractTags(infra, 'Element', 'Infrastructure Node'),
                     description: this.description(infra),
                     technology: this.technology(infra),
+                    url: this.url(infra),
                     environment: this.getEnvironment(infra),
                     relationships: this.onlyIfNotEmpty(this.extractRelationshipsForInfrastructureNode(infra).map(el => this.relationshipToJson(el)))
                 };
@@ -3279,6 +3300,7 @@ class JsonGenerator {
                     instanceId: this.instanceId(ssi),
                     group: this.extractGroup(ssi),
                     tags: this.extractTags(ssi, 'Software System Instance'),
+                    url: this.url(ssi),
                     softwareSystemId: this.getId(ssi.softwareSystem.ref),
                     environment: this.getEnvironment(ssi),
                     relationships: this.onlyIfNotEmpty(this.extractRelationshipsForSoftwareSystemInstance(ssi).map(el => this.relationshipToJson(el)))
@@ -3297,6 +3319,7 @@ class JsonGenerator {
                     environment: this.getEnvironment(ci),
                     group: this.extractGroup(ci),
                     tags: this.extractTags(ci, 'Container Instance'),
+                    url: this.url(ci),
                     relationships: this.onlyIfNotEmpty(this.extractRelationshipsForContainerInstance(ci).map(el => this.relationshipToJson(el))),
                     parentId: this.getId(this.resolveDeploymentNodeParent(ci))
                 };
@@ -3449,7 +3472,8 @@ class JsonGenerator {
                 key: this.substitute(view.key) ?? this.services.workspace.ViewKeyProvider.getKey(view),
                 elementId: view.element?.ref ? this.getId(this.el(view.element.ref)) : undefined,
                 title: this.substitute(view.titleProps?.at(0)?.value),
-                description: this.description(view)
+                description: this.description(view),
+                properties: this.viewProperties(view)
             };
 
             const content = this.resolveImageSources(view.sources, view);
@@ -3525,6 +3549,18 @@ class JsonGenerator {
         return 'image/png';
     }
 
+    /** Properties declared inside a view block, or undefined when the view has none. */
+    private viewProperties(view: any): Record<string, string> | undefined {
+        const properties: Record<string, string> = {};
+        for (const block of view.properties ?? []) {
+            for (const item of block?.items ?? []) {
+                const name = C4Utils.stripQuotes(String(item?.name ?? ''));
+                if (name) properties[name] = C4Utils.stripQuotes(String(item?.value ?? ''));
+            }
+        }
+        return Object.keys(properties).length > 0 ? properties : undefined;
+    }
+
     /** A view property, falling back to the views block properties. */
     private viewProperty(view: any, name: string): string | undefined {
         for (const block of view.properties ?? []) {
@@ -3563,6 +3599,7 @@ class JsonGenerator {
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
+                    properties: this.viewProperties(view),
                     elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),
                     relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
                     automaticLayout: this.transformAutoLayout(view),
@@ -3589,6 +3626,7 @@ class JsonGenerator {
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
+                    properties: this.viewProperties(view),
                     elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),
                     relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
                     enterpriseBoundaryVisible: true,
@@ -6105,6 +6143,7 @@ class JsonGenerator {
                         technology: this.technology(c),
                         group: this.extractGroup(c),
                         tags: this.extractTags(c, 'Element', 'Component'),
+                        url: this.url(c),
                         relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(c).map(el => this.relationshipToJson(el)))
                     };
                     this.applyElementOverlay(json, c);
@@ -6132,6 +6171,7 @@ class JsonGenerator {
                         technology: this.technology(infra),
                         group: this.extractGroup(infra),
                         tags: this.extractTags(infra, 'Element', 'Infrastructure Node'),
+                        url: this.url(infra),
                         relationships: this.onlyIfNotEmpty(this.extractRelationshipsForInfrastructureNode(infra).map(el => this.relationshipToJson(el)))
                     };
                     this.applyElementOverlay(infraJson, infra);
@@ -7235,6 +7275,7 @@ class JsonGenerator {
                 key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                 title: this.substitute(view.titleProps?.at(0)?.value),
                 description: this.description(view),
+                properties: this.viewProperties(view),
                 elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),
                 relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
                 enterpriseBoundaryVisible: true,
@@ -7265,6 +7306,7 @@ class JsonGenerator {
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
+                    properties: this.viewProperties(view),
                     elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),// elements,,
                     relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
                     automaticLayout: this.transformAutoLayout(view),
@@ -7294,6 +7336,7 @@ class JsonGenerator {
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
+                    properties: this.viewProperties(view),
                     elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),// elements,,
                     relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
                     automaticLayout: this.transformAutoLayout(view),
@@ -7373,6 +7416,7 @@ class JsonGenerator {
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
+                    properties: this.viewProperties(view),
                     softwareSystemId: scopeSystem ? this.getId(scopeSystem) : undefined,
                     environment: environment,
                     elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),// elements,,
@@ -7409,6 +7453,7 @@ class JsonGenerator {
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
                     title: this.substitute(view.titleProps?.[0]?.value),
                     description: this.description(view),
+                    properties: this.viewProperties(view),
                     elementId: scopeElement ? this.getId(scopeElement) : undefined,
                     externalBoundariesVisible: false,
                     elements: this.onlyIfNotEmpty(content.elements),
@@ -7444,7 +7489,8 @@ class JsonGenerator {
                     mode: view.mode === 'include' ? 'Include' : 'Exclude',
                     tags: this.parseTags(view.tagsProp),
                     title: this.substitute(view.titleProps?.at(0)?.value),
-                    description: this.description(view)
+                    description: this.description(view),
+                    properties: this.viewProperties(view)
                 };
             });
         return views && views?.length > 0 ? views : undefined;
@@ -7547,6 +7593,8 @@ class JsonGenerator {
                             id: this.getId(modelRel),
                             order: finalOrder,
                             description: stepDescription,
+                            // A `url` on the step belongs to the relationship view, not the model.
+                            url: this.url(member),
                             ...(isResponse ? { response: true } : {})
                         });
                         // Layout edge: direction source -> target of the step, so the

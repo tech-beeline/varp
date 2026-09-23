@@ -125,6 +125,16 @@ workspace {
 
 hello world
 `,
+        'url inside a group': `workspace {
+    model {
+        softwareSystem "Software System" {
+            group "Name" {
+                url "https://example.com"
+            }
+        }
+    }
+}
+`,
         'a relationship that repeats an implied one': `workspace {
     model {
         a = softwareSystem "A"

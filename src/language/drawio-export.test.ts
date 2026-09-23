@@ -503,6 +503,58 @@ workspace {
         expect(lineAfter('c4Type="Relationship"')).toContain('dashed=1;dashPattern=8 8;');
     }, 120_000);
 
+    it('pins the renderer font family on every cell', async () => {
+        const json = await generateDsl(`
+workspace {
+    model {
+        properties {
+            "structurizr.groupSeparator" "/"
+        }
+        s = softwareSystem "S" {
+            group "G" {
+                c = container "C"
+            }
+            d = container "D"
+            c -> d "uses"
+        }
+    }
+    views {
+        container s "containers" {
+            include *
+        }
+    }
+}
+`);
+        const cellsOf = (xml: string) => xml.split('\n').filter(l => l.includes('<mxCell style='));
+        const workspace = makeWorkspace(json);
+
+        // the family comes from the renderer, not from a style
+        const custom = loadExporter({
+            ui: {
+                isDarkMode: () => false,
+                findElementStyle: () => ({}),
+                findRelationshipStyle: () => ({}),
+                getTitleForView: titleForView,
+                DEFAULT_FONT_NAME: 'Custom Stack, Sans Serif',
+            },
+            workspace: { getTerminologyFor: terminologyFor },
+            diagram: undefined,
+        });
+        let customXml: string | undefined;
+        custom.exportView(workspace.views[0], workspace, false, (result: any) => { customXml = result; });
+        const customCells = cellsOf(customXml!);
+        expect(customCells.length).toBeGreaterThan(0);
+        for (const cell of customCells) expect(cell).toContain('fontFamily=Custom Stack, Sans Serif;');
+
+        // without the renderer constant the documented default is used
+        const drawio = makeExporter(workspace);
+        let xml: string | undefined;
+        drawio.exportView(workspace.views[0], workspace, false, (result: any) => { xml = result; });
+        const cells = cellsOf(xml!);
+        expect(cells.length).toBeGreaterThan(0);
+        for (const cell of cells) expect(cell).toContain('fontFamily=Tahoma, Verdana, Helvetica, Arial;');
+    }, 120_000);
+
     it('carries element and relationship urls into the export', async () => {
         const json = await generateDsl(`
 workspace {

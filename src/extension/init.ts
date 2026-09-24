@@ -15,6 +15,7 @@
 */
 
 import { commands, ExtensionContext, ViewColumn, workspace, window, Uri } from "vscode";
+import { createWorkspaceFileRequestHandlers } from "./workspace-file-requests";
 import { C4Snippets } from "./c4-snippets";
 import { CapabilityProvider } from "./capabilities";
 import { DIAGRAM_PREVIEW } from "./config";
@@ -27,6 +28,7 @@ import { PatternProvider } from "./patterns";
  */
 export interface C4LanguageClient {
     onNotification(method: string, handler: (params: any) => void): void;
+    onRequest(method: string, handler: (params: any) => any): void;
     sendRequest(method: string, params: any): Promise<any>;
 }
 
@@ -50,6 +52,21 @@ export function setLanguageClient(client: C4LanguageClient): void {
 }
 
 /**
+ * Serves the workspace reads requested by the web language server. In the browser
+ * the server has no file system of its own, so it forwards readFile/readDirectory/
+ * readBinary/stat/exists here, and this host is the only side with
+ * vscode.workspace.fs. Must be called before the server processes documents.
+ */
+export function registerWorkspaceFileRequests(client: C4LanguageClient): void {
+    const handlers = createWorkspaceFileRequestHandlers(workspace.fs, (value) => Uri.parse(value));
+    client.onRequest('c4/readFile', handlers.readFile);
+    client.onRequest('c4/readBinary', handlers.readBinary);
+    client.onRequest('c4/readDirectory', handlers.readDirectory);
+    client.onRequest('c4/stat', handlers.stat);
+    client.onRequest('c4/exists', handlers.exists);
+}
+
+/**
  * Registers the LSP notification listener that refreshes the open diagram preview
  * whenever the language server successfully generates fresh JSON (push model).
  * The client only updates once the JSON is actually ready, which avoids the race
@@ -65,7 +82,7 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
     }
     refreshNotificationRegistered = true;
 
-    client.onNotification('custom/contentUpdated', async (params: { uri: string; json: any; generation?: number; textMeasurements?: Record<string, any> }) => {
+    client.onNotification('c4/contentUpdated', async (params: { uri: string; json: any; generation?: number; textMeasurements?: Record<string, any> }) => {
         const uri = params?.uri;
         const json = params?.json;
         const generation = params?.generation;
@@ -93,7 +110,7 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
             return;
         }
         try {
-            const res: any = await languageClient.sendRequest('custom/getRootUri', { uri: preview.getCurrentDocUri() });
+            const res: any = await languageClient.sendRequest('c4/getRootUri', { uri: preview.getCurrentDocUri() });
             if (res?.rootUri === uri) {
                 renderPreviewIfApplicable(uri, json, generation, preview, textMeasurements);
             }
@@ -212,7 +229,7 @@ async function getThemesForPreview(themeUrls: string[] | undefined): Promise<{ u
         return undefined; // no http(s) themes - nothing to inject
     }
     try {
-        const res: any = await languageClient.sendRequest('custom/getThemes', { themes: urls });
+        const res: any = await languageClient.sendRequest('c4/getThemes', { themes: urls });
         const fetched = (Array.isArray(res?.themes) ? res.themes : []) as { url: string; content: string }[];
         // Returning undefined means "could not get themes" - the caller then
         // leaves the preview's themes unset so the webview falls back to
@@ -230,7 +247,7 @@ async function getThemesForPreview(themeUrls: string[] | undefined): Promise<{ u
  * Sets up:
  * - Tree views (snippets, capabilities, patterns)
  * - Diagram preview webview panel
- * - Auto-refresh via custom/contentUpdated push notifications (onChange/onSave, see c4.autoRefresh)
+ * - Auto-refresh via c4/contentUpdated push notifications (onChange/onSave, see c4.autoRefresh)
  * - DIAGRAM_PREVIEW command (opens diagram in webview)
  * - Export commands (DrawIO, SVG)
  */
@@ -254,7 +271,7 @@ export function init(context: ExtensionContext): void {
             return undefined;
         }
         try {
-            const res: any = await languageClient.sendRequest('custom/applyTextMeasurements', { uri, generation, widths });
+            const res: any = await languageClient.sendRequest('c4/applyTextMeasurements', { uri, generation, widths });
             return res?.views;
         } catch (err) {
             console.warn('[C4 Preview] Text measurement layout failed:', err);
@@ -267,7 +284,7 @@ export function init(context: ExtensionContext): void {
     /**
      * Auto-refresh (onSave mode): when a .c4/.dsl file is saved, render the latest
      * generated JSON for the document the open preview is bound to. Live updates
-     * (onChange mode) arrive via the custom/contentUpdated notification and do not
+     * (onChange mode) arrive via the c4/contentUpdated notification and do not
      * need the save event.
      */
     context.subscriptions.push(
@@ -278,7 +295,7 @@ export function init(context: ExtensionContext): void {
             const currentDocUri = preview.getCurrentDocUri();
             if (!currentDocUri || document.uri.toString() !== currentDocUri) {
                 // The preview is bound to a different document; fragment edits are
-                // handled by the custom/contentUpdated push instead.
+                // handled by the c4/contentUpdated push instead.
                 return;
             }
             const uri = document.uri.toString();
@@ -286,7 +303,7 @@ export function init(context: ExtensionContext): void {
             // Always pull the freshest JSON from the language server on save so
             // the preview reflects the saved content even if no push has arrived.
             try {
-                const response: any = await languageClient?.sendRequest('custom/getContentForUri', { uri });
+                const response: any = await languageClient?.sendRequest('c4/getContentForUri', { uri });
                 if (response?.json) {
                     await refreshDiagram(uri, response.json, response.generation, response.textMeasurements);
                     return;
@@ -296,7 +313,7 @@ export function init(context: ExtensionContext): void {
             }
 
             // JSON not generated yet - keep the panel open; the push notification
-            // (custom/contentUpdated) delivers it once generation completes.
+            // (c4/contentUpdated) delivers it once generation completes.
         })
     );
 
@@ -322,13 +339,13 @@ export function init(context: ExtensionContext): void {
 
             // Fetch the latest generated JSON from the language server cache; if it
             // is not ready yet, the panel stays open and the push notification
-            // (custom/contentUpdated) delivers the JSON once generation completes.
+            // (c4/contentUpdated) delivers the JSON once generation completes.
             let payload: any;
             let generation: number | undefined;
             let textMeasurements: Record<string, any> | undefined;
             if (languageClient) {
                 try {
-                    const res = await languageClient.sendRequest('custom/getContentForUri', { uri: docUri ?? '' });
+                    const res = await languageClient.sendRequest('c4/getContentForUri', { uri: docUri ?? '' });
                     payload = res?.json;
                     generation = res?.generation;
                     textMeasurements = res?.textMeasurements;
@@ -359,7 +376,7 @@ export function init(context: ExtensionContext): void {
             }
 
             // JSON is not ready yet - keep the panel open with the "Rendering"
-            // indicator; the push notification (custom/contentUpdated) delivers
+            // indicator; the push notification (c4/contentUpdated) delivers
             // the JSON once generation completes.
         })
     );

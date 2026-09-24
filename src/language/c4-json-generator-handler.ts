@@ -84,7 +84,7 @@ export class C4GeneratorHandler {
     /**
      * Optional callback invoked after a workspace's JSON has been successfully
      * generated and cached. Used by the language server entry points to notify
-     * the client (e.g., custom/contentUpdated) so the diagram preview refreshes
+     * the client (e.g., c4/contentUpdated) so the diagram preview refreshes
      * only once fresh JSON is actually available. The generation identifies the
      * build this (uri, json) pair came from (it is not mutated into the json).
      */

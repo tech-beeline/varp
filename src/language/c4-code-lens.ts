@@ -45,7 +45,7 @@ export class C4CodeLensProvider implements CodeLensProvider {
 
         // Resolve the root workspace document URI so the open preview can fetch the
         // latest generated JSON from the server cache and match auto-refresh
-        // notifications (custom/contentUpdated) against it.
+        // notifications (c4/contentUpdated) against it.
         const rootUri = this.services.generation.C4GeneratorHandler.getRootUri(document.uri.toString());
 
         // The generated JSON (when already cached) is the source of truth for whether

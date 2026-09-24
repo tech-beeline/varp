@@ -15,13 +15,16 @@
 */
 
 import { AstUtils, LangiumSharedCoreServices, type AstNode, type FileSystemNode } from 'langium';
+import { base64EncodeBytes } from './c4-base64';
 import { Utils, URI } from 'vscode-uri';
 import { flatId } from './c4-utils';
 import { base64EncodeUtf8, reconstructFullDsl } from './c4-dsl-reconstructor';
 import {
     AdrsDirective,
     AdrsFilter,
+    DocsDirective,
     isAdrsDirective,
+    isDocsDirective,
     isC4Document,
     isComponent,
     isContainer,
@@ -31,6 +34,37 @@ import {
     type Container,
     type SoftwareSystem,
 } from '../generated/ast';
+
+/** The only documentation importer implemented here; a Java importer cannot run in TS. */
+const DEFAULT_DOCS_IMPORTER = 'com.structurizr.importer.documentation.DefaultDocumentationImporter';
+
+// FormatFinder: Markdown and AsciiDoc extensions, compared case-sensitively.
+const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.text'];
+const ASCIIDOC_EXTENSIONS = ['.asciidoc', '.adoc', '.asc'];
+
+/** Whether FormatFinder accepts the file as documentation (extension is case-sensitive). */
+function isDocumentationFileName(name: string): boolean {
+    const dot = name.lastIndexOf('.');
+    if (dot < 0) return false;
+    const extension = name.substring(dot);
+    return MARKDOWN_EXTENSIONS.includes(extension) || ASCIIDOC_EXTENSIONS.includes(extension);
+}
+
+/** Image MIME types by lower-case extension, as URLConnection.guessContentTypeFromName resolves them. */
+const IMAGE_CONTENT_TYPES: Record<string, string> = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.svg': 'image/svg+xml'
+};
+
+/** FormatFinder.findFormat: Markdown unless the extension is an AsciiDoc one. */
+function documentationFormat(name: string): 'Markdown' | 'AsciiDoc' {
+    const dot = name.lastIndexOf('.');
+    const extension = dot < 0 ? '' : name.substring(dot);
+    return ASCIIDOC_EXTENSIONS.includes(extension) ? 'AsciiDoc' : 'Markdown';
+}
 
 /**
  * Enriches generated render JSON with the documentation fields the render
@@ -91,38 +125,36 @@ export class C4JsonEnricher {
             json.dsl = base64EncodeUtf8(fullDsl);
         }
 
-        // workspace-level decisions -> json.documentation.decisions
-        const workspaceDecisions: Decision[] = [];
-        // element-level decisions, keyed by the name path
-        // ("Software System/Web App") of the documentable element.
-        const elementDecisions = new Map<string, Decision[]>();
+        // Documentation is collected per documentable owner: the workspace itself, or
+        // an element addressed by its chain of names ("Software System/Web App").
+        const workspaceDocumentation: DocumentationHolder = { sections: [], decisions: [], images: [] };
+        const elementDocumentation = new Map<string, DocumentationHolder>();
 
-        for (const adrs of AstUtils.streamAllContents(root).filter(isAdrsDirective)) {
-            const owner = this.resolveOwner(adrs);
-            const decisions = await this.importAdrs(adrs, rootUri);
-            if (decisions.length === 0) continue;
+        const directives = AstUtils.streamAllContents(root).filter((node) => isAdrsDirective(node) || isDocsDirective(node));
+        for (const directive of directives) {
+            const owner = this.resolveOwner(directive);
+            const target = owner.kind === 'workspace'
+                ? workspaceDocumentation
+                : this.documentationHolder(owner.pathKey, elementDocumentation);
+            // Paths are relative to the file that declares the directive.
+            const baseUri = this.directiveBaseUri(directive, rootUri);
 
-            if (owner.kind === 'workspace') {
-                this.mergeUnique(workspaceDecisions, decisions);
+            if (isAdrsDirective(directive)) {
+                this.mergeUnique(target.decisions, await this.importAdrs(directive, baseUri));
             } else {
-                const existing = elementDecisions.get(owner.pathKey);
-                if (existing) {
-                    this.mergeUnique(existing, decisions);
-                } else {
-                    elementDecisions.set(owner.pathKey, decisions);
-                }
+                target.sections.push(...await this.importDocs(directive, baseUri));
             }
+            // Images are imported from the directive's directory, but only those the
+            // documentation or decisions content references (reluctant mode).
+            this.mergeImages(target.images, await this.importImages(directive, baseUri, target));
         }
 
-        if (workspaceDecisions.length > 0) {
-            json.documentation = { decisions: workspaceDecisions };
-        }
-
-        for (const [pathKey, decisions] of elementDecisions) {
-            if (decisions.length === 0) continue;
+        this.addDocumentation(json, workspaceDocumentation);
+        for (const [pathKey, documentation] of elementDocumentation) {
+            if (documentation.sections.length === 0 && documentation.decisions.length === 0 && documentation.images.length === 0) continue;
             const holder = this.findElementInModel(json?.model, pathKey.split('/'));
             if (holder) {
-                holder.documentation = { decisions };
+                this.addDocumentation(holder, documentation);
             }
         }
 
@@ -278,9 +310,9 @@ export class C4JsonEnricher {
      * of names). `!adrs` is only permitted in Workspace, SoftwareSystem,
      * Container and Component contexts.
      */
-    private resolveOwner(adrs: AdrsDirective): { kind: 'workspace' } | { kind: 'element'; pathKey: string } {
+    private resolveOwner(directive: AdrsDirective | DocsDirective): { kind: 'workspace' } | { kind: 'element'; pathKey: string } {
         const names: string[] = [];
-        let node = adrs.$container as any;
+        let node = directive.$container as any;
         while (node) {
             if (isWorkspace(node) || isC4Document(node)) {
                 return names.length > 0
@@ -334,6 +366,205 @@ export class C4JsonEnricher {
         return undefined;
     }
 
+    /** Adds images that are not already present, keeping the first one per name (a TreeSet). */
+    private mergeImages(target: DocumentationImage[], additions: DocumentationImage[]): void {
+        const names = new Set(target.map((image) => image.name));
+        for (const image of additions) {
+            if (names.has(image.name)) continue;
+            names.add(image.name);
+            target.push(image);
+        }
+    }
+
+    /**
+     * Names of the images referenced by the documentation content: Markdown
+     * `![alt](path)` and AsciiDoc `image:path[alt]`, matched against the image's path
+     * relative to the imported directory.
+     */
+    private referencedImages(documentation: DocumentationHolder): Set<string> {
+        const referenced = new Set<string>();
+        const collect = (content: string | undefined, format: string | undefined) => {
+            if (!content) return;
+            // The same greedy patterns DocumentationContent.findImages uses.
+            const pattern = format === 'AsciiDoc' ? /image:{1,2}(.*)\[.*]/g : /!\[.*]\((.*)\)/g;
+            for (const match of content.matchAll(pattern)) {
+                if (match[1] !== undefined) referenced.add(match[1]);
+            }
+        };
+        for (const section of documentation.sections) collect(section.content, section.format);
+        for (const decision of documentation.decisions) collect(decision.content, decision.format);
+        return referenced;
+    }
+
+    /**
+     * Imports the images of a directive's directory, as DefaultImageImporter does in
+     * reluctant mode: only images referenced by the documentation content are added,
+     * directories are walked recursively (hidden ones are skipped) and the raw file
+     * bytes are base64 encoded. The reference imports images only when the
+     * documentation path is a directory.
+     */
+    private async importImages(directive: AdrsDirective | DocsDirective, baseUri: string, documentation: DocumentationHolder): Promise<DocumentationImage[]> {
+        const path = (directive.path ?? '').replace(/^["']|["']$/g, '');
+        if (!path) return [];
+
+        const fs: any = this.services.workspace.FileSystemProvider;
+        if (!fs || typeof fs.readDirectory !== 'function' || typeof fs.readBinary !== 'function') {
+            // A provider without directory/binary access (e.g. a bare EmptyFileSystem
+            // without the web bridge) cannot import images.
+            return [];
+        }
+
+        const targetUri = Utils.resolvePath(Utils.dirname(URI.parse(baseUri)), path);
+        let dirents: FileSystemNode[];
+        try {
+            dirents = await fs.readDirectory(targetUri) as FileSystemNode[];
+        } catch {
+            return []; // a single file, not a directory: the reference imports no images
+        }
+
+        const referenced = this.referencedImages(documentation);
+        if (referenced.size === 0) return [];
+
+        const images: DocumentationImage[] = [];
+        await this.collectImages(fs, dirents, '', referenced, images);
+        return images;
+    }
+
+    /** Recursively collects the referenced images of a directory into `images`. */
+    private async collectImages(fs: any, dirents: FileSystemNode[], prefix: string, referenced: Set<string>, images: DocumentationImage[]): Promise<void> {
+        for (const entry of dirents) {
+            const name = entry.uri.path.split('/').pop() ?? '';
+            if (entry.isDirectory) {
+                if (name.startsWith('.')) continue; // hidden directories are skipped
+                let children: FileSystemNode[];
+                try {
+                    children = await fs.readDirectory(entry.uri) as FileSystemNode[];
+                } catch {
+                    continue;
+                }
+                await this.collectImages(fs, children, prefix ? `${prefix}/${name}` : name, referenced, images);
+                continue;
+            }
+            if (!entry.isFile) continue;
+            const dot = name.lastIndexOf('.');
+            const contentType = dot < 0 ? undefined : IMAGE_CONTENT_TYPES[name.substring(dot).toLowerCase()];
+            if (!contentType) continue;
+
+            const relativeName = prefix ? `${prefix}/${name}` : name;
+            if (!referenced.has(relativeName)) continue;
+
+            let bytes: Uint8Array;
+            try {
+                bytes = await fs.readBinary(entry.uri);
+            } catch {
+                continue; // unreadable file - skip
+            }
+            images.push({ content: base64EncodeBytes(bytes), name: relativeName, type: contentType });
+        }
+    }
+
+    /** Documentation of one documentable owner, collected from its directives. */
+    private documentationHolder(pathKey: string, map: Map<string, DocumentationHolder>): DocumentationHolder {
+        const existing = map.get(pathKey);
+        if (existing) return existing;
+        const holder: DocumentationHolder = { sections: [], decisions: [], images: [] };
+        map.set(pathKey, holder);
+        return holder;
+    }
+
+    /**
+     * Attaches collected documentation to a JSON holder (the workspace or a model
+     * element). Section order is the position within the owner's documentation, as
+     * Documentation.calculateOrder numbers them.
+     */
+    private addDocumentation(holder: any, documentation: DocumentationHolder): void {
+        if (!holder) return;
+        if (documentation.sections.length === 0 && documentation.decisions.length === 0 && documentation.images.length === 0) return;
+        const target = holder.documentation ?? (holder.documentation = {});
+        // Keys follow the reference serialization (Jackson sorts properties alphabetically).
+        if (documentation.decisions.length > 0) {
+            target.decisions = documentation.decisions;
+        }
+        if (documentation.images.length > 0) {
+            // Documentation.images is a TreeSet ordered by image name.
+            target.images = [...documentation.images].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+        }
+        if (documentation.sections.length > 0) {
+            target.sections = documentation.sections.map((section, index) => ({ ...section, order: index + 1 }));
+        }
+    }
+
+    /** Directory the directive's path is relative to: the document declaring it. */
+    private directiveBaseUri(directive: AdrsDirective | DocsDirective, fallbackUri: string): string {
+        const document = AstUtils.getDocument(directive as AstNode);
+        return document?.uri?.toString() ?? fallbackUri;
+    }
+
+    /**
+     * Imports documentation sections from a `!docs` directive: one Markdown/AsciiDoc
+     * file, or every Markdown/AsciiDoc file of a directory (sorted, no recursion,
+     * dot-files skipped), matching DefaultDocumentationImporter. A single-file import
+     * leaves the filename empty because the imported path is trimmed away.
+     */
+    private async importDocs(docs: DocsDirective, baseUri: string): Promise<Section[]> {
+        const path = (docs.path ?? '').replace(/^["']|["']$/g, '');
+        if (!path) return [];
+
+        const importer = (docs.importer ?? '').trim();
+        if (importer && importer !== DEFAULT_DOCS_IMPORTER) {
+            console.warn(`[C4 Docs] Unsupported documentation importer ${importer}, skipping ${path}`);
+            return [];
+        }
+
+        const fs: any = this.services.workspace.FileSystemProvider;
+        if (!fs || typeof fs.readFile !== 'function') return [];
+
+        const excluded = this.buildFilter(docs);
+        const targetUri = Utils.resolvePath(Utils.dirname(URI.parse(baseUri)), path);
+        const nameOf = (uri: URI) => uri.path.split('/').pop() ?? uri.toString();
+
+        let entries: { uri: URI; name: string }[] | undefined;
+        if (typeof fs.readDirectory === 'function') {
+            try {
+                const dirents = await fs.readDirectory(targetUri) as FileSystemNode[];
+                entries = dirents
+                    .filter((entry) => entry.isFile && !nameOf(entry.uri).startsWith('.'))
+                    .map((entry) => ({ uri: entry.uri, name: nameOf(entry.uri) }))
+                    // Java sorts the directory listing by path, i.e. by file name here.
+                    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+            } catch {
+                entries = undefined; // not a directory (or unreadable)
+            }
+        }
+        const singleFile = entries === undefined;
+        if (singleFile) {
+            const name = nameOf(targetUri);
+            if (!isDocumentationFileName(name)) return [];
+            entries = [{ uri: targetUri, name }];
+        }
+
+        const sections: Section[] = [];
+        for (const entry of entries!) {
+            if (!isDocumentationFileName(entry.name) || excluded(entry.name)) continue;
+            let content: string;
+            try {
+                // DocumentationContent.setContent normalizes line endings.
+                content = (await fs.readFile(entry.uri)).replace(/\r\n|\r|\n/g, '\n');
+            } catch {
+                continue; // unreadable file - skip
+            }
+            sections.push({
+                // Section.getTitle() returns an empty string, always serialized.
+                title: '',
+                filename: singleFile ? '' : entry.name,
+                content,
+                format: documentationFormat(entry.name),
+                order: 0 // assigned when the sections are attached to their owner
+            });
+        }
+        return sections;
+    }
+
     /**
      * Imports decisions from a single `!adrs`/`!decisions` directive: resolves
      * the path relative to the root document, reads *.md files (honoring
@@ -351,7 +582,7 @@ export class C4JsonEnricher {
             return [];
         }
 
-        const filters = this.buildFilters(adrs);
+        const excluded = this.buildFilter(adrs);
         const dirUri = Utils.resolvePath(Utils.dirname(URI.parse(rootUri)), path);
         const fs: any = this.services.workspace.FileSystemProvider;
         if (!fs || typeof fs.readFile !== 'function' || typeof fs.readDirectory !== 'function') {
@@ -362,7 +593,7 @@ export class C4JsonEnricher {
         try {
             const dirents = await fs.readDirectory(dirUri) as FileSystemNode[];
             entries = dirents
-                .filter((e) => e.isFile && e.uri.path.toLowerCase().endsWith('.md'))
+                .filter((e) => e.isFile && e.uri.path.endsWith('.md'))
                 .map((e) => ({ uri: e.uri, name: e.uri.path.split('/').pop() ?? e.uri.toString() }));
         } catch {
             return []; // directory missing/unreadable - nothing to import
@@ -372,7 +603,7 @@ export class C4JsonEnricher {
         const byFilename = new Map<string, Decision>();
 
         for (const entry of entries) {
-            if (filters.excluded(entry.name)) continue;
+            if (excluded(entry.name)) continue;
             let content: string;
             try {
                 content = await fs.readFile(entry.uri);
@@ -404,20 +635,27 @@ export class C4JsonEnricher {
         return decisions;
     }
 
-    /** Builds the exclude filter set from the directive's AdrsFilter nodes. */
-    private buildFilters(adrs: AdrsDirective): { excluded: (name: string) => boolean } {
+    /**
+     * Builds the exclude predicate of a directive: an exact file name, or a regex
+     * that has to match the whole name (Java's String.matches anchors the pattern).
+     */
+    private buildFilter(directive: AdrsDirective | DocsDirective): (name: string) => boolean {
         const excludes: string[] = [];
-        for (const f of adrs.filters ?? []) {
+        for (const f of directive.filters ?? []) {
             if (!isExcludeFilter(f)) continue;
             for (const p of f.patterns ?? []) {
                 const pattern = typeof p === 'string' ? p.replace(/^["']|["']$/g, '') : String(p);
                 if (pattern) excludes.push(pattern);
             }
         }
-        return {
-            excluded: (name: string) =>
-                excludes.some((pattern) => name === pattern || name.match(pattern) !== null),
-        };
+        return (name: string) => excludes.some((pattern) => {
+            if (name === pattern) return true;
+            try {
+                return new RegExp(`^(?:${pattern})$`).test(name);
+            } catch {
+                return false; // an invalid regex never matches, as in Java
+            }
+        });
     }
 }
 
@@ -538,6 +776,29 @@ export function extractDecisionLinks(decision: Decision, byFilename: Map<string,
         }
     }
     if (links.length > 0) decision.links = links;
+}
+
+/** A documentation section: one imported Markdown/AsciiDoc file. */
+export interface Section {
+    title: string;
+    filename: string;
+    content: string;
+    format: 'Markdown' | 'AsciiDoc';
+    order: number;
+}
+
+/** Documentation collected for one documentable owner. */
+interface DocumentationHolder {
+    sections: Section[];
+    decisions: Decision[];
+    images: DocumentationImage[];
+}
+
+/** A documentation image: base64 content, its path relative to the imported directory and MIME type. */
+export interface DocumentationImage {
+    content: string;
+    name: string;
+    type: string;
 }
 
 /** A decision record. */

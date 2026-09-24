@@ -16,7 +16,7 @@
 
 import * as vscode from 'vscode';
 import { LanguageClient, type LanguageClientOptions } from 'vscode-languageclient/browser';
-import { init, setLanguageClient } from './init';
+import { init, registerWorkspaceFileRequests, setLanguageClient } from './init';
 
 let client: LanguageClient;
 
@@ -32,6 +32,8 @@ export function activate(context: vscode.ExtensionContext): void {
     };
 
     client = new LanguageClient('c4', 'C4', worker, clientOptions);
+    // The server forwards workspace reads here, so register before it starts.
+    registerWorkspaceFileRequests(client);
     client.start().then(() => {
         setLanguageClient(client);
     });

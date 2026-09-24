@@ -241,7 +241,7 @@ The extension is split into two cooperating processes: a **language server** (bu
    a **Structurizr webview** (JointJS + Dagre rendering engine) to display the diagram.
 
 6. **Auto-refresh** — On every save, the extension requests fresh JSON via the custom
-   `custom/getContentForUri` LSP request and re-renders the open preview automatically.
+   `c4/getContentForUri` LSP request and re-renders the open preview automatically.
 
 7. **Export** — The webview can export the current diagram to **SVG** or **DrawIO**
    (`.drawio`) via the editor title menu.

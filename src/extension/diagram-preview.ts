@@ -209,7 +209,7 @@ export class DiagramPreview {
   /**
    * Opens the preview panel for a view without a JSON payload yet. The webview
    * shows the "Rendering" indicator until updateWebView() delivers the JSON
-   * (via the custom/contentUpdated push notification or a retry fetch).
+   * (via the c4/contentUpdated push notification or a retry fetch).
    */
   public openPreview(viewKey: string, docUri?: string): void {
         this.currentViewKey = viewKey;

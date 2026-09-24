@@ -1,0 +1,5 @@
+= Notes
+
+Some asciidoc notes.
+
+image:logo.svg[Logo]

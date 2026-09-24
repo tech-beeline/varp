@@ -3,8 +3,8 @@
  *
  * Works over the resolved Structurizr JSON produced by the language server
  * (C4GeneratorHandler) and fetched through the custom LSP requests:
- *   - custom/listProjects   -> root workspace document URIs with cached JSON
- *   - custom/getContentForUri -> the Structurizr JSON for a given URI
+ *   - c4/listProjects   -> root workspace document URIs with cached JSON
+ *   - c4/getContentForUri -> the Structurizr JSON for a given URI
  */
 
 export interface McpRelationship {
@@ -76,12 +76,12 @@ export class LanguageClientModelSource implements C4ModelSource {
     constructor(private readonly client: C4LanguageClientLike) { }
 
     async listProjects(): Promise<string[]> {
-        const res = await this.client.sendRequest('custom/listProjects', {});
+        const res = await this.client.sendRequest('c4/listProjects', {});
         return (res?.projects as string[]) ?? [];
     }
 
     async getContent(uri: string): Promise<any> {
-        const res = await this.client.sendRequest('custom/getContentForUri', { uri });
+        const res = await this.client.sendRequest('c4/getContentForUri', { uri });
         return res?.json ?? null;
     }
 }

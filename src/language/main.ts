@@ -86,7 +86,7 @@ const { shared, C4 } = createC4Services({
 // avoids the race where the client pulls JSON on save before the language
 // server has finished rebuilding/generating.
 C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json, generation) => {
-    connection.sendNotification('custom/contentUpdated', {
+    connection.sendNotification('c4/contentUpdated', {
         uri,
         json,
         generation,
@@ -98,7 +98,7 @@ C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json, generation) => {
 // Register a custom LSP request that the extension calls when it needs
 // the latest generated JSON (e.g., on file save, for diagram preview refresh).
 // Returns the cached JSON content for rendering.
-connection.onRequest('custom/getContentForUri', (params: { uri: string }) => {
+connection.onRequest('c4/getContentForUri', (params: { uri: string }) => {
     // Returns { json, generation } so the client can tell "same cached build,
     // just changeView" from a fresh/different build (which needs a full rebuild).
     const content = C4.generation.C4GeneratorHandler.getContentForUri(params.uri);
@@ -111,7 +111,7 @@ connection.onRequest('custom/getContentForUri', (params: { uri: string }) => {
 // measured after the first render. The renderer sizes a frame from its measured
 // name/metadata, so the layout has to reserve that space - otherwise the frame
 // overlaps its right-hand neighbour. Returns the views to re-render.
-connection.onRequest('custom/applyTextMeasurements', async (params: { uri: string; generation: number; widths: Record<string, number> }) => {
+connection.onRequest('c4/applyTextMeasurements', async (params: { uri: string; generation: number; widths: Record<string, number> }) => {
     return await C4.generation.C4GeneratorHandler.applyTextMeasurements(params.uri, params.generation, params.widths);
 });
 
@@ -119,7 +119,7 @@ connection.onRequest('custom/applyTextMeasurements', async (params: { uri: strin
 // render JSON enriched with documentation not produced by the render pipeline
 // (e.g. `documentation.decisions` from !adrs/!decisions). Used for export/tooling;
 // the diagram preview keeps using the lighter render JSON from getContentForUri.
-connection.onRequest('custom/getFullContentForUri', async (params: { uri: string }) => {
+connection.onRequest('c4/getFullContentForUri', async (params: { uri: string }) => {
     const content = await C4.generation.C4GeneratorHandler.getFullContentForUri(params.uri);
     return content ? { json: content } : null;
 });
@@ -131,7 +131,7 @@ connection.onRequest('custom/getFullContentForUri', async (params: { uri: string
 // fields, or unavailable images) is cached as invalid for the HTTP_CACHE_TTL
 // and is NOT included in the response, so the webview never receives a theme
 // that would break rendering.
-connection.onRequest('custom/getThemes', async (params: { themes: string[] }) => {
+connection.onRequest('c4/getThemes', async (params: { themes: string[] }) => {
     const urls = Array.isArray(params?.themes) ? params.themes : [];
     const themes: { url: string; content: string }[] = [];
     for (const url of urls) {
@@ -150,7 +150,7 @@ connection.onRequest('custom/getThemes', async (params: { themes: string[] }) =>
 
 // Enumerate root workspace documents that currently have generated JSON.
 // Used by MCP tools (e.g., list-projects) to discover available projects.
-connection.onRequest('custom/listProjects', () => {
+connection.onRequest('c4/listProjects', () => {
     const projects = C4.generation.C4GeneratorHandler.getCachedUris();
     return { projects };
 });
@@ -159,7 +159,7 @@ connection.onRequest('custom/listProjects', () => {
 // extension to decide whether a contentUpdated notification (which always
 // carries the ROOT workspace URI) belongs to the document the preview is bound
 // to - without fetching the full JSON on every unrelated generation event.
-connection.onRequest('custom/getRootUri', (params: { uri: string }) => {
+connection.onRequest('c4/getRootUri', (params: { uri: string }) => {
     const rootUri = C4.generation.C4GeneratorHandler.getRootUri(params?.uri ?? '');
     return { rootUri };
 });

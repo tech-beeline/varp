@@ -22,9 +22,13 @@
  * 
  * Key differences from the Node.js version:
  * 1. Uses BrowserMessageReader/Writer instead of Node.js IPC for LSP transport
- * 2. Uses EmptyFileSystem instead of NodeFileSystem (no local file access in browser)
- * 3. Does NOT register the custom 'custom/getContentForUri' handler
- *    (diagram preview in browser is handled differently)
+ * 2. Uses EmptyFileSystem, but extends it: the extension host owns the workspace
+ *    there, so local reads are forwarded to it over LSP (c4/readFile,
+ *    c4/readDirectory, c4/readBinary, c4/stat, c4/exists)
+ * 3. Registers the same c4/getContentForUri, c4/getFullContentForUri,
+ *    c4/getThemes and c4/getRootUri handlers as the Node.js version, but
+ *    not the Node.js-only c4/applyTextMeasurements and c4/listProjects;
+ *    getContentForUri omits textMeasurements (the webview measures text itself)
  * 4. The FileSystemProvider patch for remote URLs is shared with the Node.js version
  * 
  * Both versions share the same service creation logic via createC4Services().
@@ -35,6 +39,7 @@ import { startLanguageServer } from 'langium/lsp';
 import { BrowserMessageReader, BrowserMessageWriter, createConnection } from 'vscode-languageserver/browser';
 import { createC4Services } from './c4-module';
 import { HttpCache, defaultFetcher, validateTheme } from './http-cache';
+import { withClientFileSystem, withUnsupportedSyncMethods } from './c4-binary-file-system';
 
 // Create LSP connection using browser-based message transport
 // (postMessage API instead of Node.js stdin/stdout)
@@ -43,9 +48,11 @@ const messageWriter = new BrowserMessageWriter(self);
 const connection = createConnection(messageReader, messageWriter);
 
 // ─── FileSystemProvider Monkey-Patch ───────────────────────────────────────
-// In the browser, there is no local file system, only remote URLs (http/https).
-// EmptyFileSystem provides a minimal provider that we extend with fetch support.
-// This enables !include and extendsUri to load remote Structurizr workspace files.
+// Remote URLs (http/https) are fetched directly. Every other URI belongs to the
+// workspace, which the language server cannot reach on its own in the browser:
+// the extension host performs those reads via vscode.workspace.fs and answers the
+// c4/read* requests. This is what makes !include, extendsUri, !docs and
+// documentation images work in the web version.
 
 const baseProvider = EmptyFileSystem.fileSystemProvider();
 
@@ -55,22 +62,30 @@ const baseProvider = EmptyFileSystem.fileSystemProvider();
 // cached as "invalid for the TTL" and are never delivered to the preview.
 const httpCache = new HttpCache(defaultFetcher);
 
-// Store reference to the original (no-op) readFile
-const originalReadFile = (baseProvider as any).readFile.bind(baseProvider);
-
 // Replace readFile with fetch-based implementation for URL support
 (baseProvider as any).readFile = async function(uri: any) {
     const uriString = uri.toString();
-    
+
     // Handle http/https URLs via fetch with caching (no theme validation here -
     // include/extendsUri documents are not themes).
     if (uriString.startsWith('http://') || uriString.startsWith('https://')) {
         return await httpCache.readRemoteWithCache(uriString);
     }
-    
-    // For unsupported schemes in the browser, fall back to the original (empty) provider
-    return originalReadFile(uri);
+
+    // Workspace files are read by the extension host.
+    return await connection.sendRequest('c4/readFile', { uri: uriString });
 };
+
+// Binary content, directory listings, file types and existence checks also go to the
+// extension host. The synchronous FileSystemProvider methods cannot be bridged and are
+// replaced with a clear "unsupported" error.
+withClientFileSystem(baseProvider, {
+    readBinary: (uri) => connection.sendRequest<string>('c4/readBinary', { uri }),
+    readDirectory: (uri) => connection.sendRequest<{ name: string; type: number }[]>('c4/readDirectory', { uri }),
+    stat: (uri) => connection.sendRequest<number>('c4/stat', { uri }),
+    exists: (uri) => connection.sendRequest<boolean>('c4/exists', { uri })
+});
+withUnsupportedSyncMethods(baseProvider);
 
 // ─── Service Initialization ────────────────────────────────────────────────
 // Create C4 language services. The monkey-patched fileSystemProvider handles all file reads.
@@ -85,13 +100,13 @@ const { shared, C4 } = createC4Services({
 // avoids the race where the client pulls JSON on save before the language
 // server has finished rebuilding/generating.
 C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json, generation) => {
-    connection.sendNotification('custom/contentUpdated', { uri, json, generation });
+    connection.sendNotification('c4/contentUpdated', { uri, json, generation });
 };
 
 // ─── Custom LSP Request Handler ────────────────────────────────────────────
 // Register the same custom request as the Node.js version so the extension
 // can retrieve cached JSON for diagram preview refresh on file save.
-connection.onRequest('custom/getContentForUri', (params: { uri: string }) => {
+connection.onRequest('c4/getContentForUri', (params: { uri: string }) => {
     // Returns { json, generation } so the client can tell "same cached build,
     // just changeView" from a fresh/different build (which needs a full rebuild).
     const content = C4.generation.C4GeneratorHandler.getContentForUri(params.uri);
@@ -102,7 +117,7 @@ connection.onRequest('custom/getContentForUri', (params: { uri: string }) => {
 // render JSON enriched with documentation not produced by the render pipeline
 // (e.g. `documentation.decisions` from !adrs/!decisions). Used for export/tooling;
 // the diagram preview keeps using the lighter render JSON from getContentForUri.
-connection.onRequest('custom/getFullContentForUri', async (params: { uri: string }) => {
+connection.onRequest('c4/getFullContentForUri', async (params: { uri: string }) => {
     const content = await C4.generation.C4GeneratorHandler.getFullContentForUri(params.uri);
     return content ? { json: content } : null;
 });
@@ -114,7 +129,7 @@ connection.onRequest('custom/getFullContentForUri', async (params: { uri: string
 // fields, or unavailable images) is cached as invalid for the HTTP_CACHE_TTL
 // and is NOT included in the response, so the webview never receives a theme
 // that would break rendering.
-connection.onRequest('custom/getThemes', async (params: { themes: string[] }) => {
+connection.onRequest('c4/getThemes', async (params: { themes: string[] }) => {
     const urls = Array.isArray(params?.themes) ? params.themes : [];
     const themes: { url: string; content: string }[] = [];
     for (const url of urls) {
@@ -135,7 +150,7 @@ connection.onRequest('custom/getThemes', async (params: { themes: string[] }) =>
 // extension to decide whether a contentUpdated notification (which always
 // carries the ROOT workspace URI) belongs to the document the preview is bound
 // to - without fetching the full JSON on every unrelated generation event.
-connection.onRequest('custom/getRootUri', (params: { uri: string }) => {
+connection.onRequest('c4/getRootUri', (params: { uri: string }) => {
     const rootUri = C4.generation.C4GeneratorHandler.getRootUri(params?.uri ?? '');
     return { rootUri };
 });

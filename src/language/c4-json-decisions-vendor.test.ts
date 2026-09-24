@@ -28,19 +28,15 @@ import { isWorkspace } from '../generated/ast';
 const FIXTURE = resolve(__dirname, '../../test/fixtures/decisions-vendor/workspace.dsl');
 
 /**
- * Drops every decision date. Dates are not comparable across environments: madr uses
- * the file modification time, and the others are serialized with the local time zone.
+ * Drops the madr decision dates. madr uses the file modification time when the
+ * front matter has no date, so those values are not reproducible across checkouts;
+ * adrtools and log4brains dates are compared against the fixture.
  */
-function stripDecisionDates(node: any): void {
-	if (!node || typeof node !== 'object') return;
-	if (Array.isArray(node)) {
-		for (const item of node) stripDecisionDates(item);
-		return;
+function dropMadrDates(json: any): void {
+	const decisions = json?.model?.softwareSystems?.[0]?.containers?.[0]?.documentation?.decisions;
+	if (Array.isArray(decisions)) {
+		for (const decision of decisions) delete decision.date;
 	}
-	if (Array.isArray(node.decisions)) {
-		for (const decision of node.decisions) delete decision.date;
-	}
-	for (const value of Object.values(node)) stripDecisionDates(value);
 }
 
 describe('c4-json-decisions-vendor', () => {
@@ -61,7 +57,7 @@ describe('c4-json-decisions-vendor', () => {
 
 		// `dsl` is added by the enricher for the preview and is not part of the JSON shape.
 		delete json.dsl;
-		stripDecisionDates(json);
+		dropMadrDates(json);
 
 		const expected = JSON.parse(readFileSync(resolve(dirname(FIXTURE), 'expected.json'), 'utf-8'));
 		const diffs = compareJson(json, expected);

@@ -222,7 +222,7 @@ Accepted
 
 Body.
 `, '0007-use-something.md');
-		expect(decision).toMatchObject({ id: '7', title: 'Use something', date: '2024-01-31', status: 'Accepted', format: 'Markdown' });
+		expect(decision).toMatchObject({ id: '7', title: 'Use something', date: '2024-01-31T00:00:00Z', status: 'Accepted', format: 'Markdown' });
 	});
 
 	it('parses the MADR format without its front matter', () => {
@@ -237,7 +237,7 @@ date: 2024-01-31
 
 Body.
 `, '0001-use-madr.md');
-		expect(decision).toMatchObject({ id: '1', title: 'Use MADR', date: '2024-01-31', status: 'accepted', format: 'Markdown' });
+		expect(decision).toMatchObject({ id: '1', title: 'Use MADR', date: '2024-01-31T00:00:00Z', status: 'accepted', format: 'Markdown' });
 		expect(decision?.content).toBe('\n# Use MADR\n\n## Context\n\nBody.\n');
 	});
 
@@ -247,12 +247,12 @@ Body.
 - Date: 2024-02-01
 - Status: superseded by [next](0002-next.md)
 `, '20240101-use-log4brains.md', '1');
-		expect(decision).toMatchObject({ id: '1', title: 'Use Log4brains', date: '2024-02-01', status: 'superseded', format: 'Markdown' });
+		expect(decision).toMatchObject({ id: '1', title: 'Use Log4brains', date: '2024-02-01T00:00:00Z', status: 'superseded', format: 'Markdown' });
 	});
 
 	it('falls back to the file name date and omits an empty Log4brains status', () => {
 		const decision = parseLog4brainsMarkdown('# No status\n', '20240101-no-status.md', '2');
-		expect(decision?.date).toBe('2024-01-01');
+		expect(decision?.date).toBe('2024-01-01T00:00:00Z');
 		expect(decision?.status).toBeUndefined();
 	});
 

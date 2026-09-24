@@ -783,8 +783,8 @@ function extractAdrTitle(titleLine: string): string | undefined {
 function extractAdrDate(lines: string[]): string | undefined {
     for (const line of lines) {
         if (line.startsWith('Date: ')) {
-            const candidate = line.substring('Date: '.length).trim();
-            if (/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return candidate;
+            const date = extractIsoDate(line.substring('Date: '.length));
+            if (date) return date;
         }
     }
     return undefined;
@@ -872,10 +872,13 @@ function decisionFileNameMatches(importer: DecisionImporter, name: string): bool
     return name.endsWith('.md');
 }
 
-/** A "yyyy-MM-dd" value, or undefined when the text is not such a date. */
+/**
+ * A "yyyy-MM-dd" value as an ISO instant at UTC midnight, or undefined when the text
+ * is not such a date. UTC midnight keeps the value deterministic and portable.
+ */
 function extractIsoDate(value: string | undefined): string | undefined {
     const candidate = (value ?? '').trim();
-    return /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : undefined;
+    return /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? `${candidate}T00:00:00Z` : undefined;
 }
 
 /** Splits a leading Markdown front matter block ("--- ... ---") from the body. */
@@ -947,7 +950,7 @@ export function parseLog4brainsMarkdown(content: string, filename: string, id: s
     const statusValue = statusLine?.substring('- Status: '.length) ?? '';
 
     const dateLine = lines.find((line) => line.startsWith('- Date: '));
-    const date = extractIsoDate(dateLine?.substring('- Date: '.length)) ?? log4brainsFileDate(filename);
+    const date = extractIsoDate(dateLine?.substring('- Date: '.length)) ?? extractIsoDate(log4brainsFileDate(filename));
 
     const firstLine = lines[0] ?? '';
     return {

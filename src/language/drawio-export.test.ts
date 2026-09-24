@@ -933,6 +933,33 @@ workspace {
         expect(metadataLabel('hidden')).toBe('');
     }, 120_000);
 
+    it('keeps description line breaks and does not wrap the metadata cell', async () => {
+        const json = {
+            model: { people: [], softwareSystems: [{ id: 1, name: 'A', tags: 'Element,Software System' }], relationships: [] },
+            views: {
+                systemLandscapeViews: [{
+                    key: 'multi', name: 'Multi',
+                    title: 'First\nSecond',
+                    description: 'Line 1\nLine 2',
+                    elements: [{ id: 1, x: 100, y: 100 }],
+                    dimensions: { width: 2000, height: 1000 },
+                }],
+                configuration: {},
+            },
+        };
+        const xml = exportView(json, 'multi');
+        const line = xml.split('\n').find(l => l.includes('strokeColor=none;fillColor=none')) ?? '';
+        const value = line.match(/value="([^"]*)"/)?.[1] ?? '';
+        const decoded = decodeXml(value);
+
+        // the title collapses newlines into spaces, the description keeps them as line breaks
+        expect(decoded).toContain('First Second');
+        expect(decoded).not.toContain('First<br>Second');
+        expect(decoded).toContain('Line 1<br>Line 2');
+        // a long line runs past the cell instead of wrapping, as in SVG
+        expect(line).toContain('whiteSpace=nowrap;');
+    }, 120_000);
+
     it('names the group boundary type', async () => {
         const json = await generateFixture('groups-nested');
         const workspace = makeWorkspace(json);

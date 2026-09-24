@@ -30,6 +30,23 @@ structurizr.drawio._escapeXml = function(text) {
         .replace(/'/g, apos);
 };
 
+/**
+ * Text of an HTML label: XML-escaped, with newlines turned into line breaks so a
+ * multi-line text keeps its lines (structurizr-diagram.js draws the description
+ * and metadata as SVG text, where newlines are line breaks).
+ */
+structurizr.drawio._labelText = function(text) {
+    return structurizr.drawio._escapeXml(text).replace(/(\r\n|\r|\n)/g, '<br>');
+};
+
+/**
+ * Title text: XML-escaped, with newlines replaced by spaces
+ * (structurizr.util.removeNewlineCharacters).
+ */
+structurizr.drawio._titleText = function(text) {
+    return structurizr.drawio._escapeXml(text).replace(/(\r\n|\r|\n)/g, ' ');
+};
+
 structurizr.drawio._uuid = function() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         var r = Math.random() * 16 | 0;
@@ -1070,7 +1087,9 @@ structurizr.drawio._contentBounds = function(view, workspace, darkMode, boundari
 structurizr.drawio._writeDiagramMetadata = function(lines, view, workspace, darkMode, boundaries, parentId) {
     var block = structurizr.drawio._diagramMetadata(view, workspace, darkMode);
     var padding = 10;
-    var titleHeight = block.title ? structurizr.drawio._textBlockHeight(block.title, block.titleFontSize) + padding : 0;
+    // The title renders on a single line, so its height ignores newlines.
+    var titleText = String(block.title || '').replace(/(\r\n|\r|\n)/g, ' ');
+    var titleHeight = block.title ? structurizr.drawio._textBlockHeight(titleText, block.titleFontSize) + padding : 0;
     var descriptionHeight = block.description ? structurizr.drawio._textBlockHeight(block.description, block.descriptionFontSize) + padding : 0;
     var metadataHeight = block.metadata ? structurizr.drawio._textBlockHeight(block.metadata, block.metadataFontSize) + padding : 0;
     var total = titleHeight + descriptionHeight + metadataHeight;
@@ -1078,13 +1097,13 @@ structurizr.drawio._writeDiagramMetadata = function(lines, view, workspace, dark
 
     var label = '';
     if (block.title) {
-        label += '<font style="font-size:' + block.titleFontSize + 'px" color="' + block.titleColor + '">' + structurizr.drawio._escapeXml(block.title) + '</font>';
+        label += '<font style="font-size:' + block.titleFontSize + 'px" color="' + block.titleColor + '">' + structurizr.drawio._titleText(block.title) + '</font>';
     }
     if (block.description) {
-        label += (label ? '<br>' : '') + '<font style="font-size:' + block.descriptionFontSize + 'px" color="' + block.descriptionColor + '">' + structurizr.drawio._escapeXml(block.description) + '</font>';
+        label += (label ? '<br>' : '') + '<font style="font-size:' + block.descriptionFontSize + 'px" color="' + block.descriptionColor + '">' + structurizr.drawio._labelText(block.description) + '</font>';
     }
     if (block.metadata) {
-        label += (label ? '<br>' : '') + '<font style="font-size:' + block.metadataFontSize + 'px" color="' + block.metadataColor + '">' + structurizr.drawio._escapeXml(block.metadata) + '</font>';
+        label += (label ? '<br>' : '') + '<font style="font-size:' + block.metadataFontSize + 'px" color="' + block.metadataColor + '">' + structurizr.drawio._labelText(block.metadata) + '</font>';
     }
     if (!label) return;
 
@@ -1100,7 +1119,8 @@ structurizr.drawio._writeDiagramMetadata = function(lines, view, workspace, dark
         width = Math.max(bounds.maxX - bounds.minX, 400);
     }
 
-    var style = 'text;html=1;' + structurizr.drawio._fontStyle() + 'strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;resizable=0;metaEdit=1;pointerEvents=0;';
+    // The text does not wrap: a long line runs past the cell, as in SVG.
+    var style = 'text;html=1;' + structurizr.drawio._fontStyle() + 'strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=nowrap;rounded=0;resizable=0;metaEdit=1;pointerEvents=0;';
     lines.push('        <mxCell style="' + style + '" value="' + structurizr.drawio._escapeXml(label) + '" vertex="1" parent="' + parentId + '">');
     lines.push('          <mxGeometry x="' + x + '" y="' + y + '" width="' + width + '" height="' + total + '" as="geometry"/>');
     lines.push('        </mxCell>');

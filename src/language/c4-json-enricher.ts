@@ -14,6 +14,13 @@
 	limitations under the License.
 */
 
+/**
+ * Documentation images are embedded as their raw file bytes (base64), with SVG taken
+ * as-is and bitmaps not re-encoded, so an animated GIF keeps all of its frames. This
+ * is accepted on purpose: the embedded content is only rendered as a data URI, so
+ * re-encoding would not change the result.
+ */
+
 import { AstUtils, LangiumSharedCoreServices, type AstNode, type FileSystemNode } from 'langium';
 import { base64EncodeBytes } from './c4-base64';
 import { Utils, URI } from 'vscode-uri';
@@ -483,7 +490,13 @@ export class C4JsonEnricher {
         const target = holder.documentation ?? (holder.documentation = {});
         // Keys follow the reference serialization (Jackson sorts properties alphabetically).
         if (documentation.decisions.length > 0) {
-            target.decisions = documentation.decisions;
+            // Documentation.decisions is a TreeSet ordered by id, and each decision's
+            // links are a TreeSet ordered by the linked decision id.
+            target.decisions = [...documentation.decisions]
+                .sort(byDecisionId)
+                .map((decision) => decision.links
+                    ? { ...decision, links: [...decision.links].sort(byDecisionId) }
+                    : decision);
         }
         if (documentation.images.length > 0) {
             // Documentation.images is a TreeSet ordered by image name.
@@ -566,19 +579,18 @@ export class C4JsonEnricher {
     }
 
     /**
-     * Imports decisions from a single `!adrs`/`!decisions` directive: resolves
-     * the path relative to the root document, reads *.md files (honoring
-     * exclude filters) and parses them in the adr-tools format.
+     * Imports decisions from a single `!adrs`/`!decisions` directive: resolves the
+     * path relative to the root document, reads the decision files (honoring exclude
+     * filters) and parses them with the importer selected by the directive.
      */
     private async importAdrs(adrs: AdrsDirective, rootUri: string): Promise<Decision[]> {
         const rawPath = adrs.path ?? '';
         const path = rawPath.replace(/^["']|["']$/g, '');
         if (!path) return [];
 
-        // Only adrtools is implemented (the default importer). madr/log4brains
-        // importers are intentionally left as a follow-up.
-        const importer = (adrs.importer ?? '').trim().toLowerCase();
-        if (importer && importer !== 'adrtools' && importer !== 'com.structurizr.importer.documentation.AdrToolsDecisionImporter') {
+        const importer = resolveDecisionImporter(adrs.importer);
+        if (!importer) {
+            console.warn(`[C4 Docs] Unsupported decision importer ${adrs.importer}, skipping ${path}`);
             return [];
         }
 
@@ -593,14 +605,20 @@ export class C4JsonEnricher {
         try {
             const dirents = await fs.readDirectory(dirUri) as FileSystemNode[];
             entries = dirents
-                .filter((e) => e.isFile && e.uri.path.endsWith('.md'))
+                .filter((e) => e.isFile && decisionFileNameMatches(importer, e.uri.path.split('/').pop() ?? ''))
                 .map((e) => ({ uri: e.uri, name: e.uri.path.split('/').pop() ?? e.uri.toString() }));
         } catch {
             return []; // directory missing/unreadable - nothing to import
         }
 
+        // madr and log4brains sort the directory listing by file name; adrtools does not.
+        if (importer !== 'adrtools') {
+            entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+        }
+
         const decisions: Decision[] = [];
         const byFilename = new Map<string, Decision>();
+        let log4brainsId = 1;
 
         for (const entry of entries) {
             if (excluded(entry.name)) continue;
@@ -610,23 +628,30 @@ export class C4JsonEnricher {
             } catch {
                 continue; // unreadable file - skip
             }
-            const decision = parseAdrMarkdown(content, entry.name);
+            const decision = importer === 'adrtools'
+                ? parseAdrMarkdown(content, entry.name)
+                : importer === 'madr'
+                    ? parseMadrMarkdown(content, entry.name)
+                    : parseLog4brainsMarkdown(content, entry.name, String(log4brainsId++));
             if (decision) {
                 decisions.push(decision);
                 byFilename.set(entry.name, decision);
             }
         }
 
-        // Resolve inter-decision links and rewrite file references to the
-        // AdrTools link syntax.
+        // Resolve inter-decision links and rewrite file references ("NNNN-slug.md" -> "#id").
         for (const decision of decisions) {
-            extractDecisionLinks(decision, byFilename);
-            // Replace "{NNNN}-{slug}.md" references with "#{NNNN}" links.
+            if (importer === 'adrtools') {
+                extractDecisionLinks(decision, byFilename);
+            } else if (importer === 'madr') {
+                extractMadrLinks(decision, byFilename);
+            } else {
+                extractLog4brainsLinks(decision, byFilename);
+            }
             let rewritten = decision.content ?? '';
             for (const [filename, target] of byFilename) {
                 if (rewritten.includes(filename)) {
-                    const href = `#${target.id}`;
-                    rewritten = rewritten.split(filename).join(href);
+                    rewritten = rewritten.split(filename).join(`#${target.id}`);
                 }
             }
             decision.content = rewritten;
@@ -773,6 +798,174 @@ export function extractDecisionLinks(decision: Decision, byFilename: Map<string,
             if (targetId && targetId !== decision.id) {
                 links.push({ id: targetId, description });
             }
+        }
+    }
+    if (links.length > 0) decision.links = links;
+}
+
+/** Orders decisions and links by their id, as the reference TreeSets do. */
+function byDecisionId(a: { id: string }, b: { id: string }): number {
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/** The decision formats a `!adrs`/`!decisions` directive can select. */
+type DecisionImporter = 'adrtools' | 'madr' | 'log4brains';
+
+/**
+ * Resolves the directive's importer: a short type (`adrtools`, `madr`,
+ * `log4brains`), the matching fully qualified class name, or the default (adrtools).
+ * Returns undefined for an importer that cannot be run here.
+ */
+function resolveDecisionImporter(value: string | undefined): DecisionImporter | undefined {
+    const raw = (value ?? '').trim();
+    if (!raw) return 'adrtools';
+    const lower = raw.toLowerCase();
+    if (lower === 'adrtools' || lower === 'com.structurizr.importer.documentation.adrtoolsdecisionimporter') return 'adrtools';
+    if (lower === 'madr' || lower === 'com.structurizr.importer.documentation.madrdecisionimporter') return 'madr';
+    if (lower === 'log4brains' || lower === 'com.structurizr.importer.documentation.log4brainsdecisionimporter') return 'log4brains';
+    return undefined;
+}
+
+/** The file name each importer accepts (case-sensitive, like the reference). */
+function decisionFileNameMatches(importer: DecisionImporter, name: string): boolean {
+    if (importer === 'madr') return /^\d{4}-.+\.md$/.test(name);
+    if (importer === 'log4brains') return /^\d{8}-.+\.md$/.test(name);
+    return name.endsWith('.md');
+}
+
+/** A "yyyy-MM-dd" value, or undefined when the text is not such a date. */
+function extractIsoDate(value: string | undefined): string | undefined {
+    const candidate = (value ?? '').trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : undefined;
+}
+
+/** Splits a leading Markdown front matter block ("--- ... ---") from the body. */
+function splitFrontMatter(content: string): { frontMatter: string[]; body: string } {
+    const lines = content.split('\n');
+    if (lines[0] !== '---') return { frontMatter: [], body: content };
+    const end = lines.indexOf('---', 1);
+    if (end < 0) return { frontMatter: [], body: content };
+    return { frontMatter: lines.slice(1, end), body: lines.slice(end + 1).join('\n') };
+}
+
+/**
+ * Parses a single MADR Markdown file into a Decision (pure function, no I/O).
+ *
+ * MADR format:
+ *   Filename: {DECISION_ID:0000}-*.md
+ *   Content:
+ *     ---
+ *     status: {DECISION_STATUS}
+ *     date: {DECISION_DATE:YYYY-MM-DD}
+ *     ---
+ *     # {DECISION_TITLE}
+ *     ...
+ */
+export function parseMadrMarkdown(content: string, filename: string): Decision | undefined {
+    const normalized = String(content ?? '').replace(/\r/g, '');
+    const id = filename.match(/^\d{4}/)?.[0];
+    if (!id) return undefined;
+
+    const { frontMatter, body } = splitFrontMatter(normalized);
+    const frontMatterValue = (prefix: string) => {
+        const line = frontMatter.find((candidate) => candidate.startsWith(prefix));
+        return line?.substring(prefix.length);
+    };
+
+    return {
+        id: String(parseInt(id, 10)),
+        title: extractMadrTitle(body),
+        date: extractIsoDate(frontMatterValue('date: ')),
+        status: frontMatterValue('status: ') ?? 'accepted',
+        content: body,
+        format: 'Markdown',
+    };
+}
+
+/** MADR title: the first "# " line, defaulting to "Title". */
+function extractMadrTitle(body: string): string {
+    for (const line of body.split('\n')) {
+        if (line.startsWith('# ')) return line.substring(2);
+    }
+    return 'Title';
+}
+
+/**
+ * Parses a single Log4brains Markdown file into a Decision (pure function, no I/O).
+ *
+ * Log4brains format:
+ *   Filename: {YYYYMMDD}-*.md
+ *   Content:
+ *     # {DECISION_TITLE}
+ *     - Date: {DECISION_DATE:YYYY-MM-DD}
+ *     - Status: {DECISION_STATUS}
+ */
+export function parseLog4brainsMarkdown(content: string, filename: string, id: string): Decision | undefined {
+    const normalized = String(content ?? '').replace(/\r/g, '');
+    const lines = normalized.split('\n');
+
+    const statusLine = lines.find((line) => line.startsWith('- Status: '));
+    const statusValue = statusLine?.substring('- Status: '.length) ?? '';
+
+    const dateLine = lines.find((line) => line.startsWith('- Date: '));
+    const date = extractIsoDate(dateLine?.substring('- Date: '.length)) ?? log4brainsFileDate(filename);
+
+    const firstLine = lines[0] ?? '';
+    return {
+        id,
+        title: firstLine.length >= 2 ? firstLine.substring(2) : firstLine,
+        date,
+        // An empty status is omitted (NON_EMPTY serialization).
+        status: statusValue ? (statusValue.startsWith('superseded') ? 'superseded' : statusValue) : undefined,
+        content: normalized,
+        format: 'Markdown',
+    };
+}
+
+/** Date from a Log4brains file name ("yyyyMMdd-slug.md" -> "yyyy-MM-dd"). */
+function log4brainsFileDate(filename: string): string | undefined {
+    const head = filename.slice(0, 8);
+    if (!/^\d{8}$/.test(head)) return undefined;
+    return `${head.slice(0, 4)}-${head.slice(4, 6)}-${head.slice(6, 8)}`;
+}
+
+/** MADR links: every Markdown link to another decision, described as "Links to". */
+export function extractMadrLinks(decision: Decision, byFilename: Map<string, Decision>): void {
+    const links: DecisionLink[] = [];
+    const seen = new Set<string>();
+    for (const line of (decision.content ?? '').split('\n')) {
+        for (const match of line.matchAll(/\[.*]\((.*)\)/g)) {
+            const target = byFilename.get(match[1].trim());
+            if (target && target.id !== decision.id && !seen.has(target.id)) {
+                seen.add(target.id);
+                links.push({ id: target.id, description: 'Links to' });
+            }
+        }
+    }
+    if (links.length > 0) decision.links = links;
+}
+
+/** Log4brains links: from the "- Status:" line and the "## Links" section. */
+export function extractLog4brainsLinks(decision: Decision, byFilename: Map<string, Decision>): void {
+    const links: DecisionLink[] = [];
+    const seen = new Set<string>();
+    const add = (description: string, file: string) => {
+        const target = byFilename.get(file.trim());
+        if (target && target.id !== decision.id && !seen.has(target.id)) {
+            seen.add(target.id);
+            links.push({ id: target.id, description: description.trim() });
+        }
+    };
+
+    let inLinksSection = false;
+    for (const line of (decision.content ?? '').split('\n')) {
+        const statusMatch = /- Status: (.*) \[.*]\((.*)\)/.exec(line);
+        if (statusMatch) add(statusMatch[1], statusMatch[2]);
+
+        if (line.startsWith('## Links')) inLinksSection = true;
+        if (inLinksSection) {
+            const linkMatch = /- (.*) \[.*]\((.*)\)/.exec(line);
+            if (linkMatch) add(linkMatch[1], linkMatch[2]);
         }
     }
     if (links.length > 0) decision.links = links;

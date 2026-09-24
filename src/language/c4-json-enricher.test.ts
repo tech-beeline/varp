@@ -21,7 +21,7 @@ import { NodeFileSystem } from 'langium/node';
 import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
 import { C4JsonGenerator } from './c4-json-generator';
-import { C4JsonEnricher } from './c4-json-enricher';
+import { C4JsonEnricher, parseAdrMarkdown, parseMadrMarkdown, parseLog4brainsMarkdown, extractMadrLinks, extractLog4brainsLinks } from './c4-json-enricher';
 import { withClientFileSystem } from './c4-binary-file-system';
 import { createWorkspaceFileRequestHandlers } from '../extension/workspace-file-requests';
 import { isWorkspace } from '../generated/ast';
@@ -189,5 +189,74 @@ describe('c4-json-enricher: web bridge', () => {
 		]);
 		expect(bridged.documentation?.images.map((image: any) => image.name)).toEqual(['diagram.png', 'logo.svg']);
 		expect(bridged.documentation?.images[0].content).toBe(readFileSync(resolve(DOCS_DIR, 'diagram.png')).toString('base64'));
+	});
+});
+
+describe('c4-json-enricher: decision importers', () => {
+	it('parses the adr-tools format', () => {
+		const decision = parseAdrMarkdown(`# 7. Use something
+
+Date: 2024-01-31
+
+## Status
+
+Accepted
+
+## Context
+
+Body.
+`, '0007-use-something.md');
+		expect(decision).toMatchObject({ id: '7', title: 'Use something', date: '2024-01-31', status: 'Accepted', format: 'Markdown' });
+	});
+
+	it('parses the MADR format without its front matter', () => {
+		const decision = parseMadrMarkdown(`---
+status: accepted
+date: 2024-01-31
+---
+
+# Use MADR
+
+## Context
+
+Body.
+`, '0001-use-madr.md');
+		expect(decision).toMatchObject({ id: '1', title: 'Use MADR', date: '2024-01-31', status: 'accepted', format: 'Markdown' });
+		expect(decision?.content).toBe('\n# Use MADR\n\n## Context\n\nBody.\n');
+	});
+
+	it('parses the Log4brains format', () => {
+		const decision = parseLog4brainsMarkdown(`# Use Log4brains
+
+- Date: 2024-02-01
+- Status: superseded by [next](0002-next.md)
+`, '20240101-use-log4brains.md', '1');
+		expect(decision).toMatchObject({ id: '1', title: 'Use Log4brains', date: '2024-02-01', status: 'superseded', format: 'Markdown' });
+	});
+
+	it('falls back to the file name date and omits an empty Log4brains status', () => {
+		const decision = parseLog4brainsMarkdown('# No status\n', '20240101-no-status.md', '2');
+		expect(decision?.date).toBe('2024-01-01');
+		expect(decision?.status).toBeUndefined();
+	});
+
+	it('extracts MADR links described as "Links to"', () => {
+		const byFilename = new Map<string, any>([['0002-next.md', { id: '2' }]]);
+		const decision: any = { id: '1', content: 'See [next](0002-next.md).\n' };
+		extractMadrLinks(decision, byFilename);
+		expect(decision.links).toEqual([{ id: '2', description: 'Links to' }]);
+	});
+
+	it('extracts Log4brains links from the status line and the Links section', () => {
+		const byFilename = new Map<string, any>([['0002-next.md', { id: '2' }], ['0003-other.md', { id: '3' }]]);
+		const decision: any = {
+			id: '1',
+			content: '# X\n\n- Status: superseded by [next](0002-next.md)\n\n## Links\n- Other [0003-other.md](0003-other.md)\n'
+		};
+		extractLog4brainsLinks(decision, byFilename);
+		expect(decision.links).toEqual([
+			{ id: '2', description: 'superseded by' },
+			{ id: '3', description: 'Other' }
+		]);
 	});
 });

@@ -145,6 +145,22 @@ describe('c4-json-enricher: !docs', () => {
 		expect(sections[0].content).toBe(docFile('element/10-details.md'));
 	});
 
+	it('imports a directory tree recursively with sub-path filenames', () => {
+		const documentation = enriched.model?.softwareSystems?.[0]?.containers?.[1]?.documentation;
+		const sections = documentation?.sections;
+		// Sorted depth-first: ".hidden" recurses, ".skip.md" is a dot-file, then "a.md"
+		// and "sub". Dot-directories are walked, dot-files are not.
+		expect(sections?.map((section: any) => section.filename)).toEqual(['.hidden/c.md', 'a.md', 'sub/b.md']);
+		expect(sections?.map((section: any) => section.order)).toEqual([1, 2, 3]);
+	});
+
+	it('falls back to the default importer for an unknown importer class', () => {
+		const documentation = enriched.model?.softwareSystems?.[0]?.containers?.[2]?.documentation;
+		const sections = documentation?.sections;
+		// The default importer is flat, so only the top-level file is imported.
+		expect(sections?.map((section: any) => section.filename)).toEqual(['a.md']);
+	});
+
 	it('keeps decisions from !adrs alongside sections', async () => {
 		// A second enricher run over a workspace that also declares !adrs: reuse the
 		// same fixture data by importing decisions through the same directory flow.

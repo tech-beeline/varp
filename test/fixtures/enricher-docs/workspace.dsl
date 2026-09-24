@@ -8,6 +8,12 @@ workspace {
             container "Container" {
                 !docs docs/element/10-details.md
             }
+            container "Recursive Container" {
+                !docs docs/tree com.structurizr.importer.documentation.RecursiveDefaultDocumentationImporter
+            }
+            container "Custom Importer Container" {
+                !docs docs/tree com.example.CustomDocumentationImporter
+            }
         }
         user = person "User"
         user -> softwareSystem "Uses"

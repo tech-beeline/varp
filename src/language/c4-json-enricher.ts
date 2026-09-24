@@ -42,8 +42,9 @@ import {
     type SoftwareSystem,
 } from '../generated/ast';
 
-/** The only documentation importer implemented here; a Java importer cannot run in TS. */
+/** The documentation importers with a behaviour implemented here; a Java importer cannot run in TS. */
 const DEFAULT_DOCS_IMPORTER = 'com.structurizr.importer.documentation.DefaultDocumentationImporter';
+const RECURSIVE_DOCS_IMPORTER = 'com.structurizr.importer.documentation.RecursiveDefaultDocumentationImporter';
 
 // FormatFinder: Markdown and AsciiDoc extensions, compared case-sensitively.
 const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.text'];
@@ -71,6 +72,37 @@ function documentationFormat(name: string): 'Markdown' | 'AsciiDoc' {
     const dot = name.lastIndexOf('.');
     const extension = dot < 0 ? '' : name.substring(dot);
     return ASCIIDOC_EXTENSIONS.includes(extension) ? 'AsciiDoc' : 'Markdown';
+}
+
+/**
+ * Collects the documentation files of a directory tree, as
+ * RecursiveDefaultDocumentationImporter does: each directory is listed in name order,
+ * dot-files are skipped and subdirectories are walked (including dot-directories).
+ * The relative path is kept for the section filename.
+ */
+async function collectDocumentationEntries(
+    fs: any,
+    dirUri: URI,
+    prefix: string = ''
+): Promise<{ uri: URI; name: string; relative: string }[]> {
+    const dirents = (await fs.readDirectory(dirUri)) as FileSystemNode[];
+    const sorted = [...dirents].sort((a, b) => {
+        const an = a.uri.path.split('/').pop() ?? '';
+        const bn = b.uri.path.split('/').pop() ?? '';
+        return an < bn ? -1 : an > bn ? 1 : 0;
+    });
+
+    const entries: { uri: URI; name: string; relative: string }[] = [];
+    for (const dirent of sorted) {
+        const name = dirent.uri.path.split('/').pop() ?? dirent.uri.toString();
+        const relative = prefix ? `${prefix}/${name}` : name;
+        if (dirent.isDirectory) {
+            entries.push(...await collectDocumentationEntries(fs, dirent.uri, relative));
+        } else if (dirent.isFile && !name.startsWith('.')) {
+            entries.push({ uri: dirent.uri, name, relative });
+        }
+    }
+    return entries;
 }
 
 /**
@@ -515,18 +547,22 @@ export class C4JsonEnricher {
 
     /**
      * Imports documentation sections from a `!docs` directive: one Markdown/AsciiDoc
-     * file, or every Markdown/AsciiDoc file of a directory (sorted, no recursion,
-     * dot-files skipped), matching DefaultDocumentationImporter. A single-file import
-     * leaves the filename empty because the imported path is trimmed away.
+     * file, or every Markdown/AsciiDoc file of a directory (sorted, dot-files skipped).
+     * The directory listing is flat for DefaultDocumentationImporter and recursive for
+     * RecursiveDefaultDocumentationImporter. An importer that cannot be run here (any
+     * other class) falls back to the default. A single-file import leaves the filename
+     * empty because the imported path is trimmed away.
      */
     private async importDocs(docs: DocsDirective, baseUri: string): Promise<Section[]> {
         const path = (docs.path ?? '').replace(/^["']|["']$/g, '');
         if (!path) return [];
 
         const importer = (docs.importer ?? '').trim();
-        if (importer && importer !== DEFAULT_DOCS_IMPORTER) {
-            console.warn(`[C4 Docs] Unsupported documentation importer ${importer}, skipping ${path}`);
-            return [];
+        const recursive = importer === RECURSIVE_DOCS_IMPORTER;
+        if (importer && importer !== DEFAULT_DOCS_IMPORTER && !recursive) {
+            // A custom Java importer cannot be executed here, so the default importer
+            // (non-recursive) is used instead.
+            console.warn(`[C4 Docs] Unsupported documentation importer ${importer}, using the default importer for ${path}`);
         }
 
         const fs: any = this.services.workspace.FileSystemProvider;
@@ -536,15 +572,16 @@ export class C4JsonEnricher {
         const targetUri = Utils.resolvePath(Utils.dirname(URI.parse(baseUri)), path);
         const nameOf = (uri: URI) => uri.path.split('/').pop() ?? uri.toString();
 
-        let entries: { uri: URI; name: string }[] | undefined;
+        let entries: { uri: URI; name: string; relative: string }[] | undefined;
         if (typeof fs.readDirectory === 'function') {
             try {
-                const dirents = await fs.readDirectory(targetUri) as FileSystemNode[];
-                entries = dirents
-                    .filter((entry) => entry.isFile && !nameOf(entry.uri).startsWith('.'))
-                    .map((entry) => ({ uri: entry.uri, name: nameOf(entry.uri) }))
-                    // Java sorts the directory listing by path, i.e. by file name here.
-                    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+                entries = recursive
+                    ? await collectDocumentationEntries(fs, targetUri)
+                    : (await fs.readDirectory(targetUri) as FileSystemNode[])
+                        .filter((entry) => entry.isFile && !nameOf(entry.uri).startsWith('.'))
+                        .map((entry) => ({ uri: entry.uri, name: nameOf(entry.uri), relative: nameOf(entry.uri) }))
+                        // Java sorts the directory listing by path, i.e. by file name here.
+                        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
             } catch {
                 entries = undefined; // not a directory (or unreadable)
             }
@@ -553,7 +590,7 @@ export class C4JsonEnricher {
         if (singleFile) {
             const name = nameOf(targetUri);
             if (!isDocumentationFileName(name)) return [];
-            entries = [{ uri: targetUri, name }];
+            entries = [{ uri: targetUri, name, relative: name }];
         }
 
         const sections: Section[] = [];
@@ -569,7 +606,9 @@ export class C4JsonEnricher {
             sections.push({
                 // Section.getTitle() returns an empty string, always serialized.
                 title: '',
-                filename: singleFile ? '' : entry.name,
+                // The filename is relative to the imported directory (a sub-path in the
+                // recursive case); a single-file import trims it away entirely.
+                filename: singleFile ? '' : entry.relative,
                 content,
                 format: documentationFormat(entry.name),
                 order: 0 // assigned when the sections are attached to their owner

@@ -164,6 +164,9 @@ class JsonGenerator {
     private readonly constants: Map<string, string> = new Map<string, string>();
     private readonly styles: Styles = { elements: [], relationships: [] };
     private readonly themes: Set<string> = new Set<string>;
+    /** DSL identifier → name of every DeploymentGroup declared in a deployment environment. */
+    private readonly deploymentGroupsByIdentifier: Map<string, string> = new Map<string, string>();
+    private readonly propertiesWorkspace: Record<string, string> = {};
     private readonly propertiesModel: Record<string, string> = {};
     private readonly propertiesViews: Record<string, string> = {};
     private readonly elements: NamedElement[] = [];
@@ -319,8 +322,16 @@ class JsonGenerator {
 
         // Assemble the final JSON output object in Structurizr-compatible format
         const jsonOutput = {
+            // A DSL workspace has no server-side id. The renderer treats id 0 as the
+            // playground and prints the current date, so any other value keeps the
+            // diagram metadata block on the workspace's own timestamp.
+            id: 1,
             name: this.substitute(this.inheritedWorkspaceValue(workspace, ws => ws.name)) || "Name",
             description: this.substitute(this.inheritedWorkspaceValue(workspace, ws => this.description(ws))) || "Description",
+            properties: Object.keys(this.propertiesWorkspace).length > 0 ? this.propertiesWorkspace : undefined,
+            configuration: {},
+            // lastModifiedDate/lastModifiedAgent are added by the extension host, which
+            // is the only side that can read the file timestamp in the web build too.
             model: model,
             views: {
                 systemLandscapeViews: this.extractSystemLandscapeViews(workspace, model),
@@ -1052,6 +1063,21 @@ class JsonGenerator {
             visited.add(docUri);
         }
         
+        // Workspace-level `properties { }` belong to the workspace itself
+        // (WorkspaceParser), so they are emitted at the JSON root.
+        const workspaceProperties = isWorkspace(node) ? node.properties?.[0] : undefined;
+        if (workspaceProperties && Array.isArray(workspaceProperties.items)) {
+            for (const prop of workspaceProperties.items) {
+                if (prop.name && prop.value) {
+                    const name = C4Utils.stripQuotes(prop.name);
+                    const value = C4Utils.stripQuotes(prop.value);
+                    if (name && value) {
+                        this.propertiesWorkspace[name] = value;
+                    }
+                }
+            }
+        }
+
         let modelBlock : ModelBlock | undefined = undefined;
         if(isModelBlock(node)) {
             modelBlock = node;
@@ -1199,6 +1225,18 @@ class JsonGenerator {
                 }
             }
         };
+        // Deployment groups are declared by the environment, not as elements, so they
+        // are collected separately: their identifiers resolve the ambiguous single
+        // value on an instance (see resolveAllInstanceValues).
+        if (Array.isArray(node.deploymentGroups)) {
+            for (const group of node.deploymentGroups) {
+                const identifier = C4Utils.stripQuotes(group?.id);
+                const name = this.substitute(group?.name);
+                if (identifier && name) {
+                    this.deploymentGroupsByIdentifier.set(identifier, name);
+                }
+            }
+        }
         // Process all possible element collections on the current node
         if (node.nodes) processItems(node.nodes);
         if (node.groups) processItems(node.groups);
@@ -1716,9 +1754,14 @@ class JsonGenerator {
     private technology(node: any) {
         const parts: string[] = [];
         const overlay = this.elementOverlays.get(this.getId(node))?.technology;
-        const base = overlay ?? node?.technology ?? node?.technologyProps?.[0]?.value ?? this.archetypeDefaults(node).technology;
+        // An in-block `technology "..."` overwrites the positional technology
+        // (ContainerParser.parseTechnology calls setTechnology).
+        const declared = node?.techProps?.[0]?.value;
+        const base = overlay ?? declared ?? node?.technology ?? this.archetypeDefaults(node).technology;
         if (base !== undefined && base !== null && base !== '') parts.push(base);
-        if (Array.isArray(node?.technologyParts)) {
+        // Positional comma-separated segments only apply when the block did not
+        // declare a technology of its own.
+        if (declared === undefined && Array.isArray(node?.technologyParts)) {
             for (const p of node.technologyParts) {
                 const s = String(p ?? '').trim();
                 if (s) parts.push(s);
@@ -2682,27 +2725,18 @@ class JsonGenerator {
      * Post-parse resolution for DeploymentGroupOrTag ambiguity on instance nodes
      * (ContainerInstance, SoftwareSystemInstance, GenericInstance).
      *
-     * Called after collectLocal() completes, so all DeploymentGroups are already
-     * in this.elements. For each instance node with node.value set (from the
+     * Called after collectLocal() completes, so every DeploymentGroup identifier is
+     * already recorded. For each instance node with node.value set (from the
      * DeploymentGroupOrTag grammar fragment):
-     * - If the value matches a known DeploymentGroup name → it was intended as a
-     *   deployment group. The value is cleared and the node is left unchanged
-     *   (the deployment group link cannot be added programmatically,
-     *   but the value is no longer ambiguous).
-     * - If the value does NOT match any DeploymentGroup → it's a tag. The value
-     *   is added to node.tags.
+     * - If the value names a known DeploymentGroup → it is a group reference: the
+     *   resolved name is recorded on the node for the JSON output and for
+     *   relationship scoping.
+     * - Otherwise, for a GenericInstance the value is a tag and is added to node.tags;
+     *   for the other instance types the value is ignored, as in the reference.
      */
     private resolveAllInstanceValues(): void {
-        // 1. Build a set of known DeploymentGroup names
-        const deploymentGroupNames = new Set<string>();
-        for (const el of this.elements) {
-            if ((el as any).$type === 'DeploymentGroup') {
-                const groupName = C4Utils.stripQuotes((el as any).name);
-                if (groupName) {
-                    deploymentGroupNames.add(groupName);
-                }
-            }
-        }
+        // 1. Use the DeploymentGroup identifiers collected while walking the environments
+        const deploymentGroupsByIdentifier = this.deploymentGroupsByIdentifier;
 
         // 2. Scan all elements for instance nodes with unresolved value
         for (const el of this.elements) {
@@ -2718,9 +2752,17 @@ class JsonGenerator {
                 continue;
             }
 
-            if (deploymentGroupNames.has(val)) {
-                // Value matches a known DeploymentGroup → it's a group reference
-                // Nothing more to do: the group reference was already consumed by the grammar
+            const groupName = deploymentGroupsByIdentifier.get(val);
+            if (groupName) {
+                // The value names a DeploymentGroup → it is a group reference. The grammar
+                // keeps this single value separate because it cannot tell a group from a
+                // tag, so record the resolved name for the JSON output and for relationship
+                // scoping (ContainerInstanceParser resolves that token as a deployment
+                // group).
+                const resolved: string[] = node.resolvedDeploymentGroups ?? (node.resolvedDeploymentGroups = []);
+                if (!resolved.includes(groupName)) {
+                    resolved.push(groupName);
+                }
             } else if (isGenericInstance(el)) {
                 // GenericInstance is an extension: a single value is a tag.
                 if (!node.tags) node.tags = [];
@@ -2868,6 +2910,32 @@ class JsonGenerator {
     }
 
     /**
+     * Deployment groups declared directly on an instance, as names, deduplicated and
+     * sorted alphabetically like the reference's TreeSet. Besides the explicit
+     * `deploymentGroups` references this covers the single bare value after the element
+     * reference, which the grammar keeps as an ambiguous value until the known groups
+     * are collected (see resolveAllInstanceValues).
+     */
+    private directDeploymentGroupNames(node: any): string[] {
+        const names: string[] = [];
+        const add = (value: string | undefined) => {
+            const name = C4Utils.stripQuotes(value);
+            if (name && !names.includes(name)) {
+                names.push(name);
+            }
+        };
+
+        for (const ref of node.deploymentGroups ?? []) {
+            add(ref?.ref?.name);
+        }
+        for (const name of node.resolvedDeploymentGroups ?? []) {
+            add(name);
+        }
+
+        return names.sort();
+    }
+
+    /**
      * Returns the set of deployment group names for an instance node (ContainerInstance,
      * SoftwareSystemInstance, GenericInstance).
      *
@@ -2883,14 +2951,9 @@ class JsonGenerator {
     private getInstanceDeploymentGroupNames(node: any): Set<string> {
         const groups = new Set<string>();
 
-        // 1. Check direct deploymentGroups references on the instance
-        if (Array.isArray(node.deploymentGroups)) {
-            for (const ref of node.deploymentGroups) {
-                if (ref.ref && ref.ref.name) {
-                    const name = C4Utils.stripQuotes(ref.ref.name);
-                    if (name) groups.add(name);
-                }
-            }
+        // 1. Check direct deployment groups declared on the instance
+        for (const name of this.directDeploymentGroupNames(node)) {
+            groups.add(name);
         }
 
         // 2. If no direct groups, inherit from parent DeploymentNode chain
@@ -3301,6 +3364,7 @@ class JsonGenerator {
                     group: this.extractGroup(ssi),
                     tags: this.extractTags(ssi, 'Software System Instance'),
                     url: this.url(ssi),
+                    deploymentGroups: this.onlyIfNotEmpty(this.directDeploymentGroupNames(ssi)),
                     softwareSystemId: this.getId(ssi.softwareSystem.ref),
                     environment: this.getEnvironment(ssi),
                     relationships: this.onlyIfNotEmpty(this.extractRelationshipsForSoftwareSystemInstance(ssi).map(el => this.relationshipToJson(el)))
@@ -3320,6 +3384,7 @@ class JsonGenerator {
                     group: this.extractGroup(ci),
                     tags: this.extractTags(ci, 'Container Instance'),
                     url: this.url(ci),
+                    deploymentGroups: this.onlyIfNotEmpty(this.directDeploymentGroupNames(ci)),
                     relationships: this.onlyIfNotEmpty(this.extractRelationshipsForContainerInstance(ci).map(el => this.relationshipToJson(el))),
                     parentId: this.getId(this.resolveDeploymentNodeParent(ci))
                 };

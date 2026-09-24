@@ -112,6 +112,19 @@ function containerNames(json: any): Map<string, string> {
     return names;
 }
 
+/** Container instances grouped by container name, in declaration order. */
+function instancesByContainerName(json: any): Map<string, any[]> {
+    const names = containerNames(json);
+    const byName = new Map<string, any[]>();
+    for (const ci of collect(json.model, node => Array.isArray(node.containerInstances)).flatMap(node => node.containerInstances)) {
+        const name = names.get(ci.containerId) ?? '';
+        const list = byName.get(name) ?? [];
+        list.push(ci);
+        byName.set(name, list);
+    }
+    return byName;
+}
+
 function instanceIds(json: any): { ui: string; backend: string; lb: string } {
     const names = containerNames(json);
     const containerInstances = collect(json.model, node => Array.isArray(node.containerInstances)).flatMap(node => node.containerInstances);
@@ -192,6 +205,8 @@ describe('no-relationship fixture', () => {
             .find((ci: any) => ci.environment === environment && names.get(ci.containerId)?.includes(namePart));
     }
 
+
+
     it('matches expected behaviour across all deployment environments', async () => {
         const json = await generate(readFileSync(fixturePath, 'utf-8'));
         const relationships = allRelationships(json);
@@ -218,5 +233,89 @@ describe('no-relationship fixture', () => {
             // Empty technology is omitted.
             expect(fromLb?.technology).toBeUndefined();
         }
+    });
+});
+
+const deploymentGroupsDsl = `workspace {
+    !identifiers hierarchical
+    model {
+        ss = softwareSystem "Software System" {
+            ui = container "UI"
+            backend = container "Backend"
+            ui -> backend "Makes API requests to" "JSON/HTTPS"
+        }
+        live = deploymentEnvironment "Live" {
+            serviceInstance1 = deploymentGroup "Service Instance 1"
+            serviceInstance2 = deploymentGroup "Service Instance 2"
+            node = deploymentNode "Node" {
+                uiOne = containerInstance ui serviceInstance1
+                backendOne = containerInstance backend serviceInstance1
+                uiTwo = containerInstance ui serviceInstance2
+                backendTwo = containerInstance backend serviceInstance2
+            }
+            nodeInherited = deploymentNode "Inherited Node" {
+                deploymentGroup serviceInstance1
+                uiInherited = containerInstance ui
+            }
+        }
+    }
+}
+`;
+
+describe('deployment groups', () => {
+    it('emits the single deployment group of an instance', async () => {
+        const json = await generate(deploymentGroupsDsl);
+        const instances = instancesByContainerName(json);
+        expect(instances.get('UI')![0].deploymentGroups).toEqual(['Service Instance 1']);
+        expect(instances.get('UI')![1].deploymentGroups).toEqual(['Service Instance 2']);
+        expect(instances.get('Backend')![0].deploymentGroups).toEqual(['Service Instance 1']);
+        expect(instances.get('Backend')![1].deploymentGroups).toEqual(['Service Instance 2']);
+    });
+
+    it('keeps the deployment groups of the node out of the instance field', async () => {
+        const json = await generate(deploymentGroupsDsl);
+        // The reference inherits node groups only for relationship scoping, not in the
+        // instance's own deploymentGroups
+        const inherited = instancesByContainerName(json).get('UI')![2];
+        expect(inherited.deploymentGroups).toBeUndefined();
+    });
+
+    it('emits a comma separated group list sorted by name', async () => {
+        const json = await generate(`workspace {
+    model {
+        ss = softwareSystem "Software System" {
+            c = container "Container"
+        }
+        live = deploymentEnvironment "Live" {
+            serviceInstance2 = deploymentGroup "Service Instance 2"
+            serviceInstance1 = deploymentGroup "Service Instance 1"
+            node = deploymentNode "Node" {
+                instance = containerInstance c serviceInstance2,serviceInstance1
+            }
+        }
+    }
+}
+`);
+        const instance = collect(json.model, node => Array.isArray(node.containerInstances)).flatMap(node => node.containerInstances)[0];
+        expect(instance.deploymentGroups).toEqual(['Service Instance 1', 'Service Instance 2']);
+    });
+
+    it('projects a relationship only between instances that share a group', async () => {
+        const json = await generate(deploymentGroupsDsl);
+        const instances = instancesByContainerName(json);
+        const uiOne = instances.get('UI')![0];
+        const uiTwo = instances.get('UI')![1];
+        const backendOne = instances.get('Backend')![0];
+        const backendTwo = instances.get('Backend')![1];
+        const relationships = allRelationships(json);
+        const projected = (source: any, destination: any) =>
+            relationships.some(r => r.sourceId === source.id && r.destinationId === destination.id);
+
+        // Same group: projected
+        expect(projected(uiOne, backendOne)).toBe(true);
+        expect(projected(uiTwo, backendTwo)).toBe(true);
+        // Different groups: the reference does not project across them
+        expect(projected(uiOne, backendTwo)).toBe(false);
+        expect(projected(uiTwo, backendOne)).toBe(false);
     });
 });

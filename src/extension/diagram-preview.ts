@@ -19,8 +19,10 @@ import {
   Uri,
   ViewColumn,
   WebviewPanel,
-  window
+  window,
+  workspace
 } from "vscode";
+import { applyWorkspaceFileMetadata } from "./workspace-metadata";
 
 export class DiagramPreview {
   private panel: WebviewPanel | undefined;
@@ -160,6 +162,7 @@ export class DiagramPreview {
         textMeasurements: Record<string, any> | undefined,
         fetchThemes?: (urls: string[] | undefined) => Promise<{ url: string; content: string }[] | undefined>
   ): Promise<void> {
+        await this.applyFileMetadata(json, docUri);
         await this.updateWebView(json, viewKey, docUri, undefined, generation, textMeasurements);
         if (this.currentThemes !== undefined || this.themesFetched || !fetchThemes) {
           return;
@@ -174,6 +177,25 @@ export class DiagramPreview {
           // (unreachable URL, or a built-in theme the server does not resolve):
           // let the webview load them itself.
           this.requestThemeFallback();
+        }
+  }
+
+  /**
+   * Adds the workspace file's timestamp to the JSON before it reaches the webview,
+   * so the diagram metadata block can show when the workspace last changed. The
+   * file system API is used instead of the language server's provider because the
+   * latter has no file access in the web build.
+   */
+  private async applyFileMetadata(json: any, docUri: string | undefined): Promise<void> {
+        if (!json || !docUri) {
+          return;
+        }
+        try {
+          const stat = await workspace.fs.stat(Uri.parse(docUri));
+          applyWorkspaceFileMetadata(json, stat.mtime);
+        } catch {
+          // Untitled documents and schemes without a timestamp: keep the date unset.
+          applyWorkspaceFileMetadata(json, undefined);
         }
   }
 

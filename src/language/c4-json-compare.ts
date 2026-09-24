@@ -78,6 +78,8 @@ const IGNORED_KEYS = new Set([
     'properties',
     // Empty configuration at root level — the generator does not produce it
     'configuration',
+    // Workspace file metadata — depends on the file on disk, not on the DSL
+    'lastModifiedDate', 'lastModifiedAgent',
     // Emitted on landscape/context views but not on container/component views —
     // skip to avoid mismatch noise
     'enterpriseBoundaryVisible',

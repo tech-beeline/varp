@@ -329,7 +329,7 @@ class JsonGenerator {
             name: this.substitute(this.inheritedWorkspaceValue(workspace, ws => ws.name)) || "Name",
             description: this.substitute(this.inheritedWorkspaceValue(workspace, ws => this.description(ws))) || "Description",
             properties: Object.keys(this.propertiesWorkspace).length > 0 ? this.propertiesWorkspace : undefined,
-            configuration: {},
+            configuration: this.workspaceConfiguration(workspace),
             // lastModifiedDate/lastModifiedAgent are added by the extension host, which
             // is the only side that can read the file timestamp in the web build too.
             model: model,
@@ -344,9 +344,11 @@ class JsonGenerator {
                 customViews:  this.extractCustomViews(workspace),
                 imageViews: this.extractImageViews(workspace),
                 configuration: {
-                    properties: this.propertiesViews,
+                    properties: Object.keys(this.propertiesViews).length > 0 ? this.propertiesViews : undefined,
                     themes: themesArray.length > 0 ? themesArray : undefined,
-                    styles: this.styles.elements.length > 0 || this.styles.relationships.length > 0 ? this.styles : undefined,
+                    // The reference serializes the styles and terminology beans even when
+                    // they are empty (an empty bean is still a value).
+                    styles: this.styles.elements.length > 0 || this.styles.relationships.length > 0 ? this.styles : {},
                     terminology: this.terminology,
                     metadataSymbols: this.metadataSymbols
                 }
@@ -3717,6 +3719,28 @@ class JsonGenerator {
      *
      * Returns undefined if no autolayout keyword is present in the DSL view.
      */
+    /**
+     * The workspace `configuration` block: the scope and visibility. The users block
+     * is not included, because its body is parsed as opaque text.
+     */
+    private workspaceConfiguration(workspace: Workspace): any {
+        const configuration: any = {};
+        for (const block of workspace.configurationBlocks ?? []) {
+            for (const scope of block.scopeProps ?? []) {
+                const value = String(scope.value ?? '').toLowerCase();
+                if (value === 'landscape') configuration.scope = 'Landscape';
+                else if (value === 'softwaresystem') configuration.scope = 'SoftwareSystem';
+                else delete configuration.scope; // scope none
+            }
+            for (const visibility of block.visibilityProps ?? []) {
+                const value = String(visibility.value ?? '').toLowerCase();
+                if (value === 'private') configuration.visibility = 'Private';
+                else if (value === 'public') configuration.visibility = 'Public';
+            }
+        }
+        return configuration;
+    }
+
     private transformAutoLayout(view: any): any {
         const autoLayout = view.autoLayoutProps?.[0];
         const direction = this.mapDirection(autoLayout?.direction);

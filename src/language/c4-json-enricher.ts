@@ -35,6 +35,10 @@ import {
     isC4Document,
     isComponent,
     isContainer,
+    isGroup,
+    isIdentifiersProperty,
+    isNamedElement,
+    isRelationship,
     isSoftwareSystem,
     isWorkspace,
     type Component,
@@ -72,6 +76,26 @@ function documentationFormat(name: string): 'Markdown' | 'AsciiDoc' {
     const dot = name.lastIndexOf('.');
     const extension = dot < 0 ? '' : name.substring(dot);
     return ASCIIDOC_EXTENSIONS.includes(extension) ? 'AsciiDoc' : 'Markdown';
+}
+
+/**
+ * A random version 4 UUID, the identifier used for an element that declares none.
+ * Uses the platform generator when available and falls back to random bytes.
+ */
+function generateUuid(): string {
+    const cryptoApi = (globalThis as any).crypto;
+    if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
+
+    const bytes = new Uint8Array(16);
+    if (cryptoApi?.getRandomValues) {
+        cryptoApi.getRandomValues(bytes);
+    } else {
+        for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /**
@@ -199,7 +223,20 @@ export class C4JsonEnricher {
 
         // Inject per-element fields (url/properties/perspectives/technology) that
         // the render pipeline drops when defined directly on the DSL element.
-        this.enrichElementFields(root, json?.model, rootUri);
+        this.enrichElementFields(root, json?.model, rootUri, this.isHierarchicalIdentifiers(root));
+    }
+
+    /** Whether `!identifiers hierarchical` is in effect for the workspace. */
+    private isHierarchicalIdentifiers(root: AstNode): boolean {
+        // The directive applies to the declarations that follow it; a workspace declares
+        // it once, before the model, so the last directive determines the mode.
+        let hierarchical = false;
+        for (const node of AstUtils.streamAllContents(root)) {
+            if (isIdentifiersProperty(node)) {
+                hierarchical = node.style === 'hierarchical';
+            }
+        }
+        return hierarchical;
     }
 
     /** Deduplicates decisions by id (all owner-scoped decisions share one scope). */
@@ -220,20 +257,55 @@ export class C4JsonEnricher {
      * same flat-id function the generator uses, so the match is deterministic and
      * unambiguous (no name-path matching).
      */
-    private enrichElementFields(root: AstNode, model: any, rootUri: string): void {
+    private enrichElementFields(root: AstNode, model: any, rootUri: string, hierarchicalIdentifiers: boolean): void {
         if (!model) return;
 
         // Build an index of the JSON model: element id -> JSON element object.
         const byId = new Map<string, any>();
         this.indexModel(model, byId);
 
+        // Elements are visited in document order (parents before children), so a child's
+        // hierarchical identifier can reuse the identifier computed for its parent.
+        const identifiers = new Map<AstNode, string>();
         for (const node of AstUtils.streamAllContents(root)) {
-            if (!this.hasEnrichableFields(node)) continue;
+            let identifier: string | undefined;
+            if (isRelationship(node)) {
+                // Relationships are only recorded when they carry an explicit identifier.
+                identifier = this.astIdentifier(node);
+            } else if (isNamedElement(node)) {
+                // Every element is registered, with a generated identifier when none was
+                // declared (the reference uses a random UUID).
+                const declared = this.astIdentifier(node) ?? generateUuid();
+                identifier = hierarchicalIdentifiers
+                    ? this.withHierarchicalPrefix(node, declared, identifiers)
+                    : declared;
+                identifiers.set(node, identifier);
+            } else {
+                identifier = this.astIdentifier(node);
+            }
+
+            if (identifier === undefined && !this.hasEnrichableFields(node)) continue;
             const nodeId = flatId(node, rootUri);
             const target = byId.get(nodeId);
             if (!target) continue;
-            this.applyElementFields(target, node);
+            this.applyElementFields(target, node, identifier);
         }
+    }
+
+    /**
+     * Prefixes a hierarchical identifier with the identifier of the closest element
+     * ancestor, skipping groups (they are visual only and are not model parents).
+     */
+    private withHierarchicalPrefix(node: any, identifier: string, identifiers: Map<AstNode, string>): string {
+        let current = node?.$container;
+        while (current) {
+            if (!isGroup(current)) {
+                const parent = identifiers.get(current);
+                if (parent !== undefined) return `${parent}.${identifier}`;
+            }
+            current = current.$container;
+        }
+        return identifier;
     }
 
     /** Recursively indexes JSON model elements by their id. */
@@ -264,7 +336,7 @@ export class C4JsonEnricher {
         );
     }
 
-    private applyElementFields(target: any, node: any): void {
+    private applyElementFields(target: any, node: any, identifier: string | undefined): void {
         if (target.url === undefined) {
             const url = this.firstPropValue(node.urlProps);
             if (url !== undefined) target.url = url;
@@ -285,11 +357,10 @@ export class C4JsonEnricher {
             const healthChecks = this.collectHealthChecks(node.healthChecks);
             if (healthChecks) target.healthChecks = healthChecks;
         }
-        // The DSL identifier is recorded as a `structurizr.dsl.identifier`
-        // property for every element registered with an explicit identifier.
+        // The DSL identifier is recorded as a `structurizr.dsl.identifier` property for
+        // every element (a declared identifier, or a generated UUID when unassigned).
         // Merge it into (or create) the properties map without clobbering other
         // properties.
-        const identifier = this.astIdentifier(node);
         if (identifier !== undefined) {
             if (target.properties === undefined) target.properties = {};
             if (target.properties['structurizr.dsl.identifier'] === undefined) {

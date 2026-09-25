@@ -43,9 +43,6 @@ describe('c4-json-identifiers-vendor', () => {
 		const json = await generator.generate(workspace, uri);
 		await new C4JsonEnricher(shared).enrich(uri, json);
 
-		// `dsl` is added by the enricher for the preview and is not part of the JSON shape.
-		delete json.dsl;
-
 		// The identifier properties are ignored by the JSON comparator, so they are
 		// asserted directly: hierarchical identifiers are the dotted path of the
 		// declared identifiers from the root down to the element.

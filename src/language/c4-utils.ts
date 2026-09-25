@@ -299,3 +299,14 @@ function contextElement(rel: any): any | undefined {
     }
     return undefined;
 }
+
+/**
+ * The declared identifier of an element or relationship node. `ElementAssignment`
+ * carries the assignment terminal ("name = ..."), so only a trailing '=' and
+ * surrounding quotes are stripped. Returns undefined when no id is declared.
+ */
+export function declaredIdentifier(node: any): string | undefined {
+    const id = node?.id;
+    if (id === undefined || id === null) return undefined;
+    return String(id).replace(/^["']|["']$/g, '').replace(/=\s*$/, '').trim();
+}

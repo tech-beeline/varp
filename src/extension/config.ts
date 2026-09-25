@@ -22,5 +22,6 @@ export {
     COPY_CAPABILITY_CODE,
     SHOW_PATTERN_DESCRIPTION,
     GET_PATTERN_DSL,
-    REFRESH_PATTERNS
+    REFRESH_PATTERNS,
+    EXPORT_JSON
 } from '../shared/commands';

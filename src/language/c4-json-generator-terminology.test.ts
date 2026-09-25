@@ -76,9 +76,9 @@ describe('terminology', () => {
         expect(json.views.configuration.terminology.metadata).toBeUndefined();
     });
 
-    it('defaults metadataSymbols to SquareBrackets and terminology to an empty object', async () => {
+    it('omits metadataSymbols by default and keeps terminology an empty object', async () => {
         const json = await generate('workspace {\n    model {\n        user = person "User"\n    }\n}\n');
-        expect(json.views.configuration.metadataSymbols).toBe('SquareBrackets');
+        expect(json.views.configuration.metadataSymbols).toBeUndefined();
         expect(json.views.configuration.terminology).toEqual({});
     });
 

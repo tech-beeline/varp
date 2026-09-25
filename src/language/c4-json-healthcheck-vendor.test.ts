@@ -43,9 +43,6 @@ describe('c4-json-healthcheck-vendor', () => {
 		const json = await generator.generate(workspace, uri);
 		await new C4JsonEnricher(shared).enrich(uri, json);
 
-		// `dsl` is added by the enricher for the preview and is not part of the JSON shape.
-		delete json.dsl;
-
 		const expected = JSON.parse(readFileSync(resolve(dirname(FIXTURE), 'expected.json'), 'utf-8'));
 		const diffs = compareJson(json, expected);
 		if (diffs.length > 0) {

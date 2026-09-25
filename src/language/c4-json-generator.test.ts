@@ -122,7 +122,7 @@ describe('C4JsonGenerator', () => {
 
             const expected = loadExpectedJSON(testCase.jsonPath);
             
-            const diffs = compareJson(actual, expected);
+            const diffs = compareJson(actual, expected, '', { mode: 'render' });
             
             if (diffs.length > 0) {
                 console.log(`Differences for "${testCase.name}":`);

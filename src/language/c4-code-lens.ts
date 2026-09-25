@@ -18,9 +18,9 @@ import { type  LangiumDocument, type  MaybePromise  } from 'langium';
 import { AstUtils , CstUtils } from 'langium';
 import { type CodeLensProvider } from 'langium/lsp';
 import { CodeLens, Command, type CodeLensParams, Range as LspRange } from 'vscode-languageserver';
-import { isRenderedView } from '../generated/ast';
+import { isRenderedView, isWorkspace } from '../generated/ast';
 import { C4Services } from './c4-module';
-import { DIAGRAM_PREVIEW } from '../shared/commands';
+import { DIAGRAM_PREVIEW, EXPORT_JSON } from '../shared/commands';
 
 /**
  * Provides CodeLens buttons above each diagram view in the editor.
@@ -54,7 +54,16 @@ export class C4CodeLensProvider implements CodeLensProvider {
         const cachedJson = this.services.generation.C4GeneratorHandler.getCachedContentForUri(document.uri.toString());
 
         for (const node of AstUtils.streamAst(root)) {
-            if (isRenderedView(node)) {
+            if (isWorkspace(node)) {
+                const cstNode = node.$cstNode;
+                if (cstNode) {
+                    const startPoint = cstNode.range.start;
+                    const lens = CodeLens.create({ start: startPoint, end: startPoint });
+                    // Exports the workspace to the full JSON produced by the enricher.
+                    lens.command = Command.create('$(file-code) Export Workspace JSON', EXPORT_JSON, rootUri);
+                    lenses.push(lens);
+                }
+            } else if (isRenderedView(node)) {
                 const cstNode = node.$cstNode;
                 if (cstNode) {
 

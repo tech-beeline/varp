@@ -18,7 +18,7 @@ import { commands, ExtensionContext, ViewColumn, workspace, window, Uri } from "
 import { createWorkspaceFileRequestHandlers } from "./workspace-file-requests";
 import { C4Snippets } from "./c4-snippets";
 import { CapabilityProvider } from "./capabilities";
-import { DIAGRAM_PREVIEW } from "./config";
+import { DIAGRAM_PREVIEW, EXPORT_JSON } from "./config";
 import { DiagramPreview } from "./diagram-preview";
 import { PatternProvider } from "./patterns";
 
@@ -493,6 +493,38 @@ export function init(context: ExtensionContext): void {
             await workspace.fs.writeFile(uri, buffer);
 
             window.showInformationMessage('Exported diagram to SVG format.');
+        })
+    );
+
+    // ===== Command: Export the workspace to the full (enriched) JSON =====
+    context.subscriptions.push(
+        commands.registerCommand(EXPORT_JSON, async (docUri?: string) => {
+            const uri = docUri ?? window.activeTextEditor?.document.uri.toString();
+            if (!uri || !languageClient) {
+                window.showErrorMessage('No workspace to export.');
+                return;
+            }
+
+            // The full JSON is the render JSON enriched with the fields the render
+            // pipeline drops (documentation, element url/properties/perspectives,
+            // health checks, DSL identifiers).
+            const res: any = await languageClient.sendRequest('c4/getFullContentForUri', { uri });
+            if (!res?.json) {
+                window.showErrorMessage('Failed to build the workspace JSON.');
+                return;
+            }
+
+            const saveUri = await window.showSaveDialog({
+                filters: { 'JSON': ['json'] },
+                defaultUri: workspace.workspaceFolders?.[0]?.uri
+                    ? Uri.joinPath(workspace.workspaceFolders[0].uri, 'workspace.json')
+                    : undefined
+            });
+
+            if (!saveUri) return;
+
+            await workspace.fs.writeFile(saveUri, new TextEncoder().encode(JSON.stringify(res.json, null, 2)));
+            window.showInformationMessage('Exported workspace JSON.');
         })
     );
 }

@@ -39,6 +39,25 @@ function dropMadrDates(json: any): void {
 	}
 }
 
+/**
+ * Drops documentation image payloads. The enricher embeds the raw file bytes while
+ * the reference re-encodes bitmaps, so the base64 differs although the image
+ * name/type still match.
+ */
+function dropImageContents(node: any): void {
+	if (!node || typeof node !== 'object') return;
+	if (Array.isArray(node)) {
+		node.forEach(dropImageContents);
+		return;
+	}
+	for (const [key, value] of Object.entries(node)) {
+		if (key === 'documentation' && value && typeof value === 'object' && Array.isArray((value as any).images)) {
+			for (const image of (value as any).images) delete image.content;
+		}
+		dropImageContents(value);
+	}
+}
+
 describe('c4-json-decisions-vendor', () => {
 	it('matches the expected JSON for adrtools, madr and log4brains decisions', async () => {
 		const services = createC4Services({ connection: undefined as any, ...NodeFileSystem }).C4;
@@ -55,11 +74,13 @@ describe('c4-json-decisions-vendor', () => {
 		const json = await generator.generate(workspace, uri);
 		await new C4JsonEnricher(shared).enrich(uri, json);
 
-		// `dsl` is added by the enricher for the preview and is not part of the JSON shape.
-		delete json.dsl;
-		dropMadrDates(json);
-
 		const expected = JSON.parse(readFileSync(resolve(dirname(FIXTURE), 'expected.json'), 'utf-8'));
+
+		dropMadrDates(json);
+		dropMadrDates(expected);
+		dropImageContents(json);
+		dropImageContents(expected);
+
 		const diffs = compareJson(json, expected);
 		if (diffs.length > 0) {
 			console.log('Differences:', JSON.stringify(diffs.slice(0, 30), null, 2));

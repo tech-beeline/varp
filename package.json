@@ -138,6 +138,11 @@
         "command": "varp.export-svg",
         "title": "Export to SVG (.svg)",
         "shortTitle": "Export to SVG"
+      },
+      {
+        "command": "varp.export-json",
+        "title": "Export Workspace JSON (.json)",
+        "shortTitle": "Export Workspace JSON"
       }
     ],
     "languages": [

@@ -16,7 +16,7 @@
 
 import { AstNode, AstUtils, Reference } from 'langium';
 import { URI } from 'vscode-uri';
-import { flatId, C4Utils, archetypeChain, archetypeInstanceType, type FlatIdResolvers } from './c4-utils';
+import { flatId, C4Utils, archetypeChain, archetypeInstanceType, declaredIdentifier, type FlatIdResolvers } from './c4-utils';
 import { encodePlantUml } from './plantuml-encoder';
 import { Graphviz } from '@hpcc-js/wasm-graphviz';
 
@@ -84,6 +84,27 @@ import { SHAPE_NORMALIZE, BORDER_NORMALIZE, ROUTING_NORMALIZE, ICON_POSITION_NOR
 // Default theme constants
 const DEFAULT_THEME_URL = "https://static.structurizr.com/themes/default/theme.json";
 const DEFAULT_THEME_NAME = "default";
+
+/** Compares strings by UTF-16 code unit, matching the ordering of the model's style set. */
+function compareCodeUnits(a: string, b: string): number {
+    if (a < b) return -1;
+    if (a > b) return 1;
+    return 0;
+}
+
+/**
+ * Orders element/relationship styles the way the model serialises them: styles
+ * without a colour scheme first (by tag), then styles with one (by scheme/tag).
+ */
+function compareStylesByTag(a: any, b: any): number {
+    const aScheme = a?.colorScheme ?? null;
+    const bScheme = b?.colorScheme ?? null;
+    if (aScheme === null && bScheme === null) return compareCodeUnits(String(a?.tag ?? ''), String(b?.tag ?? ''));
+    if (aScheme === null) return -1;
+    if (bScheme === null) return 1;
+    return compareCodeUnits(`${aScheme}/${a?.tag ?? ''}`, `${bScheme}/${b?.tag ?? ''}`);
+}
+
 
 const DEFAULT_ELEMENT_FONT_SIZE = 24;
 
@@ -233,7 +254,13 @@ class JsonGenerator {
     /** Terminology overrides for diagram rendering (person, softwareSystem, container, etc.), populated from workspace terminology blocks */
     private terminology: Record<string, string> = {};
     /** Metadata symbol style (MetadataSymbols enum name), defaulting to SquareBrackets. */
-    private metadataSymbols = 'SquareBrackets';
+    private metadataSymbols: string | undefined;
+
+    /**
+     * Global view order and auto-key flag, keyed by the view AST node. Views are
+     * numbered in creation order across every view type, starting at 1.
+     */
+    private readonly viewOrderByNode = new Map<any, { order: number; generatedKey: boolean }>();
 
     /**
      * DOT graph and measurement candidates of every auto-laid-out view. Kept after the
@@ -313,12 +340,15 @@ class JsonGenerator {
         const themesArray = Array.from(this.themes);
 
         const model = {
-            properties: this.propertiesModel,
+            properties: Object.keys(this.propertiesModel).length > 0 ? this.propertiesModel : undefined,
             customElements: this.extractCustomElements(),
             people: this.extractPeople(),
             softwareSystems: this.extractSystems(),
             deploymentNodes: this.extractAllRootDeploymentNodes()
         };
+
+        // Number views in creation order across every view type (1-based).
+        this.assignViewOrder(workspace);
 
         // Assemble the final JSON output object in Structurizr-compatible format
         const jsonOutput = {
@@ -328,6 +358,9 @@ class JsonGenerator {
             id: 1,
             name: this.substitute(this.inheritedWorkspaceValue(workspace, ws => ws.name)) || "Name",
             description: this.substitute(this.inheritedWorkspaceValue(workspace, ws => this.description(ws))) || "Description",
+            // Documentable nodes always carry a documentation object (empty when the
+            // workspace has none), because clients read `documentation.sections`.
+            documentation: {},
             properties: Object.keys(this.propertiesWorkspace).length > 0 ? this.propertiesWorkspace : undefined,
             configuration: this.workspaceConfiguration(workspace),
             // lastModifiedDate/lastModifiedAgent are added by the extension host, which
@@ -346,9 +379,13 @@ class JsonGenerator {
                 configuration: {
                     properties: Object.keys(this.propertiesViews).length > 0 ? this.propertiesViews : undefined,
                     themes: themesArray.length > 0 ? themesArray : undefined,
-                    // The reference serializes the styles and terminology beans even when
-                    // they are empty (an empty bean is still a value).
-                    styles: this.styles.elements.length > 0 || this.styles.relationships.length > 0 ? this.styles : {},
+                    // Styles and terminology are always serialized, even when empty.
+                    styles: this.styles.elements.length > 0 || this.styles.relationships.length > 0
+                        ? {
+                            elements: [...this.styles.elements].sort(compareStylesByTag),
+                            relationships: [...this.styles.relationships].sort(compareStylesByTag)
+                        }
+                        : {},
                     terminology: this.terminology,
                     metadataSymbols: this.metadataSymbols
                 }
@@ -828,6 +865,9 @@ class JsonGenerator {
             node.elementStyles?.forEach(style => this.styles.elements.push(this.transformElementStyle(style)));
             // Process flat relationship styles at file root
             node.relationshipStyles?.forEach(style => this.styles.relationships.push(this.transformRelationshipStyle(style)));
+            // Process root-level light/dark style blocks
+            for (const light of node.lightBlocks ?? []) this.addStyleBlock(light, 'Light');
+            for (const dark of node.darkBlocks ?? []) this.addStyleBlock(dark, 'Dark');
         }
         const anyNode = node as any;
         anyNode.includes?.forEach((includeDirective: Include) => {
@@ -841,12 +881,14 @@ class JsonGenerator {
     }
     
     /**
-     * Processes a StylesBlock: transforms element styles and relationship styles,
-     * then recurses into any include directives within the block.
+     * Processes a StylesBlock: transforms element styles and relationship styles
+     * (including the light/dark colour-scheme variants), then recurses into any
+     * include directives within the block.
      */
     private processStylesBlock(block: StylesBlock, visited: Set<string>) {
-        block.elementStyles?.forEach(style => this.styles.elements.push(this.transformElementStyle(style)));
-        block.relationshipStyles?.forEach(style => this.styles.relationships.push(this.transformRelationshipStyle(style)));
+        this.addStyleBlock(block, undefined);
+        for (const light of block.lightBlocks ?? []) this.addStyleBlock(light, 'Light');
+        for (const dark of block.darkBlocks ?? []) this.addStyleBlock(dark, 'Dark');
         if (block.includes && Array.isArray(block.includes)) {
             for (const inc of block.includes) {
                 if (inc.file) {
@@ -857,110 +899,118 @@ class JsonGenerator {
         }
     }
 
+    /** Transforms the element and relationship styles of a styles/light/dark block. */
+    private addStyleBlock(block: { elementStyles?: ElementStyle[]; relationshipStyles?: RelationshipStyle[] }, colorScheme: string | undefined): void {
+        block.elementStyles?.forEach(style => this.styles.elements.push(this.transformElementStyle(style, colorScheme)));
+        block.relationshipStyles?.forEach(style => this.styles.relationships.push(this.transformRelationshipStyle(style, colorScheme)));
+    }
+
     /**
-     * Safely adds a property to the result object if the value is defined.
-     * Supports extracting .value from Langium property objects.
+     * Reads the text a style property node holds: the `value` of its single child,
+     * with surrounding quotes removed. Returns undefined when the property is absent.
      */
-    private addIfDefined(target: any, key: string, prop: any[] | string | undefined) {
-        if(typeof prop === 'string') {
-            target[key] = C4Utils.stripQuotes(prop);
-        } else {
-            const val = prop?.at(0);
-            if (val !== undefined && val !== null) {
-                // If it's an object with a 'value' field (e.g., { value: '#ffffff' }), extract it
-                // If it's a primitive (string, number, boolean), use as-is
-                target[key] = (typeof val === 'object' && 'value' in val) ? val.value : val;
-            }
-        }
+    private stylePropertyText(prop: any[] | string | undefined): string | undefined {
+        if (typeof prop === 'string') return C4Utils.stripQuotes(prop);
+        const val = prop?.at(0);
+        if (val === undefined || val === null) return undefined;
+        const raw = (typeof val === 'object' && 'value' in val) ? val.value : val;
+        if (raw === undefined || raw === null) return undefined;
+        return C4Utils.stripQuotes(String(raw));
+    }
+
+    /** Adds a string style property, with surrounding quotes removed. */
+    private addStringIfDefined(target: any, key: string, prop: any[] | string | undefined): void {
+        const value = this.stylePropertyText(prop);
+        if (value !== undefined && value !== '') target[key] = value;
+    }
+
+    /** Adds an integer style property. */
+    private addNumberIfDefined(target: any, key: string, prop: any[] | string | undefined): void {
+        const value = this.stylePropertyText(prop);
+        if (value === undefined || value === '') return;
+        const parsed = Number.parseInt(value, 10);
+        if (Number.isFinite(parsed)) target[key] = parsed;
+    }
+
+    /** Adds an integer style property clamped to the given inclusive range. */
+    private addClampedNumberIfDefined(target: any, key: string, prop: any[] | string | undefined, min: number, max: number): void {
+        const value = this.stylePropertyText(prop);
+        if (value === undefined || value === '') return;
+        const parsed = Number.parseInt(value, 10);
+        if (!Number.isFinite(parsed)) return;
+        target[key] = Math.min(max, Math.max(min, parsed));
+    }
+
+    /** Adds a hex colour style property, lower-cased. */
+    private addColorIfDefined(target: any, key: string, prop: any[] | string | undefined): void {
+        const value = this.stylePropertyText(prop);
+        if (value !== undefined && value !== '') target[key] = value.toLowerCase();
+    }
+
+    /** Adds a style property normalised through the given enum name map. */
+    private addEnumIfDefined(target: any, key: string, prop: any[] | string | undefined, map: Record<string, string>): void {
+        const value = this.stylePropertyText(prop);
+        if (value === undefined || value === '') return;
+        target[key] = map[value.toLowerCase()] ?? value;
     }
 
     /**
      * Adds a boolean style property, reading the 'true'/'false' text the DSL stores and
      * writing the JSON boolean the viewer expects.
      */
-    private addBooleanIfDefined(target: any, key: string, prop: any[] | undefined) {
-        const val = prop?.at(0);
-        if (val === undefined || val === null) return;
-        const raw = (typeof val === 'object' && 'value' in val) ? val.value : val;
-        if (raw === undefined || raw === null) return;
-        target[key] = String(C4Utils.stripQuotes(String(raw))).toLowerCase() === 'true';
+    private addBooleanIfDefined(target: any, key: string, prop: any[] | undefined): void {
+        const value = this.stylePropertyText(prop);
+        if (value === undefined || value === '') return;
+        target[key] = value.toLowerCase() === 'true';
     }
 
     /**
-     * Transforms an ElementStyle AST node into a plain JSON object.
-     * Normalizes shape, border, and other style properties to PascalCase (Structurizr convention).
+     * Transforms an ElementStyle AST node into the JSON object the viewer expects:
+     * integer fields stay numbers, hex colours are lower-cased, and shape/border/icon
+     * position are normalised to the PascalCase the model serialises.
      */
-    private transformElementStyle(style: ElementStyle) {
-        const result: any = { };
-        this.addIfDefined(result, 'tag', style.tag);
-        this.addIfDefined(result, 'background', style.backgroundProps);
-        this.addIfDefined(result, 'color', style.colorProps);
-        this.addIfDefined(result, 'shape', style.shapeProps);
-        // Normalize shape to PascalCase (Box, Cylinder, WebBrowser, etc.)
-        if (result.shape && typeof result.shape === 'string') {
-            const normalized = SHAPE_NORMALIZE[result.shape.toLowerCase()];
-            if (normalized) {
-                result.shape = normalized;
-            }
-        }
-        this.addIfDefined(result, 'icon', style.iconProps);
-        this.addIfDefined(result, 'iconPosition', style.iconPositionProps);
-        // Normalize icon position to PascalCase (Top, Bottom, Left)
-        if (result.iconPosition && typeof result.iconPosition === 'string') {
-            const normalized = ICON_POSITION_NORMALIZE[result.iconPosition.toLowerCase()];
-            if (normalized) {
-                result.iconPosition = normalized;
-            }
-        }
-        this.addIfDefined(result, 'width', style.widthProps);
-        this.addIfDefined(result, 'height', style.heightProps);
-        this.addIfDefined(result, 'border', style.borderProps);
-        // Normalize border to PascalCase (Solid, Dashed, Dotted)
-        if (result.border && typeof result.border === 'string') {
-            const normalized = BORDER_NORMALIZE[result.border.toLowerCase()];
-            if (normalized) {
-                result.border = normalized;
-            }
-        }
-        this.addIfDefined(result, 'opacity', style.opacityProps);
-        this.addIfDefined(result, 'fontSize', style.fontSizeProps);
+    private transformElementStyle(style: ElementStyle, colorScheme?: string) {
+        const result: any = {};
+        this.addStringIfDefined(result, 'tag', style.tag);
+        if (colorScheme) result.colorScheme = colorScheme;
+        this.addNumberIfDefined(result, 'width', style.widthProps);
+        this.addNumberIfDefined(result, 'height', style.heightProps);
+        this.addColorIfDefined(result, 'background', style.backgroundProps);
+        this.addColorIfDefined(result, 'stroke', style.strokeProps);
+        this.addClampedNumberIfDefined(result, 'strokeWidth', style.strokeWidthProps, 1, 10);
+        this.addColorIfDefined(result, 'color', style.colorProps);
+        this.addNumberIfDefined(result, 'fontSize', style.fontSizeProps);
+        this.addEnumIfDefined(result, 'shape', style.shapeProps, SHAPE_NORMALIZE);
+        this.addStringIfDefined(result, 'icon', style.iconProps);
+        this.addEnumIfDefined(result, 'iconPosition', style.iconPositionProps, ICON_POSITION_NORMALIZE);
+        this.addEnumIfDefined(result, 'border', style.borderProps, BORDER_NORMALIZE);
+        this.addClampedNumberIfDefined(result, 'opacity', style.opacityProps, 0, 100);
         this.addBooleanIfDefined(result, 'metadata', style.metadataProps);
         this.addBooleanIfDefined(result, 'description', style.descriptionProp);
-
         return result;
     }
 
     /**
-     * Transforms a RelationshipStyle AST node into a plain JSON object.
-     * Normalizes routing and style properties to PascalCase.
+     * Transforms a RelationshipStyle AST node into the JSON object the viewer expects:
+     * integer fields stay numbers, colours are lower-cased, and routing/line style are
+     * normalised to the PascalCase the model serialises.
      */
-    private transformRelationshipStyle(style: RelationshipStyle) {
+    private transformRelationshipStyle(style: RelationshipStyle, colorScheme?: string) {
         const result: any = {};
-
-        this.addIfDefined(result, 'tag', style.tag);
-        this.addIfDefined(result, 'thickness', style.thicknessProps);
-        this.addIfDefined(result, 'color', style.colorProps);
-        this.addIfDefined(result, 'fontSize', style.fontSizeProps);
-        this.addIfDefined(result, 'width', style.widthProps);
+        this.addStringIfDefined(result, 'tag', style.tag);
+        if (colorScheme) result.colorScheme = colorScheme;
+        this.addNumberIfDefined(result, 'thickness', style.thicknessProps);
+        this.addColorIfDefined(result, 'color', style.colorProps);
+        this.addNumberIfDefined(result, 'fontSize', style.fontSizeProps);
+        this.addNumberIfDefined(result, 'width', style.widthProps);
         this.addBooleanIfDefined(result, 'dashed', style.dashedProp);
-        this.addIfDefined(result, 'routing', style.routingProps);
-        // Normalize routing (Direct, Orthogonal, Curved)
-        if (result.routing && typeof result.routing === 'string') {
-            const normalized = ROUTING_NORMALIZE[result.routing.toLowerCase()];
-            if (normalized) result.routing = normalized;
-        }
-        this.addIfDefined(result, 'position', style.positionProps);
-        this.addIfDefined(result, 'opacity', style.opacityProps);
+        this.addEnumIfDefined(result, 'routing', style.routingProps, ROUTING_NORMALIZE);
+        this.addClampedNumberIfDefined(result, 'position', style.positionProps, 0, 100);
+        this.addClampedNumberIfDefined(result, 'opacity', style.opacityProps, 0, 100);
         this.addBooleanIfDefined(result, 'jump', style.jumpProps);
-        this.addIfDefined(result, 'style', style.styleProps);
-        // Normalize style for relationship (Solid, Dashed, Dotted)
-        if (result.style && typeof result.style === 'string') {
-            const normalized = BORDER_NORMALIZE[result.style.toLowerCase()];
-            if (normalized) result.style = normalized;
-        }
+        this.addEnumIfDefined(result, 'style', style.styleProps, BORDER_NORMALIZE);
         this.addBooleanIfDefined(result, 'metadata', style.metadataProps);
         this.addBooleanIfDefined(result, 'description', style.descriptionProp);
-
         return result;
     }
     
@@ -974,26 +1024,31 @@ class JsonGenerator {
         if (docUri && visited.has(docUri)) return;
         if (docUri) visited.add(docUri);
 
-        // Helper to extract themes from a ViewsBlock
-        const extractFromViews = (views: ViewsBlock) => {
-            // Single theme (!theme)
-            const t = C4Utils.stripQuotes(views.themeProps?.at(0)?.value);
-            if (t) {
-                this.themes.add(t === DEFAULT_THEME_NAME ? DEFAULT_THEME_URL : t);
-            }
-            // Theme array (!themes)
-            const themes = views.themesProps?.at(0);
-            themes?.values.map(t => C4Utils.stripQuotes(t)).
-            filter(t => t !== undefined).
-            map(t => t === DEFAULT_THEME_NAME ? DEFAULT_THEME_URL : t).
-            forEach(t => this.themes.add(t))
+        // Themes of an extended workspace come before the extending workspace's own.
+        if (isWorkspace(node) && node.extendsUri) {
+            const parent = this.resolveParentWorkspace(node, node.extendsUri);
+            if (parent) this.collectThemes(parent, visited);
+        }
+
+        // Reads !theme / !themes from a views, styles or root block.
+        const extractThemes = (holder: any) => {
+            const single = C4Utils.stripQuotes(holder.themeProps?.at(0)?.value);
+            if (single) this.themes.add(single === DEFAULT_THEME_NAME ? DEFAULT_THEME_URL : single);
+            holder.themesProps?.at(0)?.values?.forEach((value: string) => {
+                const theme = C4Utils.stripQuotes(value);
+                if (theme) this.themes.add(theme === DEFAULT_THEME_NAME ? DEFAULT_THEME_URL : theme);
+            });
         };
 
-        if (isViewsBlock(node)) {
-            extractFromViews(node);
-        } else if (isWorkspace(node) || isC4Document(node)) {
+        if (isViewsBlock(node) || isStylesBlock(node) || isC4Document(node)) {
+            extractThemes(node);
+        } else if (isWorkspace(node)) {
             const views = node.viewsBlocks?.at(0);
-            if (views) extractFromViews(views);
+            if (views) extractThemes(views);
+        }
+        if (isC4Document(node)) {
+            const views = node.viewsBlocks?.at(0);
+            if (views) extractThemes(views);
         }
 
         const anyNode = node as any;
@@ -2841,6 +2896,29 @@ class JsonGenerator {
         return views;
     }
 
+    /** Numbers the workspace views in creation order and records whether each key was auto-generated. */
+    private assignViewOrder(workspace: Workspace): void {
+        this.viewOrderByNode.clear();
+        this.workspaceViews(workspace).forEach((view, index) => {
+            this.viewOrderByNode.set(view, {
+                order: index + 1,
+                generatedKey: !C4Utils.stripQuotes(view.key),
+            });
+        });
+    }
+
+    /**
+     * The `order` and `generatedKey` fields of a view. `generatedKey` is emitted only
+     * when true, matching the reference output.
+     */
+    private viewOrderFields(view: any): { order?: number; generatedKey?: boolean } {
+        const entry = this.viewOrderByNode.get(view);
+        if (!entry) return {};
+        return entry.generatedKey
+            ? { order: entry.order, generatedKey: true }
+            : { order: entry.order };
+    }
+
     /**
      * Value of a workspace field, falling back to the extended workspace when the
      * extending workspace does not define it.
@@ -3198,6 +3276,7 @@ class JsonGenerator {
                 id: this.getId(container),
                 name: this.substitute(container.name),
                 description: this.description(container),
+                documentation: {},
                 group: this.extractGroup(container),
                 tags: this.extractTags(container, 'Element', 'Container'),
                 technology: this.technology(container),
@@ -3218,6 +3297,7 @@ class JsonGenerator {
                 id: this.getId(comp),
                     name: this.substitute(comp.name),
                     description: this.description(comp),
+                    documentation: {},
                     technology: this.technology(comp),
                     group: compGroup || undefined,
                     tags: this.extractTags(comp, 'Element', 'Component'),
@@ -3225,6 +3305,7 @@ class JsonGenerator {
                     relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(comp).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(compResult, comp);
+                this.applyElementExtensions(compResult, comp);
                 return compResult;
             })),
             relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(container).map(el => this.relationshipToJson(el)))
@@ -3268,6 +3349,7 @@ class JsonGenerator {
                     id: this.getId(s),
                     name: this.substitute(s.name),
                     description: this.description(s),
+                    documentation: {},
                     group: this.extractGroup(s),
                     tags: this.extractTags(s, 'Element', 'Software System'),
                     url: this.url(s),
@@ -3537,6 +3619,7 @@ class JsonGenerator {
         const list = views.map(view => {
             const json: any = {
                 key: this.substitute(view.key) ?? this.services.workspace.ViewKeyProvider.getKey(view),
+                ...this.viewOrderFields(view),
                 elementId: view.element?.ref ? this.getId(this.el(view.element.ref)) : undefined,
                 title: this.substitute(view.titleProps?.at(0)?.value),
                 description: this.description(view),
@@ -3664,6 +3747,7 @@ class JsonGenerator {
                 return {
                     name: this.viewName(view),
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
+                    ...this.viewOrderFields(view),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
                     properties: this.viewProperties(view),
@@ -3691,6 +3775,7 @@ class JsonGenerator {
                 return {
                     name: this.viewName(view),
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
+                    ...this.viewOrderFields(view),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
                     properties: this.viewProperties(view),
@@ -5268,14 +5353,16 @@ class JsonGenerator {
             || C4Utils.stripQuotes((element as any).name ?? '') === lastSegment);
     }
 
-    /** Hierarchical identifier of an element, built from its ancestors' ids. */
+    /** Hierarchical identifier of an element, built from its ancestors' ids (groups skipped). */
     private qualifiedIdentifier(element: any): string {
         const parts: string[] = [];
         let current = element;
         while (current && isNamedElement(current)) {
-            const id = (current as any).id;
-            if (typeof id === 'string' && id.length > 0) {
-                parts.unshift(id);
+            if (!isGroup(current)) {
+                const id = declaredIdentifier(current);
+                if (id) {
+                    parts.unshift(id);
+                }
             }
             current = this.el(current.$container);
         }
@@ -6112,11 +6199,9 @@ class JsonGenerator {
                 // can live in a different fragment than the !element itself.
                 if (!key && !(ext.target as any) && ext.id) {
                     const raw = C4Utils.stripQuotes(String(ext.id));
-                    const found = this.elements.find(el => {
-                        const elId = String((el as any).id ?? '');
-                        const elName = C4Utils.stripQuotes(String((el as any).name ?? ''));
-                        return elId === raw || elName === raw;
-                    });
+                    // Resolves the declared id, the name, and the hierarchical
+                    // identifier (e.g. `b.c` / `a.b.c` under `!identifiers hierarchical`).
+                    const found = this.findElementByReferenceText(raw);
                     if (found) key = found as NamedElement;
                 }
                 // Deployment environments, deployment nodes and groups are not part
@@ -6229,6 +6314,7 @@ class JsonGenerator {
                         id: this.getId(c),
                         name: this.substitute(c.name),
                         description: this.description(c),
+                        documentation: {},
                         technology: this.technology(c),
                         group: this.extractGroup(c),
                         tags: this.extractTags(c, 'Element', 'Component'),
@@ -6236,6 +6322,7 @@ class JsonGenerator {
                         relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(c).map(el => this.relationshipToJson(el)))
                     };
                     this.applyElementOverlay(json, c);
+                    this.applyElementExtensions(json, c);
                     return json;
                 });
                 jsonElement.components = (jsonElement.components ?? []).concat(list);
@@ -7362,6 +7449,7 @@ class JsonGenerator {
                 softwareSystemId: this.getId(scopeSystem),
                 name: this.viewName(view),
                 key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
+                ...this.viewOrderFields(view),
                 title: this.substitute(view.titleProps?.at(0)?.value),
                 description: this.description(view),
                 properties: this.viewProperties(view),
@@ -7393,6 +7481,8 @@ class JsonGenerator {
                     softwareSystemId: this.getId(scopeSystem),
                     name: this.viewName(view),
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
+                    ...this.viewOrderFields(view),
+                    externalSoftwareSystemBoundariesVisible: false,
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
                     properties: this.viewProperties(view),
@@ -7423,6 +7513,8 @@ class JsonGenerator {
                     containerId: this.getId(scopeContainer),
                     name: this.viewName(view),
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
+                    ...this.viewOrderFields(view),
+                    externalContainerBoundariesVisible: false,
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
                     properties: this.viewProperties(view),
@@ -7503,6 +7595,7 @@ class JsonGenerator {
                 return {
                     name: this.viewName(view),
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
+                    ...this.viewOrderFields(view),
                     title: this.substitute(view.titleProps?.at(0)?.value),
                     description: this.description(view),
                     properties: this.viewProperties(view),
@@ -7540,6 +7633,7 @@ class JsonGenerator {
                 return {
                     name: this.viewName(view),
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
+                    ...this.viewOrderFields(view),
                     title: this.substitute(view.titleProps?.[0]?.value),
                     description: this.description(view),
                     properties: this.viewProperties(view),
@@ -7574,6 +7668,7 @@ class JsonGenerator {
                 return {
                     name: baseName ? `Filtered: ${baseName}` : undefined,
                     key: this.substitute(this.services.workspace.ViewKeyProvider.getKey(view)),
+                    ...this.viewOrderFields(view),
                     baseViewKey: baseKey,
                     mode: view.mode === 'include' ? 'Include' : 'Exclude',
                     tags: this.parseTags(view.tagsProp),

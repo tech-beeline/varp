@@ -24,8 +24,8 @@
 import { AstUtils, LangiumSharedCoreServices, type AstNode, type FileSystemNode } from 'langium';
 import { base64EncodeBytes } from './c4-base64';
 import { Utils, URI } from 'vscode-uri';
-import { flatId } from './c4-utils';
-import { base64EncodeUtf8, reconstructFullDsl } from './c4-dsl-reconstructor';
+import { flatId, declaredIdentifier } from './c4-utils';
+import { base64EncodeUtf8, isDslPortable, isDslSourceRetained, retainedDslText } from './c4-dsl-source';
 import {
     AdrsDirective,
     AdrsFilter,
@@ -181,11 +181,16 @@ export class C4JsonEnricher {
         const root = doc.parseResult.value;
         if (!root) return;
 
-        // Workspace-level `dsl`: base64(UTF-8) of the FULL DSL text with
-        // `!include` expanded.
-        if (json && typeof json.dsl !== 'string') {
-            const fullDsl = reconstructFullDsl(this.services, rootUri);
-            json.dsl = base64EncodeUtf8(fullDsl);
+        // A portable workspace retains its DSL source as the `structurizr.dsl`
+        // workspace property (base64 UTF-8 of the root document's text). Workspaces
+        // that depend on files, documentation, plugins, scripts or a custom
+        // implied-relationships strategy do not retain it.
+        if (json && isDslPortable(this.services, rootUri) && isDslSourceRetained(json.properties)) {
+            const dsl = retainedDslText(this.services, rootUri);
+            if (dsl) {
+                if (!json.properties || typeof json.properties !== 'object') json.properties = {};
+                json.properties['structurizr.dsl'] = base64EncodeUtf8(dsl);
+            }
         }
 
         // Documentation is collected per documentable owner: the workspace itself, or
@@ -371,11 +376,9 @@ export class C4JsonEnricher {
 
     /** Returns the user-declared DSL identifier of an element/relationship, or undefined. */
     private astIdentifier(node: any): string | undefined {
-        const id = node?.id;
-        if (id === undefined || id === null) return undefined;
-        // ElementAssignment carries the ASSIGNMENT terminal ("name = ..."); keep
-        // the raw identifier text (strip only a trailing '=' and surrounding quotes).
-        return String(id).replace(/^["']|["']$/g, '').replace(/=\s*$/, '').trim();
+        // ElementAssignment carries the ASSIGNMENT terminal ("name = ..."); only a
+        // trailing '=' and surrounding quotes are stripped.
+        return declaredIdentifier(node);
     }
 
     /** Returns the value of the first property-array element, or undefined. */

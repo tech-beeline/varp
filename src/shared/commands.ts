@@ -29,3 +29,4 @@ export const COPY_CAPABILITY_CODE = "varp.copy-capability-code";
 export const SHOW_PATTERN_DESCRIPTION = "varp.show-pattern-description";
 export const GET_PATTERN_DSL = "varp.get-pattern-dsl";
 export const REFRESH_PATTERNS = "varp.refresh-patterns";
+export const EXPORT_JSON = "varp.export-json";

@@ -259,7 +259,8 @@ export class C4JsonEnricher {
             (Array.isArray(node?.urlProps) && node.urlProps.length > 0) ||
             (Array.isArray(node?.properties) && node.properties.length > 0) ||
             (Array.isArray(node?.perspectivesBlocks) && node.perspectivesBlocks.length > 0) ||
-            (node?.techProps && Array.isArray(node.techProps) && node.techProps.length > 0)
+            (node?.techProps && Array.isArray(node.techProps) && node.techProps.length > 0) ||
+            (Array.isArray(node?.healthChecks) && node.healthChecks.length > 0)
         );
     }
 
@@ -279,6 +280,10 @@ export class C4JsonEnricher {
         if (target.technology === undefined) {
             const tech = this.firstPropValue(node.techProps);
             if (tech !== undefined) target.technology = tech;
+        }
+        if (target.healthChecks === undefined) {
+            const healthChecks = this.collectHealthChecks(node.healthChecks);
+            if (healthChecks) target.healthChecks = healthChecks;
         }
         // The DSL identifier is recorded as a `structurizr.dsl.identifier`
         // property for every element registered with an explicit identifier.
@@ -321,6 +326,38 @@ export class C4JsonEnricher {
             if (name && value) props[name] = value;
         }
         return Object.keys(props).length > 0 ? props : undefined;
+    }
+
+    /**
+     * Reads the health checks of an instance. The interval defaults to 60 seconds and
+     * the timeout to 0 milliseconds, the (name, url) pair is unique, and the result is
+     * ordered by name then url.
+     */
+    private collectHealthChecks(checks: any[] | undefined): any[] | undefined {
+        if (!Array.isArray(checks) || checks.length === 0) return undefined;
+        const unquote = (value: any) => (typeof value === 'string' ? value.replace(/^["']|["']$/g, '') : '');
+        const result: any[] = [];
+        const seen = new Set<string>();
+        for (const check of checks) {
+            const name = unquote(check?.name);
+            const url = unquote(check?.url);
+            // A TreeSet keyed by name and url keeps the first check for each pair.
+            const key = `${name}\u0000${url}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const interval = Number.parseInt(String(check?.interval ?? ''), 10);
+            const timeout = Number.parseInt(String(check?.timeout ?? ''), 10);
+            result.push({
+                name,
+                url,
+                interval: Number.isInteger(interval) && interval >= 1 ? interval : 60,
+                timeout: Number.isInteger(timeout) && timeout >= 0 ? timeout : 0
+            });
+        }
+        result.sort((a, b) => (a.name !== b.name
+            ? (a.name < b.name ? -1 : 1)
+            : (a.url < b.url ? -1 : a.url > b.url ? 1 : 0)));
+        return result;
     }
 
     /** Reads the first PerspectivesBlock items into plain JSON objects. */

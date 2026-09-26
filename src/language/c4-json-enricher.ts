@@ -24,7 +24,7 @@
 import { AstUtils, LangiumSharedCoreServices, type AstNode, type FileSystemNode } from 'langium';
 import { base64EncodeBytes } from './c4-base64';
 import { Utils, URI } from 'vscode-uri';
-import { flatId, declaredIdentifier } from './c4-utils';
+import { flatId, declaredIdentifier, contextElement } from './c4-utils';
 import { base64EncodeUtf8, isDslPortable, isDslSourceRetained, retainedDslText } from './c4-dsl-source';
 import {
     AdrsDirective,
@@ -37,6 +37,7 @@ import {
     isContainer,
     isGroup,
     isIdentifiersProperty,
+    isImplicitRelationship,
     isNamedElement,
     isRelationship,
     isSoftwareSystem,
@@ -130,22 +131,27 @@ async function collectDocumentationEntries(
 }
 
 /**
- * Enriches generated render JSON with the documentation fields the render
- * pipeline does not produce. The render JSON is generated once by C4JsonGenerator
- * and cached; rather than re-generating it, this module takes that cached JSON
- * and injects the missing fields in the positions the JSON format expects.
+ * Enriches the generated render JSON with the fields the render pipeline does not
+ * produce. The render JSON is generated once by C4JsonGenerator and cached; rather
+ * than re-generating it, this module takes that cached JSON and injects the missing
+ * fields in the positions the JSON format expects. The render pipeline itself is
+ * left unchanged.
  *
- * Currently this covers `documentation` from `!adrs` / `!decisions`:
+ * This module adds:
  *
- *  - `!adrs` / `!decisions` declared inside a `workspace` -> root-level
- *    `documentation.decisions` (a sibling of `model` / `views`).
- *  - `!adrs` / `!decisions` declared inside a SoftwareSystem / Container /
- *    Component -> a nested `documentation.decisions` on that element in the
- *    model (each documentable element carries its own `Documentation`).
+ *  - the retained DSL source as the `structurizr.dsl` workspace property;
+ *  - `structurizr.dsl.identifier` on elements and relationships;
+ *  - `documentation` content from `!docs` (sections and images) and from `!adrs` /
+ *    `!decisions` (decisions), scoped to the workspace or to a documentable element
+ *    (SoftwareSystem / Container / Component), each of which carries its own
+ *    `Documentation`:
+ *      - a directive inside a `workspace` -> root-level `documentation` (a sibling
+ *        of `model` / `views`);
+ *      - a directive inside an element -> a nested `documentation` on that element.
  *
- * Future additions (e.g. per-element properties/url/perspectives, view order,
- * interactionStyle) should be added here so this stays the single enrichment
- * point. The render pipeline itself is left unchanged.
+ * Per-element properties, url, perspectives, technology, health checks and view
+ * order are produced by the generator; this module only fills fields the render
+ * pipeline leaves undefined.
  *
  * AdrTools decision format:
  *   Filename: {DECISION_ID:0000}-*.md
@@ -256,6 +262,25 @@ export class C4JsonEnricher {
     }
 
     /**
+     * The flat id of an AST node, matching the generator's ids. Relationships hash
+     * their resolved source/target, so they need the same resolvers the generator
+     * uses (`this` and implicit relationships resolve to the enclosing element).
+     */
+    private flatIdOf(node: any, rootUri: string): string {
+        if (!isRelationship(node) && !isImplicitRelationship(node)) return flatId(node, rootUri);
+        const isThisReference = (reference: any): boolean =>
+            reference === undefined || reference?.$refText?.toLowerCase() === 'this';
+        return flatId(node, rootUri, {
+            source: (rel: any) => (isImplicitRelationship(rel) || isThisReference(rel.source) || rel.sourceThis)
+                ? contextElement(rel)
+                : rel.source?.ref,
+            target: (rel: any) => (isThisReference(rel.target) || rel.targetThis)
+                ? contextElement(rel)
+                : rel.target?.ref,
+        });
+    }
+
+    /**
      * Injects the per-element fields the render pipeline drops when they are
      * defined directly on the DSL element (url, properties, perspectives,
      * technology). Elements are matched to their JSON counterpart by ID using the
@@ -290,7 +315,7 @@ export class C4JsonEnricher {
             }
 
             if (identifier === undefined && !this.hasEnrichableFields(node)) continue;
-            const nodeId = flatId(node, rootUri);
+            const nodeId = this.flatIdOf(node, rootUri);
             const target = byId.get(nodeId);
             if (!target) continue;
             this.applyElementFields(target, node, identifier);

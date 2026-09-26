@@ -287,7 +287,7 @@ export function archetypeInstanceTypeByRefText(node: any, lookup: (name: string 
 }
 
 /** Fallback source/target resolver: climbs the AST $container chain for C4 elements. */
-function contextElement(rel: any): any | undefined {
+export function contextElement(rel: any): any | undefined {
     let parent = rel?.$container;
     while (parent) {
         if (isSoftwareSystem(parent) || isContainer(parent) || isComponent(parent) ||

@@ -267,15 +267,25 @@ export function init(context: ExtensionContext): void {
         // stored values may not be updated yet on the very first render.
         const uri = measuredUri ?? diagramPreview?.getCurrentDocUri();
         const generation = measuredGeneration ?? diagramPreview?.getRenderedGeneration();
-        if (!languageClient || !uri || generation === undefined) {
-            return undefined;
+        if (!languageClient || !diagramPreview || !uri || generation === undefined) {
+            return;
         }
         try {
-            const res: any = await languageClient.sendRequest('c4/applyTextMeasurements', { uri, generation, widths });
-            return res?.views;
+            const result: any = await languageClient.sendRequest('c4/applyTextMeasurements', { uri, generation, widths });
+            if (!result?.changed) {
+                return; // stale measurement, or the layout did not change: nothing to re-render
+            }
+
+            // The server saved the refined coordinates in the cached JSON and bumped its
+            // generation; rebuild the preview from that cache. No text measurements are
+            // passed, so the rebuild does not start another measurement pass.
+            const content: any = await languageClient.sendRequest('c4/getContentForUri', { uri });
+            if (!content?.json) {
+                return;
+            }
+            await diagramPreview.updateWebView(content.json, diagramPreview.getCurrentViewKey() ?? '', uri, undefined, content.generation, undefined);
         } catch (err) {
             console.warn('[C4 Preview] Text measurement layout failed:', err);
-            return undefined;
         }
     };
     // Local, non-undefined alias used by the command handlers below.
@@ -444,6 +454,50 @@ export function init(context: ExtensionContext): void {
         })
     );
 
+    // ===== Command: Import layout from DrawIO =====
+    context.subscriptions.push(
+        commands.registerCommand('varp.import-drawio', async () => {
+            const currentViewKey = preview.getCurrentViewKey();
+            const docUri = preview.getCurrentDocUri();
+
+            if (!currentViewKey || !docUri || !languageClient) {
+                window.showErrorMessage('No diagram data available. Please open a diagram preview first.');
+                return;
+            }
+
+            const selected = await window.showOpenDialog({
+                canSelectMany: false,
+                filters: { 'DrawIO Diagrams': ['drawio'] },
+                defaultUri: defaultDrawioUri(docUri, currentViewKey)
+            });
+            if (!selected || selected.length === 0) {
+                return; // user cancelled
+            }
+
+            const xml = new TextDecoder().decode(await workspace.fs.readFile(selected[0]));
+
+            // The language server changes the coordinates in the cached JSON and bumps
+            // its generation; the preview is then rebuilt from that cache, so every
+            // consumer (preview, export) sees the imported layout.
+            const result: any = await languageClient.sendRequest('c4/importDrawioLayout', { uri: docUri, viewKey: currentViewKey, xml });
+            if (!result?.view) {
+                window.showErrorMessage('Failed to import the DrawIO layout.');
+                return;
+            }
+
+            const content: any = await languageClient.sendRequest('c4/getContentForUri', { uri: docUri });
+            if (!content?.json) {
+                window.showErrorMessage('Failed to import the DrawIO layout.');
+                return;
+            }
+
+            // No text measurements: the rebuild must keep the imported coordinates
+            // instead of re-running the auto-layout pass.
+            await preview.updateWebView(content.json, currentViewKey, docUri, undefined, content.generation, undefined);
+            window.showInformationMessage('Imported diagram layout from DrawIO.');
+        })
+    );
+
     // ===== Command: Export to SVG =====
     context.subscriptions.push(
         commands.registerCommand('varp.export-svg', async () => {
@@ -527,4 +581,13 @@ export function init(context: ExtensionContext): void {
             window.showInformationMessage('Exported workspace JSON.');
         })
     );
+}
+
+/** Defaults the .drawio file picker to the folder of the previewed document. */
+function defaultDrawioUri(docUri: string, viewKey: string): Uri | undefined {
+    const documentUri = Uri.parse(docUri);
+    if (documentUri.scheme !== 'file') {
+        return undefined;
+    }
+    return Uri.joinPath(documentUri, '..', `${viewKey}.drawio`);
 }

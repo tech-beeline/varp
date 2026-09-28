@@ -113,6 +113,13 @@ connection.onRequest('c4/getContentForUri', (params: { uri: string }) => {
     return content ? { json: content.json, generation: content.generation } : null;
 });
 
+// Applies a drawio file's layout to the cached view (drawio layout import). The
+// cached JSON is changed in place and its generation bumped, so a subsequent
+// getContentForUri returns the imported coordinates for a full workspace rebuild.
+connection.onRequest('c4/importDrawioLayout', (params: { uri: string; viewKey: string; xml: string }) => {
+    return C4.generation.C4GeneratorHandler.applyDrawioLayout(params.uri, params.viewKey, params.xml) ?? null;
+});
+
 // Returns the FULL Structurizr-compatible JSON for the given URI: the cached
 // render JSON enriched with documentation not produced by the render pipeline
 // (e.g. `documentation.decisions` from !adrs/!decisions). Used for export/tooling;

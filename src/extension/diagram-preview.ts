@@ -59,7 +59,7 @@ export class DiagramPreview {
    * the views to re-render. Set by the extension (it owns the language client);
    * absent when the preview is used without one.
    */
-  public requestRelayout?: (widths: Record<string, number>, uri?: string, generation?: number) => Promise<any[] | undefined>;
+  public requestRelayout?: (widths: Record<string, number>, uri?: string, generation?: number) => Promise<void>;
 
   // True while the preview is open but its first JSON payload has not been
   // delivered yet - the webview shows the "Rendering" indicator until then.
@@ -244,36 +244,6 @@ export class DiagramPreview {
         return this.renderedGeneration;
   }
 
-  /**
-   * Pushes re-laid-out views (elements, relationship vertices and dimensions) into
-   * the open webview, which re-renders them silently, keeping zoom and pan.
-   */
-  public applyViewCoordinates(views: any[] | undefined): void {
-        if (!views || views.length === 0) return;
-        // Keep the stored payload in sync: a later rebuild (e.g. when the themes
-        // arrive) re-sends it, and a stale copy would undo the second layout pass.
-        this.mergeViewCoordinates(views);
-        if (this.panel && this.panelReady) {
-          this.panel.webview.postMessage({ command: 'apply-coordinates', views });
-        }
-  }
-
-  /** Replaces the elements/relationships/dimensions of the stored JSON's views. */
-  private mergeViewCoordinates(views: any[]): void {
-        const collections = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'deploymentViews', 'dynamicViews', 'customViews', 'filteredViews', 'imageViews'];
-        for (const collection of collections) {
-          const list = this.currentJson?.views?.[collection];
-          if (!Array.isArray(list)) continue;
-          for (const updated of views) {
-            const existing = list.find((view: any) => view && view.key === updated.key);
-            if (!existing) continue;
-            existing.elements = updated.elements;
-            existing.relationships = updated.relationships;
-            existing.dimensions = updated.dimensions;
-          }
-        }
-  }
-
   public getCurrentViewKey(): string | undefined {
         return this.currentViewKey;
   }
@@ -447,10 +417,6 @@ export class DiagramPreview {
               // here (structurizr.ui.loadThemes reads them from the workspace) and
               // re-render once they are applied.
               loadThemesInWebview();
-            } else if (message.command === 'apply-coordinates') {
-              // Second layout pass: the extension reserved space for the measured frame
-              // texts, so the coordinates changed. Re-render silently.
-              applyViewCoordinates(message.views);
             } else if (message.viewKey !== undefined) {
               structurizr.diagram.changeView(message.viewKey);
             }
@@ -522,20 +488,6 @@ export class DiagramPreview {
 
             });
             vscode.postMessage({ command: 'text-widths', uri: message.uri, generation: message.generation, widths: widths });
-        }
-
-        // Applies the re-laid-out views (elements, relationship vertices and dimensions)
-        // and re-renders the current view without rebuilding the workspace.
-        function applyViewCoordinates(views) {
-            if (!views || !structurizr.workspace || !structurizr.diagram) return;
-            views.forEach(function(updated) {
-                var view = structurizr.workspace.findViewByKey(updated.key);
-                if (!view) return;
-                view.elements = updated.elements;
-                view.relationships = updated.relationships;
-                view.dimensions = updated.dimensions;
-            });
-            rebuildDiagram();
         }
 
         function buildDiagram(message, measure) {
@@ -720,12 +672,12 @@ export class DiagramPreview {
           panel.webview.postMessage({ 'uri': pending.uri, 'json': pending.json, 'viewKey': pending.viewKey, 'themes': pending.themes, 'generation': pending.generation, 'rebuild': pending.rebuild, 'textMeasurements': pending.textMeasurements });
         }
       } else if (message && message.command === 'text-widths') {
-        // The webview measured the frame texts it draws. Ask the language server to
-        // re-run the auto-layout with those widths, then push the new coordinates
-        // back for a silent re-render.
+        // The webview measured the frame texts it draws. The language server re-runs
+        // the auto-layout with those widths, saves the result in the cached JSON and
+        // the preview is rebuilt from that cache.
         if (this.requestRelayout) {
           const widths = message.widths ?? {};
-          void this.requestRelayout(widths, message.uri, message.generation).then(views => this.applyViewCoordinates(views));
+          void this.requestRelayout(widths, message.uri, message.generation);
         }
       } else if (message && message.command === 'workspace-built') {
         // The webview finished (re)building a Workspace. Ignore a stale report for

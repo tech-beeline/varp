@@ -84,6 +84,11 @@
           "when": "activeWebviewPanelId == structurizrPreview",
           "command": "varp.export-drawio",
           "group": "navigation"
+        },
+        {
+          "when": "activeWebviewPanelId == structurizrPreview",
+          "command": "varp.import-drawio",
+          "group": "navigation"
         }
       ]
     },
@@ -133,6 +138,11 @@
         "command": "varp.export-drawio",
         "title": "Export to DrawIO (.drawio)",
         "shortTitle": "Export to DrawIO"
+      },
+      {
+        "command": "varp.import-drawio",
+        "title": "Import layout from DrawIO (.drawio)",
+        "shortTitle": "Import Layout"
       },
       {
         "command": "varp.export-svg",

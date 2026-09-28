@@ -3,9 +3,10 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { EmptyFileSystem } from 'langium';
 import { URI } from 'vscode-uri';
-import { DOMParser } from '@xmldom/xmldom';
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createC4Services } from './c4-module';
 import { C4JsonGenerator } from './c4-json-generator';
+import { applyDrawioLayout } from './c4-drawio-layout';
 import { isWorkspace } from '../generated/ast';
 
 const VIEW_ARRAYS: Record<string, string> = {
@@ -71,6 +72,17 @@ function decodeXml(text: string): string {
         .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
         .replace(/&amp;/g, '&');
+}
+
+/** Deterministic PRNG so the drawio edit test is reproducible. */
+function mulberry32(seed: number): () => number {
+    let state = seed >>> 0;
+    return () => {
+        state = (state + 0x6d2b79f5) | 0;
+        let t = Math.imul(state ^ (state >>> 15), 1 | state);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
 }
 
 function loadExporter(structurizr: any): any {
@@ -968,5 +980,181 @@ workspace {
         const groups = drawio._collectBoundaries(view, workspace, false).filter((b: any) => b.isGroup);
         expect(groups.length).toBeGreaterThan(0);
         expect(groups.every((g: any) => g.c4Type === 'GroupScopeBoundary')).toBe(true);
+    }, 120_000);
+});
+
+describe('drawio layout round-trip', () => {
+    it('restores element positions and relationship vertices after export and import', async () => {
+        const json = await generateDsl(`
+workspace {
+    model {
+        user = person "User"
+        a = softwaresystem "A" {
+            b = container "B"
+            c = container "C"
+        }
+        d = softwaresystem "D"
+        user -> a "uses"
+        b -> c "calls"
+    }
+    views {
+        systemlandscape "landscape" {
+            include *
+        }
+    }
+}
+`);
+        const workspace = makeWorkspace(json);
+        const view = workspace.views.find((v: any) => v.key === 'landscape')!;
+        expect(view.elements.length).toBeGreaterThan(0);
+        expect(view.relationships.length).toBeGreaterThan(0);
+
+        // Simulate the automatic layout: every element and relationship gets coordinates.
+        view.dimensions = { width: 1800, height: 1200 };
+        view.elements.forEach((ev: any, i: number) => {
+            ev.x = 200 + (i % 2) * 600;
+            ev.y = 200 + Math.floor(i / 2) * 500;
+        });
+        view.relationships.forEach((rv: any, i: number) => {
+            rv.vertices = [{ x: 120 + i * 40, y: 160 + i * 30 }, { x: 320 + i * 40, y: 260 + i * 30 }];
+        });
+
+        const before = {
+            elements: view.elements.map((e: any) => ({ id: e.id, x: e.x, y: e.y })),
+            relationships: view.relationships.map((r: any) => ({
+                id: r.id,
+                order: r.order,
+                vertices: (r.vertices ?? []).map((v: any) => ({ x: v.x, y: v.y })),
+            })),
+        };
+
+        const drawio = makeExporter(workspace);
+        let xml: string | undefined;
+        drawio.exportView(view, workspace, false, (result: any) => { xml = result; });
+        expect(xml).toBeDefined();
+
+        // Import into a fresh view that has the same ids but no coordinates yet.
+        const imported: any = {
+            elements: before.elements.map((e: any) => ({ id: e.id, x: 0, y: 0 })),
+            relationships: before.relationships.map((r: any) => ({ id: r.id, order: r.order })),
+        };
+        applyDrawioLayout(imported, xml!, { skipElementIds: new Set() });
+
+        expect(imported.elements.map((e: any) => ({ id: e.id, x: e.x, y: e.y }))).toEqual(before.elements);
+        for (const [i, r] of before.relationships.entries()) {
+            expect(imported.relationships[i].vertices).toEqual(r.vertices);
+        }
+    }, 120_000);
+
+    it('reflects element positions, sizes and relationship waypoints edited in the drawio file', async () => {
+        const json = await generateDsl(`
+workspace {
+    model {
+        user = person "User"
+        a = softwaresystem "A" {
+            b = container "B"
+            c = container "C"
+        }
+        d = softwaresystem "D"
+        user -> a "uses"
+        a -> d "depends on"
+        user -> d "reads"
+    }
+    views {
+        systemlandscape "landscape" {
+            include *
+        }
+    }
+}
+`);
+        const workspace = makeWorkspace(json);
+        const view = workspace.views.find((v: any) => v.key === 'landscape')!;
+        expect(view.elements.length).toBeGreaterThan(0);
+        expect(view.relationships.length).toBeGreaterThan(1);
+
+        view.dimensions = { width: 2000, height: 1500 };
+        view.elements.forEach((ev: any, i: number) => { ev.x = 200 + i * 250; ev.y = 200 + i * 120; });
+        view.relationships.forEach((rv: any, i: number) => { rv.vertices = [{ x: 100 + i * 30, y: 100 + i * 30 }]; });
+
+        const drawio = makeExporter(workspace);
+        let xml: string | undefined;
+        drawio.exportView(view, workspace, false, (result: any) => { xml = result; });
+        expect(xml).toBeDefined();
+
+        // Edit the exported file directly: move and resize elements, and rewrite the
+        // relationship waypoints, adding and removing points at random.
+        const doc = new DOMParser().parseFromString(xml!, 'text/xml');
+        const random = mulberry32(20240926);
+        const elementIds = new Set(view.elements.map((e: any) => String(e.id)));
+        const relationshipIds = new Set(view.relationships.map((r: any) => `${r.id}-${r.order ?? '0'}`));
+        const expectedElements = new Map<string, { x: number; y: number; width: number; height: number }>();
+        const expectedVertices = new Map<string, { x: number; y: number }[]>();
+
+        const objects = doc.getElementsByTagName('object');
+        for (let i = 0; i < objects.length; i++) {
+            const object = objects.item(i);
+            if (!object) continue;
+            const id = object.getAttribute('id');
+            if (!id) continue;
+            const geometry = object.getElementsByTagName('mxGeometry').item(0);
+            if (!geometry) continue;
+
+            if (relationshipIds.has(id)) {
+                let array = geometry.getElementsByTagName('Array').item(0);
+                if (!array) {
+                    array = doc.createElement('Array');
+                    array.setAttribute('as', 'points');
+                    geometry.appendChild(array);
+                }
+                const existing: any[] = [];
+                const points = array.getElementsByTagName('mxPoint');
+                for (let p = 0; p < points.length; p++) existing.push(points.item(p));
+                for (const point of existing) array.removeChild(point);
+
+                const list: { x: number; y: number }[] = [];
+                const count = Math.floor(random() * 5);
+                for (let p = 0; p < count; p++) {
+                    const x = Math.floor(random() * 1000);
+                    const y = Math.floor(random() * 800);
+                    const point = doc.createElement('mxPoint');
+                    point.setAttribute('x', String(x));
+                    point.setAttribute('y', String(y));
+                    array.appendChild(point);
+                    list.push({ x, y });
+                }
+                expectedVertices.set(id, list);
+            } else if (elementIds.has(id)) {
+                const x = 100 + Math.floor(random() * 1500);
+                const y = 100 + Math.floor(random() * 1200);
+                const width = 300 + Math.floor(random() * 400);
+                const height = 200 + Math.floor(random() * 300);
+                geometry.setAttribute('x', String(x));
+                geometry.setAttribute('y', String(y));
+                geometry.setAttribute('width', String(width));
+                geometry.setAttribute('height', String(height));
+                expectedElements.set(id, { x, y, width, height });
+            }
+        }
+        const edited = new XMLSerializer().serializeToString(doc);
+
+        // The waypoint counts must actually have changed, otherwise the edit is a no-op.
+        const originalCounts = new Map<string, number>();
+        for (const rv of view.relationships) originalCounts.set(`${rv.id}-${rv.order ?? '0'}`, (rv.vertices ?? []).length);
+        expect([...expectedVertices].some(([key, points]) => points.length !== originalCounts.get(key))).toBe(true);
+
+        const imported: any = {
+            elements: view.elements.map((e: any) => ({ id: e.id, x: 0, y: 0 })),
+            relationships: view.relationships.map((r: any) => ({ id: r.id, order: r.order })),
+        };
+        applyDrawioLayout(imported, edited, { skipElementIds: new Set() });
+
+        for (const ev of imported.elements) {
+            const expected = expectedElements.get(String(ev.id))!;
+            expect({ x: ev.x, y: ev.y, width: ev.width, height: ev.height }).toEqual(expected);
+        }
+        for (const rv of imported.relationships) {
+            const expected = expectedVertices.get(`${rv.id}-${rv.order ?? '0'}`) ?? [];
+            expect(rv.vertices ?? []).toEqual(expected);
+        }
     }, 120_000);
 });

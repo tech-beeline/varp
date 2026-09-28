@@ -20,6 +20,7 @@ import { LangiumServices } from 'langium/lsp';
 import { URI } from 'vscode-uri';
 import * as includeResolver from './c4-include-resolver';
 import { C4JsonEnricher } from './c4-json-enricher';
+import { applyDrawioLayoutToView } from './c4-drawio-layout';
 
 /**
  * A generated workspace JSON together with the generation of the build it was
@@ -353,17 +354,46 @@ export class C4GeneratorHandler {
 
     /**
      * Re-runs the auto-layout of the cached workspace with the text widths the
-     * renderer measured, and returns the views to re-render (elements, relationship
-     * vertices and dimensions). Returns undefined when the generation does not match
-     * the cached build, so a stale measurement pass can never overwrite a newer
-     * layout.
+     * renderer measured. The generator writes the refined coordinates back into the
+     * cached JSON itself; the generation advances only when the layout actually
+     * changed, so the client rebuilds from the cache only then. Returns undefined when
+     * the generation does not match the cached build, so a stale measurement pass can
+     * never overwrite a newer layout.
      */
-    public async applyTextMeasurements(uri: string, generation: number, widths: Record<string, number>): Promise<{ views: any[] } | undefined> {
+    public async applyTextMeasurements(uri: string, generation: number, widths: Record<string, number>): Promise<{ changed: boolean } | undefined> {
         const rootUri = this.getRootUri(uri);
         const entry = this.jsonCache.get(rootUri);
         if (!entry || entry.generation !== generation) return undefined;
-        const views = await (this.services as any).generation.C4JsonGenerator.applyTextMeasurements(rootUri, entry.json, widths ?? {});
-        return { views };
+        const { changed } = await (this.services as any).generation.C4JsonGenerator.applyTextMeasurements(rootUri, entry.json, widths ?? {});
+        if (changed) {
+            jsonGeneration += 1;
+            entry.generation = jsonGeneration;
+        }
+        return { changed };
+    }
+
+    /**
+     * Applies a drawio file's layout to the cached view with the given key, changing the
+     * element coordinates and relationship vertices in the cached JSON itself. The
+     * generation is bumped so the client rebuilds the workspace with the imported
+     * coordinates instead of only switching the view. Returns the updated view, or
+     * undefined when no JSON is cached yet or the view is unknown.
+     */
+    public applyDrawioLayout(uri: string, viewKey: string, xml: string): { view: any } | undefined {
+        const rootUri = this.getRootUri(uri);
+        const entry = this.jsonCache.get(rootUri);
+        if (!entry) return undefined;
+
+        const view = applyDrawioLayoutToView(entry.json, viewKey, xml);
+        if (!view) return undefined;
+
+        // Size the paper to the imported content the same way the graphviz layout does,
+        // including the auto-drawn frames (deployment nodes, groups, scope boundaries).
+        (this.services as any).generation.C4JsonGenerator.fitImportedView(rootUri, viewKey, view);
+
+        jsonGeneration += 1;
+        entry.generation = jsonGeneration;
+        return { view };
     }
 
     /**

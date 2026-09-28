@@ -105,6 +105,62 @@ function compareStylesByTag(a: any, b: any): number {
     return compareCodeUnits(`${aScheme}/${a?.tag ?? ''}`, `${bScheme}/${b?.tag ?? ''}`);
 }
 
+/** Paper margin kept around the diagram on every side (px). */
+const PAPER_MARGIN = 400;
+
+/**
+ * Sizes the view's paper to its content the same way the graphviz layout does: the
+ * content bounds (element boxes, frame boxes and relationship vertices) plus
+ * {@link PAPER_MARGIN} on every side, with the content shifted so every margin is
+ * equal. Used when element coordinates are set outside the graphviz layout (drawio
+ * import, text measurement).
+ *
+ * `frameBounds` are the auto-drawn frames (deployment nodes, groups, scope boundaries);
+ * the frame elements carry no size, so their boxes are passed in explicitly.
+ */
+export function fitViewToContent(view: any, frameBounds: { x: number; y: number; width: number; height: number }[] = []): void {
+    // Leaf elements carry a size; frames do not (the renderer derives them from their
+    // children), so they are only measured through `frameBounds`.
+    const isSized = (el: any) => typeof el?.x === 'number' && typeof el?.y === 'number'
+        && typeof el?.width === 'number' && typeof el?.height === 'number';
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const include = (x: number, y: number, w: number, h: number) => {
+        minX = Math.min(minX, x); minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h);
+    };
+    for (const el of view?.elements ?? []) {
+        if (!isSized(el)) continue;
+        include(el.x, el.y, el.width, el.height);
+    }
+    for (const frame of frameBounds) include(frame.x, frame.y, frame.width, frame.height);
+    for (const rel of view?.relationships ?? []) {
+        for (const v of rel?.vertices ?? []) {
+            if (typeof v?.x === 'number' && typeof v?.y === 'number') include(v.x, v.y, 0, 0);
+        }
+    }
+    if (minX === Infinity) { minX = PAPER_MARGIN; minY = PAPER_MARGIN; maxX = PAPER_MARGIN; maxY = PAPER_MARGIN; }
+
+    const paperW = Math.max(2 * PAPER_MARGIN, (maxX - minX) + 2 * PAPER_MARGIN);
+    const paperH = Math.max(2 * PAPER_MARGIN, (maxY - minY) + 2 * PAPER_MARGIN);
+    const shiftX = PAPER_MARGIN - minX;
+    const shiftY = PAPER_MARGIN - minY;
+
+    for (const el of view?.elements ?? []) {
+        if (!isSized(el)) continue;
+        el.x = Math.floor(el.x + shiftX);
+        el.y = Math.floor(el.y + shiftY);
+    }
+    for (const rel of view?.relationships ?? []) {
+        for (const v of rel?.vertices ?? []) {
+            if (typeof v?.x === 'number') v.x = Math.round(v.x + shiftX);
+            if (typeof v?.y === 'number') v.y = Math.round(v.y + shiftY);
+        }
+    }
+
+    view.dimensions = { width: Math.ceil(paperW), height: Math.ceil(paperH) };
+}
+
 
 const DEFAULT_ELEMENT_FONT_SIZE = 24;
 
@@ -178,6 +234,18 @@ interface ViewTextMeasurements {
     children: Record<string, string[]>;
     /** Node id → rendered width in px (lower bound for a frame's content width). */
     nodeWidths: Record<string, number>;
+}
+
+/**
+ * The frame (cluster) tree of a laid-out view, mirroring the renderer's embedded
+ * cells: `childrenOf` maps a cluster id to its children (cluster ids or element ids)
+ * and `clusterKind` classifies each cluster. A group frame shows no metadata line, so
+ * its bottom padding is smaller. Used to recompute the paper size when element
+ * coordinates change outside the graphviz layout (drawio import).
+ */
+interface FrameTree {
+    childrenOf: Record<string, string[]>;
+    clusterKind: Record<string, 'scope' | 'group' | 'deploy'>;
 }
 
 class JsonGenerator {
@@ -268,6 +336,9 @@ class JsonGenerator {
      * renderer measured, without rebuilding the DOT from the AST.
      */
     private readonly viewLayouts: Map<string, { dot: string; measurements: ViewTextMeasurements }> = new Map();
+
+    /** Frame (cluster) tree per view key, kept so the paper can be refitted after an import. */
+    private readonly frameTrees: Map<string, FrameTree> = new Map();
 
     /** Maps the `metadata` directive keyword to its MetadataSymbols enum name. */
     private static readonly METADATA_SYMBOLS: Record<string, string> = {
@@ -1831,7 +1902,11 @@ class JsonGenerator {
     }
 
     /** Helper to create a minimal element JSON stub with id and default position. */
-    private readonly elementJson = (el: any) => ({ id: this.getId(el), x: 0, y: 0 });
+    // Deployment nodes are drawn as frames whose box the renderer derives from their
+    // children, so they carry no coordinates in the JSON.
+    private readonly elementJson = (el: any) => isDeploymentNode(el)
+        ? { id: this.getId(el) }
+        : { id: this.getId(el), x: 0, y: 0 };
 
     /** Returns undefined when the array is empty, so empty collections are never emitted in JSON. */
     private onlyIfNotEmpty<T>(arr: T[] | undefined): T[] | undefined {
@@ -3909,6 +3984,7 @@ class JsonGenerator {
         // Cluster tree: clusterId -> list of children (element ids / sub-cluster ids).
         const childrenOf: Record<string, string[]> = {};
         const owningCluster: Record<string, string> = {}; // element id -> owning cluster id
+        const clusterKind: Record<string, 'scope' | 'group' | 'deploy'> = {};
         const getChildren = (id: string): string[] => (childrenOf[id] ||= []);
         const addChild = (parent: string, child: string) => {
             owningCluster[child] = parent;
@@ -3945,6 +4021,7 @@ class JsonGenerator {
                 addChild('root', sid);
                 addElementTexts(sid, system);
             }
+            clusterKind[sid] = 'scope';
             return sid;
         };
         const ensureContainerCluster = (container: NamedElement): string => {
@@ -3954,6 +4031,7 @@ class JsonGenerator {
                 addChild(system ? ensureSystemCluster(system) : 'root', cid);
                 addElementTexts(cid, container);
             }
+            clusterKind[cid] = 'scope';
             return cid;
         };
         // The webview also draws a boundary for the scope element's
@@ -3993,6 +4071,7 @@ class JsonGenerator {
                     addChild(current ?? 'root', cid);
                     addGroupText(cid, seg);
                 }
+                clusterKind[cid] = 'group';
                 current = cid;
             }
             return current!;
@@ -4005,6 +4084,7 @@ class JsonGenerator {
             const id = this.getId(el);
             const cid = 'cluster_deploy_' + id;
             deployCluster[id] = cid;
+            clusterKind[cid] = 'deploy';
             const parentEl = this.resolveFrameParentId(el, scopeElement);
             const base = parentEl !== undefined ? deployCluster[parentEl] : scopeClusterId;
             const group = this.extractGroup(el);
@@ -4194,6 +4274,9 @@ class JsonGenerator {
         }
 
         lines.push('}');
+        // Keep the frame tree so the paper can be refitted when element coordinates
+        // change outside the graphviz layout (drawio import).
+        this.frameTrees.set(viewKey, { childrenOf, clusterKind });
         return {
             dot: lines.join('\n'),
             measurements: { candidates, clusters, nodeTexts, children: childrenOf, nodeWidths }
@@ -4500,8 +4583,9 @@ class JsonGenerator {
      *
      * Returns the views that were re-laid out, so the client can re-render them.
      */
-    public async applyTextMeasurements(json: any, widths: Record<string, number>): Promise<any[]> {
+    public async applyTextMeasurements(json: any, widths: Record<string, number>): Promise<{ views: any[]; changed: boolean }> {
         const updated: any[] = [];
+        let changed = false;
         for (const { views, dynamic } of this.viewArrays(json)) {
             if (!Array.isArray(views)) continue;
             for (const view of views) {
@@ -4529,12 +4613,81 @@ class JsonGenerator {
                     // widths, e.g. after the themes arrived) does not re-render again.
                     this.viewLayouts.set(view.key, { dot, measurements: layout.measurements });
                     updated.push(view);
+                    changed = true;
                 } catch (err) {
                     console.error(`[C4 Graphviz] Measured layout failed for view ${view.key}:`, err);
                 }
             }
         }
-        return updated;
+        return { views: updated, changed };
+    }
+
+    /**
+     * Refits the view's paper to imported element coordinates, including the auto-drawn
+     * frames (deployment nodes, groups and scope boundaries) whose boxes the renderer
+     * derives from the elements. The frame tree was captured when the DOT graph was
+     * built, so only the leaf boxes have to be recomputed here.
+     */
+    public fitImportedView(viewKey: string, view: any): void {
+        const tree = this.frameTrees.get(viewKey);
+        fitViewToContent(view, tree ? this.frameBoxes(tree, view) : []);
+    }
+
+    /**
+     * Boxes of every frame in the tree, bottom-up: a frame encloses its elements and its
+     * child frames plus the webview's cluster padding (mirrors the renderer's
+     * reposition()). A group frame shows no metadata line, so its bottom padding is
+     * smaller.
+     */
+    private frameBoxes(tree: FrameTree, view: any): { x: number; y: number; width: number; height: number }[] {
+        const nameFontSize = Math.floor(DEFAULT_ELEMENT_FONT_SIZE * NAME_FONT_SIZE_DIFFERENCE_RATIO);
+        const metadataFontSize = Math.floor(DEFAULT_ELEMENT_FONT_SIZE * METADATA_FONT_SIZE_DIFFERENCE_RATIO);
+        const padFor = (clusterId: string) => ({
+            top: WEBVIEW_CLUSTER_PADDING,
+            left: WEBVIEW_CLUSTER_PADDING,
+            right: WEBVIEW_CLUSTER_PADDING,
+            bottom: WEBVIEW_CLUSTER_PADDING + WEBVIEW_FRAME_MARGIN + nameFontSize
+                + (tree.clusterKind[clusterId] === 'group' ? 0 : metadataFontSize)
+                + WEBVIEW_FRAME_MARGIN
+        });
+
+        const elementById = new Map<string, any>();
+        for (const el of view?.elements ?? []) elementById.set(String(el?.id), el);
+
+        const boxes: { x: number; y: number; width: number; height: number }[] = [];
+        const visit = (clusterId: string): { x: number; y: number; width: number; height: number } | undefined => {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            const add = (x: number, y: number, w: number, h: number) => {
+                minX = Math.min(minX, x); minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h);
+            };
+            for (const child of tree.childrenOf[clusterId] ?? []) {
+                if (child.startsWith('cluster_')) {
+                    const box = visit(child);
+                    if (box) add(box.x, box.y, box.width, box.height);
+                } else {
+                    const el = elementById.get(child);
+                    if (typeof el?.x === 'number' && typeof el?.y === 'number'
+                        && typeof el?.width === 'number' && typeof el?.height === 'number') {
+                        add(el.x, el.y, el.width, el.height);
+                    }
+                }
+            }
+            // `root` is not a frame: its children are the frames and leaves, which are
+            // measured on their own.
+            if (minX === Infinity || clusterId === 'root') return undefined;
+            const pad = padFor(clusterId);
+            const box = {
+                x: minX - pad.left,
+                y: minY - pad.top,
+                width: (maxX - minX) + pad.left + pad.right,
+                height: (maxY - minY) + pad.top + pad.bottom
+            };
+            boxes.push(box);
+            return box;
+        };
+        visit('root');
+        return boxes;
     }
 
     /**
@@ -4660,7 +4813,7 @@ class JsonGenerator {
         const graphviz = await Graphviz.load();
         const json = JSON.parse(graphviz.layout(dot, 'json'));
 
-        const margin = 400; // paper margin - the same gap on every side of the diagram
+        const margin = PAPER_MARGIN; // paper margin - the same gap on every side of the diagram
         // Graphviz -Tjson coordinates are in points (72/inch) with the origin at
         // the bottom-left (y grows UP); the webview paper origin is at the top-left.
         // The DOT sizes are in a 300dpi inch space (STRUCTURIZR_DPI), so points are
@@ -4903,21 +5056,15 @@ class JsonGenerator {
         // view.elements may be absent (empty view with no elements - onlyIfNotEmpty
         // drops the empty array), so iterate over [] in that case.
         for (const el of (view.elements ?? [])) {
+            // Frames (deployment nodes) have no box of their own: the renderer derives
+            // their position and size from their children, so only leaf elements are
+            // placed here.
             const r = rects[el.id];
-            if (r) {
-                el.x = Math.floor(r.x + shiftX);
-                el.y = Math.floor(r.y + shiftY);
-                el.width = Math.round(r.w);
-                el.height = Math.round(r.h);
-                continue;
-            }
-            // Deployment nodes are clusters - place them at their webview frame
-            // top-left (reposition() computes the same box from the embedded cells).
-            const fb = frameBounds['cluster_deploy_' + el.id];
-            if (fb) {
-                el.x = Math.floor(fb.x + shiftX);
-                el.y = Math.floor(fb.y + shiftY);
-            }
+            if (!r) continue;
+            el.x = Math.floor(r.x + shiftX);
+            el.y = Math.floor(r.y + shiftY);
+            el.width = Math.round(r.w);
+            el.height = Math.round(r.h);
         }
 
         if (!isDynamic) {
@@ -7867,10 +8014,24 @@ export class C4JsonGenerator {
 
     /**
      * Re-runs the auto-layout of the given JSON with the measured text widths.
-     * Returns the views whose coordinates changed.
+     * Returns the views to re-render and whether any layout actually changed.
      */
-    public async applyTextMeasurements(uri: string | undefined, json: any, widths: Record<string, number>): Promise<any[]> {
+    public async applyTextMeasurements(uri: string | undefined, json: any, widths: Record<string, number>): Promise<{ views: any[]; changed: boolean }> {
         const generator = this.generators.get(uri ?? '');
-        return generator ? await generator.applyTextMeasurements(json, widths) : [];
+        return generator ? await generator.applyTextMeasurements(json, widths) : { views: [], changed: false };
+    }
+
+    /**
+     * Refits the view's paper to coordinates set outside the graphviz layout (drawio
+     * import), including the auto-drawn frames. Falls back to elements and vertices only
+     * when no frame tree was captured for the view.
+     */
+    public fitImportedView(uri: string | undefined, viewKey: string, view: any): void {
+        const generator = this.generators.get(uri ?? '');
+        if (generator) {
+            generator.fitImportedView(viewKey, view);
+        } else {
+            fitViewToContent(view);
+        }
     }
 }

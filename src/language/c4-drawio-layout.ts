@@ -16,63 +16,28 @@
 
 import { DOMParser } from '@xmldom/xmldom';
 
-/** Paper sizes in pixels at 300dpi, in the order the reference declares them. */
-const PAPER_SIZES: { name: string; orientation: 'Portrait' | 'Landscape'; width: number; height: number }[] = [
-	{ name: 'A6_Portrait', orientation: 'Portrait', width: 1240, height: 1748 },
-	{ name: 'A6_Landscape', orientation: 'Landscape', width: 1748, height: 1240 },
-	{ name: 'A5_Portrait', orientation: 'Portrait', width: 1748, height: 2480 },
-	{ name: 'A5_Landscape', orientation: 'Landscape', width: 2480, height: 1748 },
-	{ name: 'A4_Portrait', orientation: 'Portrait', width: 2480, height: 3508 },
-	{ name: 'A4_Landscape', orientation: 'Landscape', width: 3508, height: 2480 },
-	{ name: 'A3_Portrait', orientation: 'Portrait', width: 3508, height: 4961 },
-	{ name: 'A3_Landscape', orientation: 'Landscape', width: 4961, height: 3508 },
-	{ name: 'A2_Portrait', orientation: 'Portrait', width: 4961, height: 7016 },
-	{ name: 'A2_Landscape', orientation: 'Landscape', width: 7016, height: 4961 },
-	{ name: 'A1_Portrait', orientation: 'Portrait', width: 7016, height: 9933 },
-	{ name: 'A1_Landscape', orientation: 'Landscape', width: 9933, height: 7016 },
-	{ name: 'A0_Portrait', orientation: 'Portrait', width: 9933, height: 14043 },
-	{ name: 'A0_Landscape', orientation: 'Landscape', width: 14043, height: 9933 },
-	{ name: 'Letter_Portrait', orientation: 'Portrait', width: 2550, height: 3300 },
-	{ name: 'Letter_Landscape', orientation: 'Landscape', width: 3300, height: 2550 },
-	{ name: 'Legal_Portrait', orientation: 'Portrait', width: 2550, height: 4200 },
-	{ name: 'Legal_Landscape', orientation: 'Landscape', width: 4200, height: 2550 },
-	{ name: 'Slide_4_3', orientation: 'Landscape', width: 3306, height: 2480 },
-	{ name: 'Slide_16_9', orientation: 'Landscape', width: 3508, height: 1973 },
-	{ name: 'Slide_16_10', orientation: 'Landscape', width: 3508, height: 2193 }
-];
-
 export interface DrawioLayoutOptions {
-	/** Empty border kept around the diagram (pixels). */
-	margin?: number;
-	/** Update the view dimensions and paper size from the imported bounds. */
-	changePaperSize?: boolean;
 	/** Element ids whose position is derived from their children (e.g. deployment nodes). */
 	skipElementIds?: Set<string>;
 }
 
-interface Geometry {
-	x: number;
-	y: number;
-	width: number;
-	height: number;
-}
-
 /**
- * Applies element positions and relationship vertices from a drawio diagram to a view.
+ * Applies element positions and sizes plus relationship vertices from a drawio diagram
+ * to a view.
  *
  * The drawio file is expected to come from the diagram export: elements are `object`
  * elements with id = element id and a nested `mxGeometry`, relationships are `object`
- * elements with id = "<relationship id>-<order>" and `mxPoint` vertices. Deployment
- * nodes are clusters whose position is derived from their children, so the caller
- * passes their ids in `skipElementIds`. Everything is moved relative to (0,0) and then
- * centred in the computed page.
+ * elements with id = "<relationship id>-<order>" and `<Array as="points">` vertices.
+ * Deployment nodes are clusters whose position is derived from their children, so the
+ * caller passes their ids in `skipElementIds`.
+ *
+ * Only coordinates and sizes are applied. The page (dimensions and paper size) is left
+ * to {@link fitViewToContent}, which sizes it exactly like the graphviz auto-layout.
  */
 export function applyDrawioLayout(view: any, mx: string, options: DrawioLayoutOptions = {}): void {
-	const margin = options.margin ?? 400;
-	const changePaperSize = options.changePaperSize ?? true;
 	const skipElementIds = options.skipElementIds ?? new Set<string>();
 
-	const geometries = new Map<string, Geometry>();
+	const geometries = new Map<string, { x: number; y: number; width: number; height: number }>();
 	const vertices = new Map<string, { x: number; y: number }[]>();
 
 	const document = new DOMParser().parseFromString(mx, 'text/xml');
@@ -92,33 +57,18 @@ export function applyDrawioLayout(view: any, mx: string, options: DrawioLayoutOp
 			height: attribute(geometry, 'height')
 		});
 
-		const points = geometry.getElementsByTagName('mxPoint');
-		if (points.length > 0) {
-			const list: { x: number; y: number }[] = [];
-			for (let p = 0; p < points.length; p++) {
-				const point = points.item(p);
-				list.push({ x: Math.trunc(attribute(point, 'x')), y: Math.trunc(attribute(point, 'y')) });
-			}
-			vertices.set(id, list);
-		}
+		const points = waypoints(geometry);
+		if (points.length > 0) vertices.set(id, points);
 	}
-
-	let minimumX = Number.POSITIVE_INFINITY;
-	let minimumY = Number.POSITIVE_INFINITY;
-	let maximumX = Number.NEGATIVE_INFINITY;
-	let maximumY = Number.NEGATIVE_INFINITY;
 
 	for (const elementView of view.elements ?? []) {
 		if (skipElementIds.has(elementView.id)) continue;
 		const geometry = geometries.get(elementView.id);
 		if (!geometry) continue;
-
 		elementView.x = Math.trunc(geometry.x);
 		elementView.y = Math.trunc(geometry.y);
-		minimumX = Math.min(elementView.x, minimumX);
-		minimumY = Math.min(elementView.y, minimumY);
-		maximumX = Math.max(elementView.x + geometry.width, maximumX);
-		maximumY = Math.max(elementView.y + geometry.height, maximumY);
+		elementView.width = Math.round(geometry.width);
+		elementView.height = Math.round(geometry.height);
 	}
 
 	for (const relationshipView of view.relationships ?? []) {
@@ -126,55 +76,62 @@ export function applyDrawioLayout(view: any, mx: string, options: DrawioLayoutOp
 		if (!points) continue;
 		relationshipView.vertices = points.map((point) => ({ ...point }));
 	}
-
-	if (!Number.isFinite(minimumX)) return;
-
-	const pageWidth = Math.max(margin, maximumX + margin);
-	const pageHeight = Math.max(margin, maximumY + margin);
-
-	if (changePaperSize) {
-		view.dimensions = { width: pageWidth, height: pageHeight };
-		const paperSize = selectPaperSize(pageWidth, pageHeight);
-		if (paperSize) view.paperSize = paperSize;
-	}
-
-	const deltaX = Math.trunc((pageWidth - maximumX + minimumX) / 2);
-	const deltaY = Math.trunc((pageHeight - maximumY + minimumY) / 2);
-
-	for (const elementView of view.elements ?? []) {
-		elementView.x -= minimumX;
-		elementView.y -= minimumY;
-	}
-	for (const relationshipView of view.relationships ?? []) {
-		for (const vertex of relationshipView.vertices ?? []) {
-			vertex.x -= minimumX;
-			vertex.y -= minimumY;
-		}
-	}
-	for (const elementView of view.elements ?? []) {
-		elementView.x += deltaX;
-		elementView.y += deltaY;
-	}
-	for (const relationshipView of view.relationships ?? []) {
-		for (const vertex of relationshipView.vertices ?? []) {
-			vertex.x += deltaX;
-			vertex.y += deltaY;
-		}
-	}
 }
 
-/** The first paper size (in declaration order) that fits the page, or undefined. */
-function selectPaperSize(width: number, height: number): string | undefined {
-	const orientation = width > height ? 'Landscape' : 'Portrait';
-	for (const size of PAPER_SIZES) {
-		if (size.orientation === orientation && size.width > width && size.height > height) {
-			return size.name;
-		}
+/** Waypoints of a relationship geometry, i.e. the `<mxPoint>` children of its `<Array>`. */
+function waypoints(geometry: any): { x: number; y: number }[] {
+	const points = geometry.getElementsByTagName('mxPoint');
+	const list: { x: number; y: number }[] = [];
+	for (let i = 0; i < points.length; i++) {
+		const point = points.item(i);
+		if (point?.parentNode?.nodeName !== 'Array') continue;
+		list.push({ x: Math.trunc(attribute(point, 'x')), y: Math.trunc(attribute(point, 'y')) });
 	}
-	return undefined;
+	return list;
 }
 
 function attribute(node: any, name: string): number {
 	const value = Number.parseFloat(node?.getAttribute(name) ?? '');
 	return Number.isFinite(value) ? value : 0;
+}
+
+/** View collections of a workspace JSON, as used by the generator. */
+const VIEW_COLLECTIONS = [
+	'systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews',
+	'deploymentViews', 'dynamicViews', 'customViews', 'filteredViews', 'imageViews'
+];
+
+/**
+ * Applies a drawio file's layout to the view with the given key in a workspace JSON,
+ * and returns that view. Deployment nodes are clusters whose position comes from their
+ * children, so their ids are passed to {@link applyDrawioLayout} to be skipped. Returns
+ * undefined when the view is not found.
+ */
+export function applyDrawioLayoutToView(json: any, viewKey: string, mx: string): any | undefined {
+	const view = findViewByKey(json, viewKey);
+	if (!view) return undefined;
+	applyDrawioLayout(view, mx, { skipElementIds: deploymentNodeIds(json?.model) });
+	return view;
+}
+
+function findViewByKey(json: any, viewKey: string): any | undefined {
+	for (const collection of VIEW_COLLECTIONS) {
+		const list = json?.views?.[collection];
+		if (!Array.isArray(list)) continue;
+		const view = list.find((candidate: any) => candidate && candidate.key === viewKey);
+		if (view) return view;
+	}
+	return undefined;
+}
+
+/** Ids of all deployment nodes in a workspace model (they are positioned from children). */
+function deploymentNodeIds(model: any): Set<string> {
+	const ids = new Set<string>();
+	const visit = (node: any): void => {
+		if (!node || typeof node !== 'object') return;
+		if (node.id !== undefined) ids.add(String(node.id));
+		for (const child of node.children ?? []) visit(child);
+	};
+	for (const node of model?.deploymentNodes ?? []) visit(node);
+	return ids;
 }

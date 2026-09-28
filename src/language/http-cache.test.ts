@@ -73,64 +73,34 @@ describe('HttpCache coalescing (concurrent requests share one fetch)', () => {
 
 describe('validateTheme', () => {
 	it('accepts a well-formed theme with relative and absolute icons', async () => {
-		const fetcher = fetcherFor({
-			'https://themes.example.com/amazon/theme.json': VALID_THEME,
-			'https://themes.example.com/amazon/aws-ec2.png': 'PNG',
-			'https://themes.example.com/amazon/aws-cloud.png': 'PNG',
-			'https://cdn.example.com/rds.png': 'PNG'
-		});
-		await expect(validateTheme('https://themes.example.com/amazon/theme.json', VALID_THEME, fetcher)).resolves.toBeUndefined();
+		await expect(validateTheme('https://themes.example.com/amazon/theme.json', VALID_THEME)).resolves.toBeUndefined();
 	});
 
 	it('rejects a document that is not valid JSON', async () => {
-		const fetcher = fetcherFor({});
-		await expect(validateTheme('https://x.example/theme.json', '<!DOCTYPE html>', fetcher)).rejects.toThrow('not valid JSON');
+		await expect(validateTheme('https://x.example/theme.json', '<!DOCTYPE html>')).rejects.toThrow('not valid JSON');
 	});
 
 	it('rejects a JSON array (not an object)', async () => {
-		const fetcher = fetcherFor({});
-		await expect(validateTheme('https://x.example/theme.json', '[1,2,3]', fetcher)).rejects.toThrow(/not a JSON object/);
+		await expect(validateTheme('https://x.example/theme.json', '[1,2,3]')).rejects.toThrow(/not a JSON object/);
 	});
 
 	it('accepts a theme without "elements" and "relationships"', async () => {
-		const fetcher = fetcherFor({});
-		await expect(validateTheme('https://x.example/theme.json', JSON.stringify({ logo: '' }), fetcher)).resolves.toBeUndefined();
+		await expect(validateTheme('https://x.example/theme.json', JSON.stringify({ logo: '' }))).resolves.toBeUndefined();
 	});
 
 	it('accepts a theme whose "elements" is not an array', async () => {
-		const fetcher = fetcherFor({});
-		await expect(validateTheme('https://x.example/theme.json', JSON.stringify({ elements: {}, relationships: [] }), fetcher)).resolves.toBeUndefined();
+		await expect(validateTheme('https://x.example/theme.json', JSON.stringify({ elements: {}, relationships: [] }))).resolves.toBeUndefined();
 	});
 
-	it('rejects a theme with an unavailable icon', async () => {
+	it('accepts a theme regardless of whether its icons are available', async () => {
+		// Icon availability is not checked: verifying it would download every icon
+		// and stall on an unreachable host.
 		const theme = JSON.stringify({
 			elements: [{ tag: 'Amazon Web Services - EC2', icon: 'missing.png' }],
-			relationships: []
-		});
-		const fetcher = fetcherFor({
-			'https://x.example/theme.json': theme
-			// no icon file -> 404
-		});
-		await expect(validateTheme('https://x.example/theme.json', theme, fetcher)).rejects.toThrow('image is not available');
-	});
-
-	it('rejects a theme with an unavailable logo', async () => {
-		const theme = JSON.stringify({
-			elements: [],
 			relationships: [],
 			logo: 'https://x.example/logo-missing.png'
 		});
-		const fetcher = fetcherFor({ 'https://x.example/theme.json': theme });
-		await expect(validateTheme('https://x.example/theme.json', theme, fetcher)).rejects.toThrow('image is not available');
-	});
-
-	it('skips network checks for data: URIs', async () => {
-		const theme = JSON.stringify({
-			elements: [{ tag: 'X', icon: 'data:image/png;base64,AAA' }],
-			relationships: []
-		});
-		const fetcher = fetcherFor({ 'https://x.example/theme.json': theme });
-		await expect(validateTheme('https://x.example/theme.json', theme, fetcher)).resolves.toBeUndefined();
+		await expect(validateTheme('https://x.example/theme.json', theme)).resolves.toBeUndefined();
 	});
 });
 
@@ -175,28 +145,17 @@ describe('HttpCache.readRemoteWithCache', () => {
 
 		vi.advanceTimersByTime(HTTP_CACHE_TTL + 1);
 		bodies['https://x.example/theme.json'] = VALID_THEME;
-		// icons referenced by VALID_THEME must be available for validation
-		bodies['https://x.example/aws-ec2.png'] = 'PNG';
-		bodies['https://x.example/aws-cloud.png'] = 'PNG';
-		bodies['https://cdn.example.com/rds.png'] = 'PNG';
 		await expect(cache.readRemoteWithCache('https://x.example/theme.json', validateTheme)).resolves.toBe(VALID_THEME);
-			// the THEME itself is fetched twice (invalid + recovered); icons are fetched
-			// by the validator once each and are not cached separately
-			expect(fetchSpy.mock.calls.filter(([u]) => u === 'https://x.example/theme.json')).toHaveLength(2);
-		});
+		// the theme is fetched twice: invalid, then recovered after the TTL
+		expect(fetchSpy.mock.calls.filter(([u]) => u === 'https://x.example/theme.json')).toHaveLength(2);
+	});
 
 	it('remembers a valid theme and does not re-fetch within the TTL', async () => {
-		const fetchSpy = vi.fn(fetcherFor({
-			'https://x.example/theme.json': VALID_THEME,
-			'https://x.example/aws-ec2.png': 'PNG',
-			'https://x.example/aws-cloud.png': 'PNG',
-			'https://cdn.example.com/rds.png': 'PNG'
-		}));
+		const fetchSpy = vi.fn(fetcherFor({ 'https://x.example/theme.json': VALID_THEME }));
 		const cache = new HttpCache(fetchSpy);
 
 		await expect(cache.readRemoteWithCache('https://x.example/theme.json', validateTheme)).resolves.toBe(VALID_THEME);
 		await expect(cache.readRemoteWithCache('https://x.example/theme.json', validateTheme)).resolves.toBe(VALID_THEME);
-		// theme fetched once; icons fetched once each (not caching icons separately is fine)
 		expect(fetchSpy.mock.calls.filter(([u]) => u === 'https://x.example/theme.json')).toHaveLength(1);
 	});
 });

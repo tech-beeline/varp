@@ -135,7 +135,7 @@ connection.onRequest('c4/getFullContentForUri', async (params: { uri: string }) 
 // Returns the raw JSON content of the requested theme files so the diagram
 // preview webview can render without re-downloading them. Themes are validated
 // before being cached: an invalid theme (malformed JSON, missing required
-// fields, or unavailable images) is cached as invalid for the HTTP_CACHE_TTL
+// fields) is cached as invalid for the HTTP_CACHE_TTL
 // and is NOT included in the response, so the webview never receives a theme
 // that would break rendering.
 connection.onRequest('c4/getThemes', async (params: { themes: string[] }) => {

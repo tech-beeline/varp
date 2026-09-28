@@ -21,10 +21,10 @@
  *  - remote Structurizr themes (fetch + validation + cache)
  *
  * A single TTL (`HTTP_CACHE_TTL`) governs every cached document. When a theme
- * fails validation (malformed JSON, missing required fields, or unavailable
- * icons), its URL is cached as *invalid for the TTL* so the webview never
- * receives a broken theme; once the TTL expires the next request re-downloads
- * and re-validates it (giving a broken-but-fixed source a chance to recover).
+ * fails validation (malformed JSON, missing required fields), its URL is cached
+ * as *invalid for the TTL* so the webview never receives a broken theme; once
+ * the TTL expires the next request re-downloads and re-validates it (giving a
+ * broken-but-fixed source a chance to recover).
  *
  * The module is platform-neutral: the callers (`main.ts` / `main.browser.ts`)
  * supply the transport dependent `fetch` implementation. Keeping it here lets
@@ -60,9 +60,9 @@ export type Fetcher = (url: string) => Promise<FetchResult>;
  * Validator for a fetched document. Throws an Error when the content is
  * unacceptable; returns void/undefined when it is fine.
  *
- * The `fetcher` argument is the cache's own fetcher, so validators that need to
- * verify referenced assets (e.g. theme icons) reuse the same transport - and in
- * tests it can be stubbed together with the cache.
+ * The `fetcher` argument is the cache's own fetcher, so a validator that needs
+ * to verify referenced assets reuses the same transport - and in tests it can
+ * be stubbed together with the cache.
  */
 export type ContentValidator = (url: string, text: string, fetcher: Fetcher) => void | Promise<void>;
 
@@ -201,22 +201,19 @@ export const defaultFetcher: Fetcher = async (url: string) => {
 /**
  * Validates that `text` is a well-formed Structurizr theme JSON document.
  *
- * A theme is considered valid when:
- *  - it parses as a JSON object (not null/array/primitive);
- *  - every `icon`/`logo` it references is downloadable over the network
- *    (relative icon paths are resolved against the theme's base URL first).
+ * A theme is considered valid when it parses as a JSON object (not
+ * null/array/primitive). `elements`/`relationships` are optional: the renderer
+ * defaults them to empty arrays when absent.
  *
- * `elements`/`relationships` are optional: the renderer defaults them to empty
- * arrays when absent.
+ * The availability of the icons the theme references is deliberately NOT
+ * checked: verifying them downloads every icon, and an unreachable icon host
+ * stalls the theme request until the network timeout. The renderer simply
+ * ignores images it cannot load.
  *
  * Throws an Error with a human-readable reason on any failure; the caller
  * treats that as "theme must not be applied".
  */
-export async function validateTheme(
-	url: string,
-	text: string,
-	fetcher: Fetcher = defaultFetcher
-): Promise<void> {
+export async function validateTheme(url: string, text: string): Promise<void> {
 	let theme: any;
 	try {
 		theme = JSON.parse(text);
@@ -227,45 +224,4 @@ export async function validateTheme(
 	if (theme === null || typeof theme !== 'object' || Array.isArray(theme)) {
 		throw new Error(`Theme is not a JSON object: ${url}`);
 	}
-
-	const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
-
-	const iconUrls: string[] = [];
-
-	const elements = Array.isArray(theme.elements) ? theme.elements : [];
-	for (const style of elements) {
- 	if (style && typeof style === 'object' && typeof style.icon === 'string' && style.icon.length > 0) {
- 		// data URIs need no network check
- 		if (style.icon.startsWith('data:image')) {
- 			continue;
- 		}
- 		iconUrls.push(resolveIconUrl(baseUrl, style.icon));
- 	}
- }
-
- // The theme logo (bottom-left branding) is also rendered from an image URL.
- if (typeof theme.logo === 'string' && theme.logo.length > 0) {
- 	// data URIs need no network check
- 	if (theme.logo.startsWith('data:image')) {
- 		// skip
- 	} else {
- 		iconUrls.push(resolveIconUrl(baseUrl, theme.logo));
- 	}
- }
-
- // Verify every referenced image is downloadable. Any failure invalidates the
- // whole theme (per the requirement: unavailable images → do not apply theme).
- for (const iconUrl of iconUrls) {
- 	const fetched = await fetcher(iconUrl);
- 	if (!fetched.response.ok) {
- 		throw new Error(`Theme image is not available (HTTP ${fetched.response.status}): ${iconUrl}`);
- 	}
- }
-}
-
-function resolveIconUrl(baseUrl: string, icon: string): string {
- if (/^https?:\/\//i.test(icon)) {
- 	return icon;
- }
- return baseUrl + icon;
 }

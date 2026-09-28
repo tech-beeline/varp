@@ -24,6 +24,16 @@ import {
 } from "vscode";
 import { applyWorkspaceFileMetadata } from "./workspace-metadata";
 
+/** Random nonce for the webview's inline script, per the VS Code webview CSP guidance. */
+function getNonce(): string {
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let text = '';
+  for (let i = 0; i < 32; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
+}
+
 export class DiagramPreview {
   private panel: WebviewPanel | undefined;
   private currentViewKey: string | undefined;
@@ -52,7 +62,12 @@ export class DiagramPreview {
   // first postMessage to a freshly created webview can be dropped, leaving the
   // preview empty until the next auto-refresh arrives.
   private panelReady = false;
-  private pendingMessage: { uri?: string; json: any; viewKey: string; themes?: { url: string; content: string }[]; generation?: number; rebuild: boolean; textMeasurements?: Record<string, any> } | undefined;
+  private pendingMessage: { uri?: string; json: any; viewKey: string; themes?: { url: string; content: string }[]; generation?: number; rebuild: boolean; textMeasurements?: Record<string, any>; loadThemes?: boolean } | undefined;
+
+  // Themed delivery held back until the webview has built the theme-less workspace
+  // (its 'workspace-built' report). Delivering it earlier replaces the buffered
+  // theme-less payload before it is ever painted.
+  private pendingThemedDelivery: { json: any; viewKey: string; docUri?: string; generation?: number; textMeasurements?: Record<string, any>; themes?: { url: string; content: string }[]; loadThemes?: boolean } | undefined;
 
   /**
    * Re-runs the auto-layout with the text widths the webview measured, and returns
@@ -105,19 +120,27 @@ export class DiagramPreview {
     this.localResourceRoots = [Uri.joinPath(context.extensionUri, 'css'), Uri.joinPath(context.extensionUri, 'js')];
   }
 
-  public async updateWebView(json : any, viewKey : string, docUri? : string, themes : { url: string; content: string }[] | undefined = undefined, generation?: number, textMeasurements?: Record<string, any>) {
+  public async updateWebView(json : any, viewKey : string, docUri? : string, themes : { url: string; content: string }[] | undefined = undefined, generation?: number, textMeasurements?: Record<string, any>, loadThemes?: boolean) {
         console.log(`[C4 Gen] View Key: ${viewKey}`);
         const themesProvided = themes !== undefined;
         if (themesProvided) {
           this.currentThemes = themes;
+          // The themes are applied by this very delivery; a deferred one is stale.
+          this.pendingThemedDelivery = undefined;
+        } else if (this.pendingThemedDelivery) {
+          // Keep the deferred themed delivery on the latest payload: a drawio import
+          // (or any newer generation) may have changed the layout meanwhile, and the
+          // themed pass must rebuild that, not the snapshot taken in deliver().
+          this.pendingThemedDelivery = { ...this.pendingThemedDelivery, json, viewKey, docUri, generation, textMeasurements };
         }
         // Same document + same generation → the webview already built this exact
         // workspace JSON, so only a view switch is needed (no full rebuild).
         // Compared against the document bound by the previous call, before it is
-        // replaced below. Newly provided themes always force a rebuild.
+        // replaced below. Newly provided themes, and the theme fallback, force a rebuild.
         const sameWorkspace = docUri !== undefined
             && docUri === this.currentDocUri
             && !themesProvided
+            && loadThemes !== true
             && this.renderedGeneration !== undefined
             && generation !== undefined
             && generation === this.renderedGeneration;
@@ -134,13 +157,13 @@ export class DiagramPreview {
         // the webview measures them once it has the workspace styles, then reports
         // the widths back for the second layout pass.
         const measureText = textMeasurements !== undefined && Object.keys(textMeasurements).length > 0 && !sameWorkspace;
-        const message = { 'uri': docUri, 'json': json, 'viewKey': viewKey, 'themes': this.currentThemes, 'generation': generation, 'rebuild': !sameWorkspace, 'textMeasurements': measureText ? textMeasurements : undefined };
+        const message = { 'uri': docUri, 'json': json, 'viewKey': viewKey, 'themes': this.currentThemes, 'generation': generation, 'rebuild': !sameWorkspace, 'textMeasurements': measureText ? textMeasurements : undefined, 'loadThemes': loadThemes === true || undefined };
         if (this.panelReady) {
           this.panel.webview.postMessage(message);
         } else {
           // The webview is still loading - hold on to the latest payload and
           // deliver it as soon as the webview signals it is ready.
-          this.pendingMessage = { uri: docUri, json, viewKey, themes: this.currentThemes, generation, rebuild: !sameWorkspace, textMeasurements: measureText ? textMeasurements : undefined };
+          this.pendingMessage = { uri: docUri, json, viewKey, themes: this.currentThemes, generation, rebuild: !sameWorkspace, textMeasurements: measureText ? textMeasurements : undefined, loadThemes: loadThemes === true || undefined };
         }
   }
 
@@ -170,14 +193,40 @@ export class DiagramPreview {
         this.themesFetched = true;
         const declared = json?.views?.configuration?.themes;
         const themes = await fetchThemes(declared);
+        // The themed re-render must not replace the buffered theme-less payload before
+        // it is painted: the webview may still be loading (the theme fetch is
+        // cache-backed and returns in milliseconds). It is therefore held back until
+        // the webview reports it built the theme-less workspace (see the
+        // 'workspace-built' handler below).
         if (themes !== undefined) {
-          await this.updateWebView(json, viewKey, docUri, themes, generation, textMeasurements);
+          this.pendingThemedDelivery = { json, viewKey, docUri, generation, textMeasurements, themes };
         } else if (Array.isArray(declared) && declared.length > 0) {
           // The workspace declares themes but the server could not provide them
           // (unreachable URL, or a built-in theme the server does not resolve):
-          // let the webview load them itself.
-          this.requestThemeFallback();
+          // let the webview load them itself, once it has rendered the workspace.
+          this.pendingThemedDelivery = { json, viewKey, docUri, generation, textMeasurements, loadThemes: true };
         }
+        // If the theme-less workspace was already built (the theme fetch resolved
+        // after it), no further 'workspace-built' report is coming for this
+        // generation - send the deferred delivery now.
+        if (this.pendingThemedDelivery && this.renderedGeneration === generation) {
+          await this.flushPendingThemedDelivery();
+        }
+  }
+
+  /**
+   * Sends the deferred themed delivery, once the webview has built the theme-less
+   * workspace. Either injects the theme contents fetched by the server, or, when the
+   * server could not provide them, re-sends the JSON with the declared themes so the
+   * webview loads them itself.
+   */
+  private async flushPendingThemedDelivery(): Promise<void> {
+        const pending = this.pendingThemedDelivery;
+        if (!pending) {
+          return;
+        }
+        this.pendingThemedDelivery = undefined;
+        await this.updateWebView(pending.json, pending.viewKey, pending.docUri, pending.themes, pending.generation, pending.textMeasurements, pending.loadThemes);
   }
 
   /**
@@ -199,13 +248,6 @@ export class DiagramPreview {
         }
   }
 
-  /** Asks the webview to load the workspace's themes itself and re-render. */
-  public requestThemeFallback(): void {
-        if (this.panel && this.panelReady) {
-          this.panel.webview.postMessage({ command: 'load-themes' });
-        }
-  }
-
   /**
    * Opens the preview panel for a view without a JSON payload yet. The webview
    * shows the "Rendering" indicator until updateWebView() delivers the JSON
@@ -221,6 +263,7 @@ export class DiagramPreview {
         if (!this.panel || docUri === undefined || docUri !== this.currentDocUri) {
           this.currentThemes = undefined;
           this.themesFetched = false;
+          this.pendingThemedDelivery = undefined;
         }
         if (docUri) {
           this.currentDocUri = docUri;
@@ -276,10 +319,18 @@ export class DiagramPreview {
     // vertices into the view JSON and clears view.automaticLayout, so the webview
     // renders those coordinates as-is. The vendored dagre layout is kept only as
     // a fallback for views without pre-computed positions.
+    //
+    // The CSP allows the local scripts/styles (webview.cspSource), the inline
+    // styles the renderer writes and the SVG it injects ('unsafe-inline'), the
+    // theme icon images over https and as data:/blob: URIs (img-src), and the
+    // webview's own theme download for the fallback (connect-src https:). The
+    // inline script is authorized by a per-load nonce instead of 'unsafe-inline'.
+    const nonce = getNonce();
     panel.webview.html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${panel.webview.cspSource} https: data: blob:; style-src ${panel.webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${panel.webview.cspSource}; font-src ${panel.webview.cspSource} data:; connect-src ${panel.webview.cspSource} https: data:">
     <meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no">
     <script type="text/javascript" src="${panel.webview.asWebviewUri(this.jsjquery)}"></script>
     <script type="text/javascript" src="${panel.webview.asWebviewUri(this.jsjointcore)}"></script>
@@ -343,7 +394,7 @@ export class DiagramPreview {
 </body>
 </html>
 
-<script>
+<script nonce="${nonce}">
         var diagram;
         // Text measurement candidates of the last delivered workspace, so a re-render
         // triggered by the theme fallback can measure again with the themed styles.
@@ -374,27 +425,7 @@ export class DiagramPreview {
                 return;
               }
 
-              structurizr.workspace = undefined;
-              structurizr.diagram = undefined;
-              structurizr.ui.themes = [];
-              structurizr.ui.ignoredImages = [];
-
-              // Completely wipe the DOM container of any previous paper/canvas
-              // (structurizr.ui.Diagram appends '#diagram-viewport'/'#diagram-canvas'
-              // with fixed ids, so a stale one must not remain).
-              $('#diagram').empty();
-
-              lastTextMeasurements = message.textMeasurements;
-              lastUri = message.uri;
-              lastGeneration = message.generation;
-              structurizr.workspace = new structurizr.Workspace(message.json);
-              if (message.themes !== undefined) {
-                applyThemes(message.themes, function() {
-                  buildDiagram(message);
-                });
-              } else {
-                buildDiagram(message);
-              }
+              startBuild(message, undefined);
             } else if (message.command === 'export-drawio') {
               // Export current (displayed) view to DrawIO format
               var currentViewKey = structurizr.diagram.getCurrentViewOrFilter ?
@@ -412,11 +443,6 @@ export class DiagramPreview {
               structurizr.diagram.exportCurrentDiagramToSVG({ metadata: true, crop: true }, function(svgMarkup) {
                 vscode.postMessage({ command: 'svg-result', svg: svgMarkup });
               });
-            } else if (message.command === 'load-themes') {
-              // The extension could not fetch the declared themes: try to load them
-              // here (structurizr.ui.loadThemes reads them from the workspace) and
-              // re-render once they are applied.
-              loadThemesInWebview();
             } else if (message.viewKey !== undefined) {
               structurizr.diagram.changeView(message.viewKey);
             }
@@ -490,10 +516,74 @@ export class DiagramPreview {
             vscode.postMessage({ command: 'text-widths', uri: message.uri, generation: message.generation, widths: widths });
         }
 
+        // Serializes Diagram construction. The renderer keeps a single global
+        // structurizr.diagram and a single '#diagram' container (fixed ids), so two
+        // Diagram constructors must never overlap: the construction callback fires
+        // asynchronously, and a payload delivered meanwhile would reassign the global
+        // and wipe the container under the pending callback. A payload that arrives
+        // while a build is in progress is queued - the latest wins - and started once
+        // the current construction completes.
+        var buildInProgress = false;
+        var queuedBuild;
+
+        function startBuild(message, measure) {
+            if (buildInProgress) {
+                queuedBuild = { message: message, measure: measure };
+                return;
+            }
+            buildInProgress = true;
+            if (message.json !== undefined) {
+                applyWorkspace(message);
+            } else {
+                // A rebuild of the already-built workspace (theme pass): reset the
+                // container and construct a fresh Diagram from the mutated workspace.
+                $('#diagram').empty();
+                structurizr.diagram = undefined;
+                buildDiagram(message, measure);
+            }
+        }
+
+        function applyWorkspace(message) {
+            structurizr.workspace = undefined;
+            structurizr.diagram = undefined;
+            structurizr.ui.themes = [];
+            structurizr.ui.ignoredImages = [];
+
+            // Completely wipe the DOM container of any previous paper/canvas
+            // (structurizr.ui.Diagram appends '#diagram-viewport'/'#diagram-canvas'
+            // with fixed ids, so a stale one must not remain).
+            $('#diagram').empty();
+
+            lastTextMeasurements = message.textMeasurements;
+            lastUri = message.uri;
+            lastGeneration = message.generation;
+            structurizr.workspace = new structurizr.Workspace(message.json);
+            if (message.themes !== undefined) {
+                applyThemes(message.themes, function() {
+                    buildDiagram(message);
+                });
+            } else {
+                buildDiagram(message);
+            }
+        }
+
+        function finishBuild() {
+            buildInProgress = false;
+            if (queuedBuild) {
+                var queued = queuedBuild;
+                queuedBuild = undefined;
+                startBuild(queued.message, queued.measure);
+            }
+        }
+
         function buildDiagram(message, measure) {
-            structurizr.diagram = new structurizr.ui.Diagram('diagram', false, function() {
-                structurizr.diagram.onViewChanged(viewChanged);
-                structurizr.diagram.changeView(message.viewKey);
+            // Bind the callback to THIS instance, not the global: a superseded build
+            // must never act on a later Diagram.
+            var diagram = new structurizr.ui.Diagram('diagram', false, function() {
+                diagram.onViewChanged(function() {
+                    viewChanged(diagram);
+                });
+                diagram.changeView(message.viewKey);
                 // After the Diagram (workspace) is fully constructed, tell the
                 // extension which (uri, generation) it built - so a later
                 // updateWebView for the SAME pair can skip the rebuild.
@@ -504,14 +594,22 @@ export class DiagramPreview {
                 if (measure !== false) {
                     measureFrameTexts(message);
                 }
+                // The server could not provide the declared themes: load them here,
+                // once the diagram is rendered, and create the diagram again in the
+                // load callback (see loadThemesInWebview).
+                if (message.loadThemes === true) {
+                    loadThemesInWebview();
+                }
+                finishBuild();
             });
+            structurizr.diagram = diagram;
         }
 
         // Loads the workspace themes inside the webview and re-renders when they are
         // applied. A theme that never loads must not block the re-render forever, so
         // the callback also fires after a timeout.
         function loadThemesInWebview() {
-            if (!structurizr.workspace || !structurizr.diagram) return;
+            if (!structurizr.workspace) return;
             var configuration = structurizr.workspace.views ? structurizr.workspace.views.configuration : undefined;
             var declared = configuration ? configuration.themes : undefined;
             if (!declared || declared.length === 0) return;
@@ -519,6 +617,13 @@ export class DiagramPreview {
             // not serve, so only http(s) themes are worth loading here.
             var loadable = declared.some(function(theme) { return String(theme).indexOf('http') === 0; });
             if (!loadable) return;
+            // Discard the current diagram BEFORE loading the themes: loadThemes mutates
+            // structurizr.ui.themes, and a diagram rendering while they are being
+            // applied finds theme icons with no preloaded metadata. The diagram is
+            // created again in the callback, once the themes are in place, so its
+            // constructor's preloadImages picks the icons up - the same order the
+            // vendor's static viewer uses (it creates its diagram inside this callback).
+            structurizr.diagram = undefined;
             var finished = false;
             var finish = function() {
                 if (finished) return;
@@ -548,9 +653,7 @@ export class DiagramPreview {
                 viewKey = current ? current.key : undefined;
             }
             if (!viewKey) return;
-            $('#diagram').empty();
-            structurizr.diagram = undefined;
-            buildDiagram({
+            startBuild({
                 viewKey: viewKey,
                 textMeasurements: measure ? lastTextMeasurements : undefined,
                 uri: lastUri,
@@ -612,22 +715,22 @@ export class DiagramPreview {
             });
         }
 
-        function viewChanged() {
+        function viewChanged(diagram) {
             const options = {
                 metadata: true,
                 crop: false,
                 dimensions: false
             }
-            const view = structurizr.diagram.getCurrentViewOrFilter
-                ? structurizr.diagram.getCurrentViewOrFilter()
-                : structurizr.diagram.getCurrentView();
+            const view = diagram.getCurrentViewOrFilter
+                ? diagram.getCurrentViewOrFilter()
+                : diagram.getCurrentView();
             const viewKey = view ? view.key : undefined;
             // Compare the stable base prefix, not the full key: the CST-offset hash
             // suffix changes on every edit even for the same logical view.
             const sameView = baseViewKey(viewKey) === baseViewKey(displayedViewKey);
             displayedViewKey = viewKey;
 
-            structurizr.diagram.exportCurrentDiagramToSVG(options, function(svgMarkup) {
+            diagram.exportCurrentDiagramToSVG(options, function(svgMarkup) {
               // IMPORTANT: do NOT empty('#diagram') here. #diagram is the live
               // Joint-viewport of the current Diagram - wiping it (asynchronously,
               // after SVG export) can delete the freshly appended canvas of the
@@ -639,7 +742,7 @@ export class DiagramPreview {
               // reset the viewport when switching to a different view.
               if (!sameView) {
                 panzoom.reset({ animate: false });
-              }              
+              }
             });
         }
 
@@ -658,6 +761,7 @@ export class DiagramPreview {
       this.panel = undefined;
       this.panelReady = false;
       this.pendingMessage = undefined;
+      this.pendingThemedDelivery = undefined;
       this.pendingJson = false;
     });
 
@@ -669,7 +773,7 @@ export class DiagramPreview {
         if (this.pendingMessage) {
           const pending = this.pendingMessage;
           this.pendingMessage = undefined;
-          panel.webview.postMessage({ 'uri': pending.uri, 'json': pending.json, 'viewKey': pending.viewKey, 'themes': pending.themes, 'generation': pending.generation, 'rebuild': pending.rebuild, 'textMeasurements': pending.textMeasurements });
+          panel.webview.postMessage({ 'uri': pending.uri, 'json': pending.json, 'viewKey': pending.viewKey, 'themes': pending.themes, 'generation': pending.generation, 'rebuild': pending.rebuild, 'textMeasurements': pending.textMeasurements, 'loadThemes': pending.loadThemes });
         }
       } else if (message && message.command === 'text-widths') {
         // The webview measured the frame texts it draws. The language server re-runs
@@ -687,6 +791,8 @@ export class DiagramPreview {
         if (message.uri === undefined || message.uri === this.currentDocUri) {
           this.renderedGeneration = message.generation;
         }
+        // The theme-less workspace is built and rendered - apply the themes now.
+        void this.flushPendingThemedDelivery();
       }
     });
 

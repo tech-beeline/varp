@@ -14,7 +14,7 @@
 	limitations under the License.
 */
 
-import { describe, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { NodeFileSystem } from 'langium/node';

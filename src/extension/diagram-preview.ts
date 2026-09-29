@@ -790,9 +790,17 @@ export class DiagramPreview {
         // instead of a full rebuild.
         if (message.uri === undefined || message.uri === this.currentDocUri) {
           this.renderedGeneration = message.generation;
+          // The theme-less workspace is built and rendered - apply the themes now.
+          // Only the report of the pending delivery's own (document, generation)
+          // proves that build is on screen, so a stale report cannot flush the
+          // themed delivery before the theme-less one is painted.
+          const pending = this.pendingThemedDelivery;
+          if (pending
+              && (pending.docUri === undefined || pending.docUri === message.uri)
+              && (pending.generation === undefined || pending.generation === message.generation)) {
+            void this.flushPendingThemedDelivery();
+          }
         }
-        // The theme-less workspace is built and rendered - apply the themes now.
-        void this.flushPendingThemedDelivery();
       }
     });
 

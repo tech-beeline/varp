@@ -33,6 +33,7 @@ export function activate(context: ExtensionContext): void {
             transport: TransportKind.ipc,
             options: { 
                 execArgv: [
+                    '--use-system-ca',
                     '--stack-size=65536',
                     '--max-old-space-size=8192',
                     '--max-semi-space-size=256'
@@ -46,6 +47,7 @@ export function activate(context: ExtensionContext): void {
                 execArgv: [
                     '--nolazy', 
                     '--inspect=6009',
+                    '--use-system-ca',
                     '--stack-size=65536',
                     '--max-old-space-size=8192',
                     '--max-semi-space-size=256'

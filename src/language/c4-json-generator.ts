@@ -210,7 +210,7 @@ interface ImpliedRelationship {
 interface TextMeasurementCandidate {
     /** Unique across the workspace: view key, cluster id and text kind. */
     key: string;
-    kind: 'element-name' | 'element-metadata' | 'group-name' | 'leaf-name' | 'leaf-metadata' | 'leaf-description';
+    kind: 'element-name' | 'element-metadata' | 'group-name';
     /** Element whose name/metadata is drawn (element-* kinds). */
     elementId?: string;
     /** Metadata candidates: whether the renderer appends the element technology. */
@@ -224,12 +224,6 @@ interface ViewTextMeasurements {
     candidates: TextMeasurementCandidate[];
     /** Cluster id → keys of the texts drawn inside that cluster. */
     clusters: Record<string, string[]>;
-    /**
-     * Node id → keys of the texts drawn inside that element box. The renderer wraps
-     * name, metadata and description to the box width, so a box only has to fit the
-     * longest unbreakable word; the webview reports the required box width directly.
-     */
-    nodeTexts: Record<string, string[]>;
     /** Cluster/node id → child ids (the cluster tree of the DOT graph). */
     children: Record<string, string[]>;
     /** Node id → rendered width in px (lower bound for a frame's content width). */
@@ -3995,7 +3989,6 @@ class JsonGenerator {
         // frame shows a name; element frames also show a metadata line.
         const candidates: TextMeasurementCandidate[] = [];
         const clusters: Record<string, string[]> = {};
-        const nodeTexts: Record<string, string[]> = {};
         const nodeWidths: Record<string, number> = {};
         const addElementTexts = (clusterId: string, element: NamedElement, withTechnology = false) => {
             const elementId = this.getId(element);
@@ -4113,16 +4106,6 @@ class JsonGenerator {
                 label: `${id}: ${name}`
             };
             nodeWidths[id] = size.width;
-            // The renderer wraps a box's name and metadata to the box width, so only
-            // an unbreakable word wider than the box can overflow it - the webview
-            // measures the longest word of both texts.
-            const nameKey = `${viewKey}|${id}|leaf-name`;
-            const metadataKey = `${viewKey}|${id}|leaf-metadata`;
-            const descriptionKey = `${viewKey}|${id}|leaf-description`;
-            nodeTexts[id] = [nameKey, metadataKey, descriptionKey];
-            candidates.push({ key: nameKey, kind: 'leaf-name', elementId: id });
-            candidates.push({ key: metadataKey, kind: 'leaf-metadata', elementId: id, withTechnology: true });
-            candidates.push({ key: descriptionKey, kind: 'leaf-description', elementId: id });
             const frameParent = this.resolveFrameParent(el, scopeElement);
             const base = frameParent ? this.getId(frameParent) : undefined;
             const scopeId = scopeElement ? this.getId(scopeElement) : undefined;
@@ -4279,7 +4262,7 @@ class JsonGenerator {
         this.frameTrees.set(viewKey, { childrenOf, clusterKind });
         return {
             dot: lines.join('\n'),
-            measurements: { candidates, clusters, nodeTexts, children: childrenOf, nodeWidths }
+            measurements: { candidates, clusters, children: childrenOf, nodeWidths }
         };
     }
 
@@ -4577,9 +4560,9 @@ class JsonGenerator {
 
     /**
      * Re-runs the auto-layout of the views whose frames show measured texts wider than
-     * their content. The renderer sizes such a frame from the measured name/metadata,
-     * so the space the frame (or its text) takes beyond the content has to be reserved
-     * in the graph, otherwise the frame overlaps its right-hand neighbour.
+     * their content, raising the cluster margins so the frame text and the frame itself
+     * are reserved in the graph. Element boxes are not measured: the renderer wraps
+     * their text to the box width.
      *
      * Returns the views that were re-laid out, so the client can re-render them.
      */
@@ -4592,16 +4575,11 @@ class JsonGenerator {
                 const layout = view?.key !== undefined ? this.viewLayouts.get(view.key) : undefined;
                 if (!layout) continue;
                 const margins = this.clusterMargins(layout.measurements, widths);
-                const nodeWidths = this.elementWidths(layout.measurements, widths);
-                if (margins === undefined && nodeWidths === undefined) continue;
-                let dot = layout.dot;
-                if (margins !== undefined) dot = this.withClusterMargins(dot, margins);
-                if (nodeWidths !== undefined) dot = this.withNodeWidths(dot, nodeWidths);
-                // Nothing needs more room than the DOT already reserves: the view was
-                // re-laid out by an earlier measurement pass, so return it as-is. A
-                // rebuild that raced with that pass (e.g. the themes arriving) still
-                // has to receive the reserved coordinates, otherwise it would keep
-                // rendering the layout from before the measurement.
+                if (margins === undefined) continue;
+                const dot = this.withClusterMargins(layout.dot, margins);
+                // The DOT already reserves the requested space: the view was re-laid out
+                // by an earlier measurement pass, so return it as-is and let the client
+                // rebuild with the reserved coordinates.
                 if (dot === layout.dot) {
                     updated.push(view);
                     continue;
@@ -4729,45 +4707,6 @@ class JsonGenerator {
             if (marginPoints > 0) margins[clusterId] = marginPoints;
         }
         return Object.keys(margins).length > 0 ? margins : undefined;
-    }
-
-    /**
-     * Extra widths (in px) for element boxes whose text contains a word wider than
-     * the box: the renderer wraps that text to the box width, so an unbreakable word
-     * would otherwise be drawn across the neighbouring element. The measured value
-     * already includes the renderer's padding and icon allowance.
-     * Returns undefined when every box already fits its text.
-     */
-    private elementWidths(measurements: ViewTextMeasurements, widths: Record<string, number>): Record<string, number> | undefined {
-        const required: Record<string, number> = {};
-        for (const nodeId of Object.keys(measurements.nodeTexts)) {
-            let textWidth = 0;
-            for (const key of measurements.nodeTexts[nodeId]) {
-                const measured = widths[key];
-                if (measured !== undefined) textWidth = Math.max(textWidth, measured);
-            }
-            if (textWidth === 0) continue;
-            if (textWidth > (measurements.nodeWidths[nodeId] ?? 0)) required[nodeId] = textWidth;
-        }
-        return Object.keys(required).length > 0 ? required : undefined;
-    }
-
-    /**
-     * Returns the DOT with the width of the given element boxes raised to the
-     * requested value (in px), keeping every other attribute untouched.
-     */
-    private withNodeWidths(dot: string, widths: Record<string, number>): string {
-        const lines = dot.split('\n');
-        for (let i = 0; i < lines.length; i++) {
-            const node = /^(\s*)([A-Za-z_][A-Za-z0-9_]*|"[^"]+") \[width=([\d.]+),height=/.exec(lines[i]);
-            if (!node) continue;
-            const requested = widths[node[2]];
-            if (requested === undefined) continue;
-            const inches = (requested / 300).toFixed(6);
-            if (parseFloat(inches) <= parseFloat(node[3])) continue;
-            lines[i] = lines[i].replace(/\[width=[\d.]+,/, `[width=${inches},`);
-        }
-        return lines.join('\n');
     }
 
     /**

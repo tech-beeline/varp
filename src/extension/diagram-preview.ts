@@ -64,9 +64,8 @@ export class DiagramPreview {
   private panelReady = false;
   private pendingMessage: { uri?: string; json: any; viewKey: string; themes?: { url: string; content: string }[]; generation?: number; rebuild: boolean; textMeasurements?: Record<string, any>; loadThemes?: boolean } | undefined;
 
-  // Themed delivery held back until the webview has built the theme-less workspace
-  // (its 'workspace-built' report). Delivering it earlier replaces the buffered
-  // theme-less payload before it is ever painted.
+  // Themed delivery (server-fetched theme contents, or loadThemes for the webview
+  // fallback) sent once the webview reports it built the theme-less workspace.
   private pendingThemedDelivery: { json: any; viewKey: string; docUri?: string; generation?: number; textMeasurements?: Record<string, any>; themes?: { url: string; content: string }[]; loadThemes?: boolean } | undefined;
 
   /**
@@ -193,11 +192,8 @@ export class DiagramPreview {
         this.themesFetched = true;
         const declared = json?.views?.configuration?.themes;
         const themes = await fetchThemes(declared);
-        // The themed re-render must not replace the buffered theme-less payload before
-        // it is painted: the webview may still be loading (the theme fetch is
-        // cache-backed and returns in milliseconds). It is therefore held back until
-        // the webview reports it built the theme-less workspace (see the
-        // 'workspace-built' handler below).
+        // The themed delivery is deferred until the webview reports it built the
+        // theme-less workspace (see the 'workspace-built' handler below).
         if (themes !== undefined) {
           this.pendingThemedDelivery = { json, viewKey, docUri, generation, textMeasurements, themes };
         } else if (Array.isArray(declared) && declared.length > 0) {
@@ -405,6 +401,15 @@ export class DiagramPreview {
         // when the same view is re-rendered (e.g., auto-refresh) and reset the
         // viewport only when switching to a different view.
         var displayedViewKey;
+        // Themes applied to the workspace currently built, with the key of the payload
+        // they belong to. A later payload of the same workspace that carries no themes
+        // of its own reuses them.
+        var loadedThemes;
+        var loadedThemesKey;
+        // Key of the payload currently being built (see themesKey).
+        var currentThemesKey;
+        // True while structurizr.ui.loadThemes is fetching themes for this workspace.
+        var themesPending = false;
         // View keys embed a CST-offset hash that changes whenever the source is
         // edited (the view's offset shifts), so the same logical view can be
         // re-delivered under a different full key. The stable base prefix
@@ -448,10 +453,10 @@ export class DiagramPreview {
             }
         });
 
-        // Measures the texts the renderer sizes frames from (name and metadata) with
-        // the same font it draws them with, and reports the widths back so the
-        // extension can re-run the auto-layout with that space reserved. Frames whose
-        // text is wider than their content would otherwise overlap their neighbours.
+        // Measures the frame texts (name and metadata) with the font the renderer draws
+        // them with, and reports the widths back so the extension can reserve that space
+        // in the auto-layout. Only frame texts are measured: the renderer wraps element
+        // box text to the box width, so a box size does not depend on its text.
         function measureFrameTexts(message) {
             if (!message.textMeasurements || !structurizr.workspace) return;
             var context = document.createElement('canvas').getContext('2d');
@@ -462,11 +467,9 @@ export class DiagramPreview {
                     var text;
                     var fontSize;
                     var bold = false;
-                    var longestWordOnly = false;
-                    var requiredBoxExtra = 0;
                     var frameExtra = 0;
                     if (candidate.kind === 'group-name') {
-                        var groupStyle = structurizr.ui.findElementStyle({ type: 'Group', tags: 'Group, Group:' + text });
+                        var groupStyle = structurizr.ui.findElementStyle({ type: 'Group', tags: 'Group, Group:' + candidate.groupName });
                         text = candidate.groupName;
                         fontSize = groupStyle.fontSize * 1.4;
                         bold = true;
@@ -475,23 +478,14 @@ export class DiagramPreview {
                         var element = structurizr.workspace.findElementById(candidate.elementId);
                         if (!element) return;
                         var elementStyle = structurizr.ui.findElementStyle(element);
-                        if (candidate.kind === 'element-name' || candidate.kind === 'leaf-name') {
+                        if (candidate.kind === 'element-name') {
                             text = structurizr.util.removeNewlineCharacters(element.name);
                             fontSize = elementStyle.fontSize * 1.4;
                             bold = true;
-                        } else if (candidate.kind === 'leaf-description') {
-                            text = element.description;
-                            fontSize = elementStyle.fontSize;
                         } else {
                             text = structurizr.ui.getMetadataForElement(element, candidate.withTechnology === true);
                             fontSize = elementStyle.fontSize * 0.7;
                         }
-                        // A box wraps its text to the box width, so only its longest
-                        // unbreakable word can overflow the box.
-                        longestWordOnly = candidate.kind === 'leaf-name' || candidate.kind === 'leaf-metadata' || candidate.kind === 'leaf-description';
-                        // The renderer wraps a box's text to the box width minus its
-                        // padding, and reserves room for a left icon.
-                        requiredBoxExtra = 60 + (elementStyle.iconPosition === 'Left' && elementStyle.icon !== undefined ? 75 : 0);
                         // A frame is sized as max(content + 2 * clusterPadding, minimumWidth + 2 * margin)
                         // with minimumWidth = icon + 10 + text and margin = 15 - so the frame
                         // needs the text plus 30px, plus 70px when it shows an icon.
@@ -499,17 +493,8 @@ export class DiagramPreview {
                     }
                     if (!text || !isFinite(fontSize) || fontSize <= 0) return;
                     context.font = (bold ? 'bold ' : '') + fontSize + 'px ' + structurizr.ui.DEFAULT_FONT_NAME;
-                    if (longestWordOnly) {
-                        var longest = 0;
-                        String(text).split(/\s+/).forEach(function(word) {
-                            longest = Math.max(longest, context.measureText(word).width);
-                        });
-                        // Report the box width the renderer needs, not the text width.
-                        widths[candidate.key] = longest + requiredBoxExtra;
-                    } else {
-                        // Frames: report the frame width the renderer will enforce.
-                        widths[candidate.key] = context.measureText(text).width + frameExtra;
-                    }
+                    // Report the frame width the renderer will enforce.
+                    widths[candidate.key] = context.measureText(text).width + frameExtra;
                 });
 
             });
@@ -543,10 +528,44 @@ export class DiagramPreview {
             }
         }
 
+        // Key of a payload's theme set: its document URI and its declared themes.
+        function themesKey(message) {
+            var declared;
+            try {
+                var json = message.json;
+                declared = json && json.views && json.views.configuration ? json.views.configuration.themes : undefined;
+            } catch (e) {
+                declared = undefined;
+            }
+            return (message.uri || '') + '|' + JSON.stringify(declared || []);
+        }
+
+        // Stores the themes now in structurizr.ui.themes under the key of the workspace
+        // being built, for reuse by later payloads of that workspace.
+        function rememberThemes() {
+            if (structurizr.ui.themes && structurizr.ui.themes.length > 0 && currentThemesKey) {
+                loadedThemes = structurizr.ui.themes;
+                loadedThemesKey = currentThemesKey;
+            }
+        }
+
+        // Whether the frame texts can be measured now. False only while the webview is
+        // loading themes: the frame widths depend on the themed font sizes.
+        function themesReadyForMeasurement() {
+            return themesPending !== true;
+        }
+
         function applyWorkspace(message) {
+            currentThemesKey = themesKey(message);
+            // A payload that carries no themes of its own (relayout, auto-refresh,
+            // drawio import) reuses the themes already loaded for this workspace.
+            var preserved = (message.themes === undefined && message.loadThemes !== true && loadedThemesKey === currentThemesKey)
+                ? loadedThemes
+                : undefined;
+
             structurizr.workspace = undefined;
             structurizr.diagram = undefined;
-            structurizr.ui.themes = [];
+            structurizr.ui.themes = preserved || [];
             structurizr.ui.ignoredImages = [];
 
             // Completely wipe the DOM container of any previous paper/canvas
@@ -588,17 +607,16 @@ export class DiagramPreview {
                 // extension which (uri, generation) it built - so a later
                 // updateWebView for the SAME pair can skip the rebuild.
                 rememberBuiltWorkspace(message);
-                // Styles are registered by now, so the frame texts can be measured.
-                // The rebuild after the measurement pass must not measure again -
-                // the widths are already reserved and it would loop.
-                if (measure !== false) {
-                    measureFrameTexts(message);
-                }
-                // The server could not provide the declared themes: load them here,
-                // once the diagram is rendered, and create the diagram again in the
-                // load callback (see loadThemesInWebview).
+                // The payload asks the webview to load the declared themes itself; the
+                // diagram is created again in the load callback (see loadThemesInWebview).
+                // It runs before the measurement, which waits for the themes.
                 if (message.loadThemes === true) {
                     loadThemesInWebview();
+                }
+                // Styles are registered by now, so the frame texts can be measured with
+                // the final font sizes.
+                if (measure !== false && themesReadyForMeasurement()) {
+                    measureFrameTexts(message);
                 }
                 finishBuild();
             });
@@ -612,11 +630,15 @@ export class DiagramPreview {
             if (!structurizr.workspace) return;
             var configuration = structurizr.workspace.views ? structurizr.workspace.views.configuration : undefined;
             var declared = configuration ? configuration.themes : undefined;
-            if (!declared || declared.length === 0) return;
+            if (!declared || declared.length === 0) {
+                return;
+            }
             // Built-in theme names resolve to /static/themes/... which the panel does
             // not serve, so only http(s) themes are worth loading here.
             var loadable = declared.some(function(theme) { return String(theme).indexOf('http') === 0; });
-            if (!loadable) return;
+            if (!loadable) {
+                return;
+            }
             // Discard the current diagram BEFORE loading the themes: loadThemes mutates
             // structurizr.ui.themes, and a diagram rendering while they are being
             // applied finds theme icons with no preloaded metadata. The diagram is
@@ -628,11 +650,15 @@ export class DiagramPreview {
             var finish = function() {
                 if (finished) return;
                 finished = true;
+                themesPending = false;
+                rememberThemes();
                 rebuildDiagram(true);
             };
             try {
+                themesPending = true;
                 structurizr.ui.loadThemes(finish);
             } catch (e) {
+                themesPending = false;
                 console.warn('[C4 Themes] webview theme fallback failed:', e);
                 return;
             }
@@ -695,6 +721,7 @@ export class DiagramPreview {
                 });
                 if (--pending <= 0) {
                     structurizr.ui.themes = loaded;
+                    rememberThemes();
                     callback();
                 }
             }
@@ -778,26 +805,30 @@ export class DiagramPreview {
       } else if (message && message.command === 'text-widths') {
         // The webview measured the frame texts it draws. The language server re-runs
         // the auto-layout with those widths, saves the result in the cached JSON and
-        // the preview is rebuilt from that cache.
+        // the preview is rebuilt from that cache. While a themed delivery is pending the
+        // relayout is skipped: that delivery rebuilds the workspace and measures again.
+        if (this.pendingThemedDelivery) {
+          return;
+        }
         if (this.requestRelayout) {
           const widths = message.widths ?? {};
           void this.requestRelayout(widths, message.uri, message.generation);
         }
       } else if (message && message.command === 'workspace-built') {
-        // The webview finished (re)building a Workspace. Ignore a stale report for
-        // a document the preview is no longer bound to. Subsequent updateWebView
-        // calls for the SAME document + generation then only need a changeView
-        // instead of a full rebuild.
-        if (message.uri === undefined || message.uri === this.currentDocUri) {
+        // The webview finished (re)building a Workspace. A report for a document the
+        // preview is no longer bound to is ignored: subsequent updateWebView calls for
+        // the SAME document + generation then only need a changeView instead of a full
+        // rebuild.
+        const bound = message.uri === undefined || message.uri === this.currentDocUri;
+        // The themed delivery is sent once the build it belongs to is on screen, i.e.
+        // when the report matches its document and generation.
+        const pending = this.pendingThemedDelivery;
+        const pendingMatches = !!pending
+            && (pending.docUri === undefined || pending.docUri === message.uri)
+            && (pending.generation === undefined || pending.generation === message.generation);
+        if (bound) {
           this.renderedGeneration = message.generation;
-          // The theme-less workspace is built and rendered - apply the themes now.
-          // Only the report of the pending delivery's own (document, generation)
-          // proves that build is on screen, so a stale report cannot flush the
-          // themed delivery before the theme-less one is painted.
-          const pending = this.pendingThemedDelivery;
-          if (pending
-              && (pending.docUri === undefined || pending.docUri === message.uri)
-              && (pending.generation === undefined || pending.generation === message.generation)) {
+          if (pendingMatches) {
             void this.flushPendingThemedDelivery();
           }
         }

@@ -6,10 +6,11 @@
 architecture diagrams directly from code. Powered by [Langium](https://langium.org/).
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![VS Code Marketplace](https://img.shields.io/badge/VS%20Code%20Marketplace-2.0.5-0078D4.svg)](https://marketplace.visualstudio.com/items?itemName=vimpelcom.c4-varp)
+[![VS Code Marketplace](https://img.shields.io/badge/VS%20Code%20Marketplace-2.0.6-0078D4.svg)](https://marketplace.visualstudio.com/items?itemName=vimpelcom.c4-varp)
 [![Open VSX](https://img.shields.io/open-vsx/v/vimpelcom/c4-varp.svg?label=Open%20VSX)](https://open-vsx.org/extension/vimpelcom/c4-varp)
 [![Node.js 24.18.0](https://img.shields.io/badge/Node.js-24.18.0-339933.svg)](package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6.svg)](package.json)
+[![Langium 4.4.0](https://img.shields.io/badge/Langium-4.4.0-26888C.svg)](package.json)
 
 </div>
 
@@ -17,15 +18,11 @@ architecture diagrams directly from code. Powered by [Langium](https://langium.o
 
 - [Overview](#overview)
 - [Features](#features)
-- [Screenshots](#screenshots)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-- [Commands](#commands)
-- [Configuration](#configuration)
-- [Architecture Center Integration](#architecture-center-integration)
+- [Model Context Protocol](#model-context-protocol)
 - [Development](#development)
 - [Project Structure](#project-structure)
-- [How It Works](#how-it-works)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -38,33 +35,37 @@ C4 Architecture As A Code brings the [C4 model](https://c4model.com/) and the
 workflow. Describe your software architecture as text, get instant validation,
 intellisense-style hints, and a **live diagram preview** — no separate tooling required.
 
-It runs on the **desktop** (VS Code) and in the **browser** (`vscode.dev`).
+It is a port of the reference Structurizr DSL to the **Langium**/**TypeScript**
+stack, and runs on the **desktop** (VS Code) and in the **browser** (`vscode.dev`).
 
 ## Features
 
-### 📐 Full Structurizr DSL support
+### 📐 Structurizr DSL support
 
-- Complete C4 model: `Person`, `SoftwareSystem`, `Container`, `Component`
-- Deployment model: `deploymentEnvironment`, `deploymentNode`, `infrastructureNode`, instances
-- Relationships (explicit `->`, implicit, implied)
-- Deployment groups with relationship scoping
-- Archetypes, groups, health checks, perspectives
+The language server is a port of the reference Structurizr DSL to the
+**Langium**/**TypeScript** stack. It implements the same DSL surface — the C4 and
+deployment models, view definitions, and the directives that shape them — and emits
+Structurizr-compatible workspace JSON. The intent is behavioural parity: a workspace
+written for Structurizr parses, validates and renders here the same way, unchanged.
 
 ### 🔍 Intelligent Language Server (Langium-based)
 
 - **Syntax highlighting** with a generated TextMate grammar
 - **Semantic tokens** (macros, classes, properties)
-- **Validation** — uniqueness checks, reference resolution, style validation with
-  human-readable error messages
 - **Inlay hints** — inline `name:`, `description:`, `technology:` labels
 - **Document links** — `Ctrl+Click` on `!include` paths and `extendsUri` to navigate
 - **Scope provider** — hierarchical identifiers and cross-file references
+- **CodeLens** — actions above each view and above the workspace
 
 ### 🖼️ Diagram Preview
 
 - Render any view as an interactive Structurizr diagram
-- **Auto-refresh** on file save
-- Export to **SVG** and **DrawIO** (`.drawio`)
+- **Auto-refresh** on every change or on save (`varp.diagram.autoRefresh`)
+- Remote Structurizr **themes**, with a webview fallback when the server cannot
+  fetch them
+- Export the current diagram to **SVG** or **DrawIO** (`.drawio`)
+- Import a layout from a `.drawio` file back into the view
+- Export the full **Structurizr workspace JSON** (`.json`)
 - One-click preview via CodeLens: *"Show As Structurizr Diagram"*
 
 ### 🧩 Views & Filtering
@@ -79,6 +80,16 @@ It runs on the **desktop** (VS Code) and in the **browser** (`vscode.dev`).
 - `!include` of other files (relative paths, directories, remote URLs)
 - `extendsUri` workspace inheritance
 - `${CONST}` constant substitution across files
+
+### 🤖 MCP server
+
+- Optional built-in **Model Context Protocol** server (`varp.mcp.autoStart`) that
+  exposes the resolved model to AI assistants over streamable HTTP on `127.0.0.1`
+  (see [Model Context Protocol](#model-context-protocol))
+
+### 🌐 Desktop and web
+
+- Runs on desktop VS Code and in the browser (`vscode.dev`)
 
 ## Installation
 
@@ -128,24 +139,51 @@ workspace {
 
 Click **"Show As Structurizr Diagram"** above the `systemContext` block to render the diagram.
 
-## Configuration
+## Model Context Protocol
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `archops.api.url` | *(internal)* | ArchOps automation server URL |
-| `archops.api.key` | *(internal)* | Workspace API key |
-| `archops.api.secret` | *(internal)* | Workspace API secret |
+With `varp.mcp.autoStart` enabled, the extension starts a built-in **MCP server**
+(streamable HTTP on `127.0.0.1`) that exposes the resolved C4 model to AI
+assistants. It is available in the desktop build only.
 
-## Architecture Center Integration
+### Tools
 
-The extension ships with optional sidebar views that integrate with an internal
-**Architecture Center** API:
+| Tool | Description |
+|------|-------------|
+| `list-projects` | List all root workspace documents (projects) that currently have a resolved C4 model. |
+| `list-views` | Catalog of all views in a project: key, type, title, description, element/relationship counts and a `byType` breakdown; optionally filtered by type. |
+| `read-project-summary` | Summary of a project: element counts by type, total relationships, and available views. |
+| `search-element` | Search elements in a project by id, name, type or tags. |
+| `read-element` | Full details of an element: attributes, outgoing relationships, and the views that include it. |
+| `read-view` | Details of a single view: metadata, elements and relationships (with names resolved). |
+| `read-deployment` | Deployment tree: deployment nodes, infrastructure nodes and deployed instances (with instance counts). |
+| `query-graph` | Neighbourhood of an element: ancestors, descendants, siblings, children, parent and/or direct incoming/outgoing relationships. |
+| `query-incomers-graph` | Recursive graph of elements that (directly or transitively) depend on the given element, up to a depth/node cap. |
+| `query-outgoers-graph` | Recursive graph of elements the given element (directly or transitively) depends on, up to a depth/node cap. |
+| `find-relationships` | Find model relationships by optional source, destination and/or tag. |
+| `find-relationship-paths` | Find paths (sequences of relationships) between two elements via BFS; with `includeIndirect=false` only a direct relationship is returned. |
+| `query-by-tags` | Query elements by tags: `allOf` (must have every tag), `anyOf` (at least one), `noneOf` (must have none). |
+| `query-by-tag-pattern` | Query elements whose any tag matches a pattern by prefix, contains or suffix. |
+| `query-by-metadata` | Query elements by a property (key/value): only key matches presence, key+value matches the value by the operator. |
+| `read-model-json` | Raw Structurizr model JSON (`json.model`): people, software systems, deployment nodes with their relationships. |
+| `read-view-json` | Raw Structurizr view JSON for a view key: elements with computed positions/sizes, relationships and dimensions. |
+| `read-raw-workspace-json` | Complete resolved Structurizr workspace JSON: model, views, configuration, styles/themes, documentation and more. |
+| `batch-read-elements` | Read full details of multiple elements in one call; not-found ids are reported in `missing`. |
+| `element-diff` | Side-by-side comparison of two elements: attributes, properties, tags and relationships. |
+| `subgraph-summary` | Compact summary of all descendants of an element: per-element metadata, tags, relationship counts and a breakdown by type. |
 
-- **C4 DSL Snippets** — ready-to-use DSL snippets
-- **Patterns Catalogue** — browse and insert architecture patterns as C4 DSL
-- **Capabilities Catalogue** — browse business/technical capabilities
+### Prompts
 
-These views require the `archops.api.*` configuration settings to be reachable.
+| Prompt | Description |
+|--------|-------------|
+| `summarize-project` | Instruct the model to summarize a C4 project: its elements, relationships and views. |
+| `explore-element` | Instruct the model to deep-dive into one element: its details, relationships and views. |
+
+### Resources
+
+| Resource | Description |
+|----------|-------------|
+| `projects` | List of all C4 projects (root workspace document URIs). |
+| `project` | Flattened C4 model (elements, relationships, views) of a project. |
 
 ## Development
 
@@ -192,66 +230,29 @@ src/
 ├── generated/            # Langium-generated AST, module, and grammar artifacts
 ├── language/             # Language server (Langium) implementation
 │   ├── c4.langium        # C4 DSL grammar definition
-│   ├── c4-json-generator.ts     # Structurizr-compatible JSON generator
+│   ├── c4-json-generator.ts          # Structurizr-compatible render JSON generator
 │   ├── c4-json-generator-handler.ts  # JSON build lifecycle & caching
-│   ├── c4-validator.ts   # Validation checks
-│   ├── c4-scope-provider.ts    # Reference scoping & includes
-│   ├── c4-document-builder.ts  # Auto-loading of !include files
+│   ├── c4-json-enricher.ts           # documentation, decisions, health checks, DSL identifiers
+│   ├── c4-dsl-source.ts              # retained portable DSL (base64) of the workspace
+│   ├── c4-json-compare.ts            # golden-test JSON comparator
+│   ├── c4-drawio-layout.ts           # DrawIO layout reader
+│   ├── c4-validator.ts               # Validation checks
+│   ├── c4-scope-provider.ts          # Reference scoping & includes
+│   ├── c4-document-builder.ts / c4-include-resolver.ts  # !include and extendsUri loading
 │   ├── c4-inlay-hints.ts / c4-code-lens.ts / c4-document-link.ts  # LSP features
-│   ├── c4-tokens.ts / c4-module.ts / c4-utils.ts
-│   └── main.ts / main.browser.ts  # Language server entry points
+│   ├── c4-binary-file-system.ts / c4-base64.ts  # web file-system bridge
+│   └── main.ts / main.browser.ts     # Language server entry points
 ├── extension/            # VS Code extension host
 │   ├── init.ts           # Extension activation & command registration
-│   ├── diagram-preview.ts  # Structurizr diagram webview
+│   ├── diagram-preview.ts  # Structurizr diagram webview (themes, export, layout import)
+│   ├── workspace-file-requests.ts / workspace-metadata.ts
 │   ├── c4-snippets.ts / patterns.ts / capabilities.ts  # Sidebar views
-│   └── hmac.ts / config.ts
+│   ├── hmac.ts / config.ts
+│   └── mcp/              # built-in MCP server (tools, prompts, resources)
 css/                      # Structurizr rendering styles
-js/                       # Structurizr rendering engine (JointJS, Dagre, etc.)
+js/                       # Structurizr rendering engine (JointJS, Dagre, panzoom)
 test/fixtures/            # DSL → expected JSON golden tests
 ```
-
-## How It Works
-
-The extension is split into two cooperating processes: a **language server** (built on
-[Langium](https://langium.org/)) and the **extension host** that provides the VS Code UI.
-
-### Language Server pipeline
-
-1. **Parsing** — When you open or edit a `.dsl` file, the language server parses it
-   with the Chevrotain-based LL(k) parser generated from [`c4.langium`](src/language/c4.langium).
-   `!include` directives and `extendsUri` inheritance are resolved automatically, and
-   `${CONST}` placeholders are substituted.
-
-2. **Validation & reference resolution** — The `C4Validator` checks uniqueness of element
-   identifiers, resolves cross-file references (via `C4ScopeProvider`), and validates
-   style properties and relationship syntax. Errors and warnings are reported inline.
-
-3. **JSON generation** — The `C4JsonGenerator` walks the validated AST and produces
-   **Structurizr-compatible workspace JSON**, including the model, all views, styles,
-   deployment elements, and relationship scoping. `!elements` / `!relationships`
-   directives are applied as overlays during this phase.
-
-4. **Caching** — The `C4GeneratorHandler` hooks into the document build lifecycle and
-   stores the generated JSON per workspace document, keeping it in sync with edits.
-
-### Rendering in VS Code
-
-5. **Diagram preview** — A CodeLens button ("Show As Structurizr Diagram") appears above
-   each view block. Clicking it sends the cached JSON to the extension host, which opens
-   a **Structurizr webview** (JointJS + Dagre rendering engine) to display the diagram.
-
-6. **Auto-refresh** — On every save, the extension requests fresh JSON via the custom
-   `c4/getContentForUri` LSP request and re-renders the open preview automatically.
-
-7. **Export** — The webview can export the current diagram to **SVG** or **DrawIO**
-   (`.drawio`) via the editor title menu.
-
-### Sidebar views
-
-Independent of the diagram pipeline, the sidebar provides optional **Architecture Center**
-integrations — C4 DSL snippets, a patterns catalogue, and a capabilities catalogue — each
-loading data from the configured `archops.api.*` endpoint (see
-[Architecture Center Integration](#architecture-center-integration)).
 
 ## Contributing
 

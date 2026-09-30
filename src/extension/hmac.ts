@@ -15,19 +15,32 @@
 */
 
 import { createHash, createHmac, randomBytes } from 'crypto';
-import { workspace } from 'vscode';
+import { env, extensions, UIKind, workspace } from 'vscode';
 
-export function generateHmac(method: string, path: string, body: string | undefined = undefined, contentType: string | undefined = undefined) {
+const EXTENSION_ID = 'vimpelcom.c4-varp';
+
+/**
+ * Identifier of this extension for the ArchOps server:
+ * `varp-<web|desktop>-<extension version>`. The host kind and the version are
+ * resolved at runtime.
+ */
+function agentHeader(): string {
+    const host = env.uiKind === UIKind.Web ? 'web' : 'desktop';
+    const version = extensions.getExtension(EXTENSION_ID)?.packageJSON?.version ?? 'unknown';
+    return `varp-${host}-${version}`;
+}
+
+export function generateHmac(method: string, path: string, body: string | undefined = undefined, contentType: string | undefined = undefined): Record<string, string> {
+    const headers: Record<string, string> = { 'X-Agent': agentHeader() };
     const archopsApiSecret = workspace.getConfiguration().get<string>('archops.api.secret');
     const archopsApiKey = workspace.getConfiguration().get<string>('archops.api.key');
-    if(!archopsApiKey || !archopsApiSecret) return undefined;
+    if(!archopsApiKey || !archopsApiSecret) return headers;
     const nonce = randomBytes(8).toString('base64');
     const md5Hash = (body === undefined) ? 'd41d8cd98f00b204e9800998ecf8427e' : createHash('md5').update(body).digest('hex');
     const parts: string[] = [method, path, md5Hash, contentType ?? '', nonce];
     const message: string = parts.join('\n') + '\n';
     const hmac = createHmac('sha256', archopsApiSecret).update(message).digest('base64');
-    return {
-        'X-Authorization': archopsApiKey + ':' + hmac,
-        'Nonce': nonce
-    };
+    headers['X-Authorization'] = archopsApiKey + ':' + hmac;
+    headers['Nonce'] = nonce;
+    return headers;
 }

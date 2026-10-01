@@ -461,6 +461,21 @@ export class DiagramPreview {
             if (!message.textMeasurements || !structurizr.workspace) return;
             var context = document.createElement('canvas').getContext('2d');
             var widths = {};
+            // findElementStyle rebuilds the whole theme/workspace style map on every
+            // call, so resolve each distinct (type, tags) pair only once per pass.
+            var styleCache = {};
+            function cachedElementStyle(element) {
+                var key = (element.type || '') + '|' + structurizr.workspace.getAllTagsForElement(element).join(',');
+                var style = styleCache[key];
+                if (style === undefined) {
+                    style = structurizr.ui.findElementStyle(element);
+                    styleCache[key] = style;
+                }
+                return style;
+            }
+            // Assigning context.font re-parses the font string, so only assign it
+            // when the resolved font actually changes.
+            var currentFont;
             Object.keys(message.textMeasurements).forEach(function(viewKey) {
                 var view = message.textMeasurements[viewKey];
                 (view.candidates || []).forEach(function(candidate) {
@@ -469,7 +484,7 @@ export class DiagramPreview {
                     var bold = false;
                     var frameExtra = 0;
                     if (candidate.kind === 'group-name') {
-                        var groupStyle = structurizr.ui.findElementStyle({ type: 'Group', tags: 'Group, Group:' + candidate.groupName });
+                        var groupStyle = cachedElementStyle({ type: 'Group', tags: 'Group, Group:' + candidate.groupName });
                         text = candidate.groupName;
                         fontSize = groupStyle.fontSize * 1.4;
                         bold = true;
@@ -477,7 +492,7 @@ export class DiagramPreview {
                     } else {
                         var element = structurizr.workspace.findElementById(candidate.elementId);
                         if (!element) return;
-                        var elementStyle = structurizr.ui.findElementStyle(element);
+                        var elementStyle = cachedElementStyle(element);
                         if (candidate.kind === 'element-name') {
                             text = structurizr.util.removeNewlineCharacters(element.name);
                             fontSize = elementStyle.fontSize * 1.4;
@@ -492,7 +507,11 @@ export class DiagramPreview {
                         frameExtra = 30 + (elementStyle.icon !== undefined ? 70 : 0);
                     }
                     if (!text || !isFinite(fontSize) || fontSize <= 0) return;
-                    context.font = (bold ? 'bold ' : '') + fontSize + 'px ' + structurizr.ui.DEFAULT_FONT_NAME;
+                    var font = (bold ? 'bold ' : '') + fontSize + 'px ' + structurizr.ui.DEFAULT_FONT_NAME;
+                    if (font !== currentFont) {
+                        context.font = font;
+                        currentFont = font;
+                    }
                     // Report the frame width the renderer will enforce.
                     widths[candidate.key] = context.measureText(text).width + frameExtra;
                 });

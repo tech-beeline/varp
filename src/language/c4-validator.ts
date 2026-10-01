@@ -15,7 +15,7 @@
 */
 
 import { AstNode, AstUtils, type ValidationAcceptor, type ValidationChecks } from 'langium';
-import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty } from '../generated/ast';
+import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
 import * as includeResolver from './c4-include-resolver';
@@ -303,7 +303,8 @@ export function registerValidationChecks(services: C4Services) {
             (node, accept) => validator.checkHealthCheck(node, accept)
         ],
         TerminologyBlock: [
-            (node, accept) => validator.checkIncludeElements(node, accept, 'TerminologyBlock')
+            (node, accept) => validator.checkIncludeElements(node, accept, 'TerminologyBlock'),
+            (node, accept) => validator.checkTerminologyMetadata(node, accept)
         ],
         RelationshipStyle: [
             (node, accept) => validator.checkIncludeElements(node, accept, 'RelationshipStyle')
@@ -1162,8 +1163,20 @@ export class C4Validator {
         this.checkIntegerToken(prop, prop.value, accept, 'value', 'Stroke width must be an integer between 1 and 10.', { allowQuoted: true });
     }
 
-    /** Validates autolayout separations (positive integers in pixels). */
+    /** Validates the terminology metadata symbols. */
+    checkTerminologyMetadata(node: TerminologyBlock, accept: ValidationAcceptor): void {
+        for (const symbol of node.metadata ?? []) {
+            if (!['square', 'round', 'curly', 'angle', 'double-angle', 'none'].includes(symbol.toLowerCase())) {
+                accept('error', 'Expected: metadata <square|round|curly|angle|double-angle|none>', { node, property: 'metadata' });
+            }
+        }
+    }
+
+    /** Validates autolayout rank direction and separations (positive integers in pixels). */
     checkAutoLayout(node: AutoLayoutProperty, accept: ValidationAcceptor): void {
+        if (node.direction !== undefined && !['tb', 'bt', 'lr', 'rl'].includes(node.direction)) {
+            accept('error', 'Valid rank directions are: tb|bt|lr|rl', { node, property: 'direction' });
+        }
         this.checkIntegerToken(node, node.rankSeparation, accept, 'rankSeparation', 'Rank separation must be a positive integer in pixels.');
         this.checkIntegerToken(node, node.nodeSeparation, accept, 'nodeSeparation', 'Node separation must be a positive integer in pixels.');
     }

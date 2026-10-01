@@ -465,7 +465,7 @@ TerminologyBlock:
             | NL+ DEPLOYMENT_NODE_KW deploymentNode+=(UNQUOTED_STRING | STRING)
             | NL+ INFRASTRUCTURE_NODE_KW infrastructureNode+=(UNQUOTED_STRING | STRING)
             | NL+ RELATIONSHIP_KW relationship+=(UNQUOTED_STRING | STRING)
-            | NL+ METADATA_KW metadata+=('square' | 'round' | 'curly' | 'angle' | 'double-angle' | NONE_KW)
+            | NL+ METADATA_KW metadata+=(UNQUOTED_STRING | NONE_KW)
             | NL+ includes+=Include
         )*
     NL+ '}';
@@ -954,9 +954,11 @@ ComponentView:
 DefaultViewProperty:
     value=DEFAULT_KW;
 
-// autolayout <direction> <rankSeparation> <nodeSeparation>
+// autolayout <direction> <rankSeparation [nodeSeparation]>
+// The rank direction is a plain token (tb|bt|lr|rl) checked by the validator, like
+// the separations.
 AutoLayoutProperty:
-    AUTOLAYOUT_KW (direction=('lr'|'rl'|'tb'|'bt'))? (rankSeparation=UNQUOTED_STRING)? (nodeSeparation=UNQUOTED_STRING)?;
+    AUTOLAYOUT_KW (direction=UNQUOTED_STRING (rankSeparation=UNQUOTED_STRING (nodeSeparation=UNQUOTED_STRING)?)?)?;
 
 // include <expression> — includes elements matching the expression
 IncludeProperty:
@@ -1079,7 +1081,8 @@ RelationshipEqExpression returns ViewExpression:
 // ─── Arrow expression rules ────────────────────────────────────────────────
 
 // NonArrowExpression: subset of ViewExpression that does NOT contain arrow forms.
-// This prevents left recursion when arrow expressions embed expressions.
+// This prevents left recursion when arrow expressions embed expressions, and keeps
+// `relationship==` bound as a whole instead of acting as an arrow operand.
 NonArrowExpression returns ViewExpression:
     '(' ViewExpression ')' 
     | StringExpressionLiteral
@@ -1093,12 +1096,11 @@ NonArrowExpression returns ViewExpression:
     | RelationshipSourceExpression
     | RelationshipDestinationExpression
     | RelationshipPropertiesExpression
-    | RelationshipEqExpression
     | SingleElementExpression;
 
 // Simple element reference: include MySystem / exclude this
 SingleElementExpression returns ViewExpression:
-    {SingleElementExpression} (element=[NamedElement:Identifier]);
+    {SingleElementExpression} (element=[NamedElement:UnquotedIdentifier]);
 
 // -><expression>: afferent (incoming) relationships to the expression
 AfferentCouplingExpression returns ViewExpression:
@@ -1401,7 +1403,7 @@ Group:
             NL+ DocumentableElementDirectives
             | NL+ identifiers+=IdentifiersProperty
             | NL+ EverywhereFeatures
-            | NL+ elements+=(Person | SoftwareSystem | Container | Component | DeploymentNode | ContainerInstance | SoftwareSystemInstance | GenericInstance | Group)
+            | NL+ elements+=(Person | SoftwareSystem | CustomElement | Container | Component | DeploymentNode | ContainerInstance | SoftwareSystemInstance | GenericInstance | Group)
             | NL+ relationships+=(Relationship | ImplicitRelationship)
         )*
     NL+ '}';
@@ -1566,9 +1568,15 @@ Component:
         NL+ '}'
     )?;
 
-// CustomElement: element <name> [description] [technology] [tags] { ... }
+// CustomElementMeta fragment: metadata [description] [tags]
+// Positional, like the reference: the token after the name is the metadata, then the
+// description, then the tags.
+fragment CustomElementMeta:
+    (metadata=(STRING | UNQUOTED_STRING) (description=(STRING | UNQUOTED_STRING) (tags+=(STRING | UNQUOTED_STRING))?)?);
+
+// CustomElement: element <name> [metadata] [description] [tags] { ... }
 CustomElement:
-    Id? ELEMENT_KW Name Meta?
+    Id? ELEMENT_KW Name CustomElementMeta?
     (
         '{'
             (
@@ -1679,13 +1687,13 @@ fragment UnquotedTag:
 fragment Name:
     name=(STRING | UNQUOTED_STRING);
 
-// Meta fragment: description [technology] [quoted|unquoted tags]
-// Shared by SoftwareSystem, Container, Component, CustomElement, InfrastructureNode
+// Meta fragment: description [technology] [tags]
+// Shared by Container, Component, InfrastructureNode: the token after the description
+// is the technology, so tags always follow it.
 fragment Meta:
     (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* QuotedTag)
     | (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* UnquotedTag)
     | (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))*)
-    | (description=STRING UnquotedTag)
     | (description=STRING);
 
 // InfrastructureNode: infrastructureNode <name> [description] [technology] [tags] { ... }
@@ -1805,9 +1813,9 @@ GenericInstance:
 // HEALTH CHECK
 // ═════════════════════════════════════════════════════════════════════════════
 
-// healthCheck <name> <url> [interval] [timeout]
+// healthCheck <name> <url> [interval [timeout]]
 HealthCheck:
-    HEALTHCHECK_KW Name url=STRING (interval=UNQUOTED_STRING)? (timeout=UNQUOTED_STRING)?;
+    HEALTHCHECK_KW Name url=STRING (interval=UNQUOTED_STRING (timeout=UNQUOTED_STRING)?)?;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -1867,7 +1875,12 @@ terminal PATH_TOKEN: /[a-zA-Z0-9_\u00A0-\uFFFF][\w\u00A0-\uFFFF.\/\\:@%&+~$?=()\
 
 // Identifier: quoted or unquoted reference
 Identifier returns string:
-    UNQUOTED_STRING | STRING | 
+    UnquotedIdentifier | STRING;
+
+// Identifier without the quoted form: a quoted value in a view filter is parsed as a
+// StringLiteralExpression, not as a reference.
+UnquotedIdentifier returns string:
+    UNQUOTED_STRING |
     RELATIONSHIP_SOURCE |
     ASSIGNMENT |          
     (SOFTWARE_SYSTEM_KW DOT_SUFFIX?) |

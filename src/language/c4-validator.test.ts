@@ -830,3 +830,127 @@ workspace {
         expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
     });
 });
+
+describe('autolayout rank direction', () => {
+    it('rejects an invalid rank direction', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        s = softwareSystem "S"
+    }
+    views {
+        systemContext s {
+            autoLayout sideways
+        }
+    }
+}
+`);
+
+        expect(messages(doc, ERROR_SEVERITY)).toContain('Valid rank directions are: tb|bt|lr|rl');
+    });
+
+    it('accepts every valid rank direction', async () => {
+        for (const direction of ['tb', 'bt', 'lr', 'rl']) {
+            const doc = await build(`
+workspace {
+    model {
+        s = softwareSystem "S"
+    }
+    views {
+        systemContext s {
+            autoLayout ${direction}
+        }
+    }
+}
+`);
+
+            expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+        }
+    });
+
+    it('accepts tb/bt/lr/rl as identifiers, references and names', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        lr = person "LR"
+        rl = softwareSystem "RL" {
+            tb = container "TB" "Tech" {
+                bt = component "BT" "Tech"
+            }
+        }
+        lr -> rl "Uses"
+        rl -> tb "Uses"
+        tb -> bt "Uses"
+        p = person lr
+    }
+    views {
+        systemContext rl {
+            include *
+        }
+    }
+}
+`);
+
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+});
+
+describe('terminology metadata symbols', () => {
+    it('rejects an invalid metadata symbol', async () => {
+        const doc = await build(`
+workspace {
+    views {
+        terminology {
+            metadata sideways
+        }
+    }
+}
+`);
+
+        expect(messages(doc, ERROR_SEVERITY)).toContain('Expected: metadata <square|round|curly|angle|double-angle|none>');
+    });
+
+    it('accepts every valid metadata symbol', async () => {
+        for (const symbol of ['square', 'round', 'curly', 'angle', 'double-angle', 'none']) {
+            const doc = await build(`
+workspace {
+    views {
+        terminology {
+            metadata ${symbol}
+        }
+    }
+}
+`);
+
+            expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+        }
+    });
+
+    it('accepts square/round/curly/angle/double-angle as identifiers, references and names', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        square = person "Square"
+        round = softwareSystem "Round" {
+            curly = container "Curly" "Tech" {
+                angle = component "Angle" "Tech"
+                double-angle = component "Double Angle" "Tech"
+            }
+        }
+        square -> round "Uses"
+        round -> curly "Uses"
+        curly -> angle "Uses"
+        angle -> double-angle "Uses"
+        p = person square
+    }
+    views {
+        container round {
+            include *
+        }
+    }
+}
+`);
+
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+});

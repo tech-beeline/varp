@@ -1773,7 +1773,7 @@ class JsonGenerator {
 
     /** Returns the metadata text for an element, inherited from its archetype. */
     private metadata(node: any): string | undefined {
-        const value = this.archetypeDefaults(node).metadata;
+        const value = node.metadata ?? this.archetypeDefaults(node).metadata;
         return this.substitute(value);
     }
 
@@ -3392,6 +3392,8 @@ class JsonGenerator {
                 const result: any = {
                     id: this.getId(ce),
                     name: this.substitute(ce.name),
+                    group: this.extractGroup(ce),
+                    description: this.description(ce),
                     metadata: this.metadata(ce),
                     relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(ce).map(el => this.relationshipToJson(el))),
                     tags: this.extractTags(ce, 'Element'),

@@ -223,9 +223,9 @@
   "browser": "./dist/extension.browser.js",
   "main": "./dist/extension.js",
   "scripts": {
-    "vscode:prepublish": "langium generate && tsc -b && node esbuild.mjs",
-    "build": "langium generate && tsc -b && node esbuild.mjs && vitest run",
-    "build:ci": "langium generate && tsc -b && node esbuild.mjs && vitest run && vsce package --no-dependencies",
+    "vscode:prepublish": "langium generate --mode production && tsc -b && node esbuild.mjs",
+    "build": "langium generate --mode production && tsc -b && node esbuild.mjs && vitest run",
+    "build:ci": "langium generate --mode production && tsc -b && node esbuild.mjs && vitest run && vsce package --no-dependencies",
     "test": "vitest run",
     "package": "vsce package --no-dependencies",
     "dev": "npm run build && node -e \"require('http').createServer((req, res) => { res.writeHead(200, {'Content-Type': 'text/html'}); res.end('<h1>c4varp VS Code Extension</h1><p>This is a VS Code extension project.</p>'); }).listen(3000, '0.0.0.0');\""

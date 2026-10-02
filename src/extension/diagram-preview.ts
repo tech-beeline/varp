@@ -66,6 +66,12 @@ export class DiagramPreview {
   private currentViewKey: string | undefined;
   private currentJson: any | undefined;
   private currentDocUri: string | undefined;
+  // Generation the currentJson was built from. It advances with currentJson: a
+  // delivery stores the delivered generation, and a relayout patch stores the
+  // generation the server advanced to. A payload snapshot taken earlier (the
+  // pending themed delivery) is refreshed against it before being sent, so a
+  // text-measurement relayout that lands in between is not rolled back.
+  private currentJsonGeneration: number | undefined;
 
   // Generation of the workspace JSON the webview has ALREADY built for the
   // current currentDocUri. When updateWebView is called again for the same URI
@@ -172,6 +178,7 @@ export class DiagramPreview {
             && generation === this.renderedGeneration;
         this.currentViewKey = viewKey;
         this.currentJson = json;
+        this.currentJsonGeneration = generation;
         if (docUri) {
           this.currentDocUri = docUri;
         }
@@ -205,6 +212,7 @@ export class DiagramPreview {
           return;
         }
         this.currentJson = mergeViewUpdates(this.currentJson, views);
+        this.currentJsonGeneration = generation;
         this.pendingJson = false;
         this.panel.webview.postMessage({ command: 'views-updated', views, uri: docUri, generation, viewKey: this.currentViewKey });
   }
@@ -247,8 +255,13 @@ export class DiagramPreview {
         }
         // If the theme-less workspace was already built (the theme fetch resolved
         // after it), no further 'workspace-built' report is coming for this
-        // generation - send the deferred delivery now.
-        if (this.pendingThemedDelivery && this.renderedGeneration === generation) {
+        // generation - send the deferred delivery now. A relayout may have advanced
+        // the webview past this generation, which is fine: the flush refreshes its
+        // payload from the latest JSON (see flushPendingThemedDelivery).
+        const builtAtLeastDelivered = generation === undefined
+            ? this.renderedGeneration === undefined
+            : this.renderedGeneration !== undefined && this.renderedGeneration >= generation;
+        if (this.pendingThemedDelivery && builtAtLeastDelivered) {
           await this.flushPendingThemedDelivery();
         }
   }
@@ -264,9 +277,14 @@ export class DiagramPreview {
         if (!pending) {
           return;
         }
+        // A text-measurement relayout may have refined the layout (and advanced the
+        // generation) since this delivery was queued: rebuild the themed pass from
+        // the latest known JSON instead of the pre-relayout snapshot.
+        const json = this.currentJson ?? pending.json;
+        const generation = this.currentJsonGeneration ?? pending.generation;
         this.pendingThemedDelivery = undefined;
-        await this.updateWebView(pending.json, pending.viewKey, pending.docUri, pending.themes, pending.generation, pending.textMeasurements, pending.loadThemes);
-  }
+        await this.updateWebView(json, pending.viewKey, pending.docUri, pending.themes, generation, pending.textMeasurements, pending.loadThemes);
+    }
 
   /**
    * Adds the workspace file's timestamp to the JSON before it reaches the webview,
@@ -295,6 +313,7 @@ export class DiagramPreview {
   public openPreview(viewKey: string, docUri?: string): void {
         this.currentViewKey = viewKey;
         this.currentJson = undefined;
+        this.currentJsonGeneration = undefined;
         // A new document (or a freshly created panel) starts without themes: the
         // first render must not wait for the theme's icon images, which make the SVG
         // export that the panel shows much slower. The themes are fetched and
@@ -491,9 +510,9 @@ export class DiagramPreview {
               structurizr.diagram.exportCurrentDiagramToSVG({ metadata: true, crop: true }, function(svgMarkup) {
                 vscode.postMessage({ command: 'svg-result', svg: svgMarkup });
               });
-            } else if (message.command === 'views-updated') {
-              applyViewUpdates(message);
-            } else if (message.viewKey !== undefined) {
+              } else if (message.command === 'views-updated') {
+                applyViewUpdates(message);
+              } else if (message.viewKey !== undefined) {
               structurizr.diagram.changeView(message.viewKey);
             }
         });
@@ -562,7 +581,10 @@ export class DiagramPreview {
                 });
 
             });
-            vscode.postMessage({ command: 'text-widths', uri: message.uri, generation: message.generation, widths: widths });
+            // Report the generation of the workspace as it is now (a relayout patch
+            // may have advanced it after this build's message was sent), so the
+            // server validates the widths against the layout it currently holds.
+            vscode.postMessage({ command: 'text-widths', uri: message.uri, generation: lastGeneration, widths: widths });
         }
 
         // Serializes Diagram construction. The renderer keeps a single global
@@ -677,12 +699,12 @@ export class DiagramPreview {
                 if (message.loadThemes === true) {
                     loadThemesInWebview();
                 }
-                // Styles are registered by now, so the frame texts can be measured with
-                // the final font sizes.
-                if (measure !== false && themesReadyForMeasurement()) {
-                    measureFrameTexts(message);
-                }
-                finishBuild();
+              // Styles are registered by now, so the frame texts can be measured with
+              // the final font sizes.
+              if (measure !== false && themesReadyForMeasurement()) {
+                  measureFrameTexts(message);
+              }
+              finishBuild();
             });
             structurizr.diagram = diagram;
         }
@@ -735,9 +757,12 @@ export class DiagramPreview {
         function applyViewUpdates(message) {
             if (!structurizr.workspace || !structurizr.workspace.views) return;
             var buckets = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'deploymentViews', 'dynamicViews', 'customViews', 'imageViews', 'filteredViews'];
-            var patched = false;
+            var patchedAny = false;
             (message.views || []).forEach(function(updated) {
                 if (!updated || typeof updated.key !== 'string') return;
+                // Each view is looked up independently: a match for one view must not
+                // stop the search for the others.
+                var patched = false;
                 for (var b = 0; b < buckets.length && !patched; b++) {
                     var list = structurizr.workspace.views[buckets[b]];
                     if (!Array.isArray(list)) continue;
@@ -749,8 +774,9 @@ export class DiagramPreview {
                         }
                     }
                 }
+                patchedAny = patchedAny || patched;
             });
-            if (!patched) return;
+            if (!patchedAny) return;
             if (message.generation !== undefined) lastGeneration = message.generation;
             if (message.uri !== undefined) lastUri = message.uri;
             // The element positions changed, so rebuild the Diagram from the mutated
@@ -758,13 +784,16 @@ export class DiagramPreview {
             rebuildDiagram(false);
         }
 
-        // Copies every field of the updated view onto the existing object. The
-        // workspace indexes views by reference (findViewByKey walks its registered
-        // list), so replacing the bucket entry would leave the renderer on the old
-        // object.
+        // Copies every field of the updated view onto the existing object, never
+        // deleting: the workspace indexes views by reference (findViewByKey walks
+        // its registered list), so the bucket entry must not be replaced, and the
+        // updated view is the server's full view object, so every relayout-changed
+        // field is carried by it. Keys the workspace parser added to the built view
+        // (type, level, normalized description/relationships/animations) are absent
+        // from the server JSON and the renderer needs them (view.type drives the
+        // frame creation), so a delete pass would destroy the frames.
         function patchViewInPlace(target, updated) {
             Object.keys(updated).forEach(function(k) { target[k] = updated[k]; });
-            Object.keys(target).forEach(function(k) { if (!(k in updated)) delete target[k]; });
         }
 
         // Recreates the Diagram from the (mutated) workspace. A refresh() re-renders in
@@ -923,11 +952,15 @@ export class DiagramPreview {
         // rebuild.
         const bound = message.uri === undefined || message.uri === this.currentDocUri;
         // The themed delivery is sent once the build it belongs to is on screen, i.e.
-        // when the report matches its document and generation.
+        // when the report matches its document and has built AT LEAST its generation:
+        // a text-measurement relayout may have rebuilt a newer generation in between,
+        // and the flush then carries that newer JSON (see flushPendingThemedDelivery).
         const pending = this.pendingThemedDelivery;
         const pendingMatches = !!pending
             && (pending.docUri === undefined || pending.docUri === message.uri)
-            && (pending.generation === undefined || pending.generation === message.generation);
+            && (pending.generation === undefined || message.generation === undefined
+                ? pending.generation === message.generation
+                : message.generation >= pending.generation);
         if (bound) {
           this.renderedGeneration = message.generation;
           if (pendingMatches) {

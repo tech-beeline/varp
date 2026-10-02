@@ -204,6 +204,16 @@ function resolveFreshViewKey(json: any, currentKey: string | undefined): string 
     return undefined;
 }
 
+/** Opens a side panel with the raw workspace JSON for debugging. */
+async function openJsonDebugTab(json: any): Promise<void> {
+    const content = JSON.stringify(json, null, 2);
+    const doc = await workspace.openTextDocument({ content, language: 'json' });
+    await window.showTextDocument(doc, {
+        viewColumn: ViewColumn.Beside,
+        preview: true
+    });
+}
+
 /** Renders fresh JSON into the open preview bound to the given root document URI. */
 async function refreshDiagram(uri: string, json: any, generation?: number, textMeasurements?: Record<string, any>): Promise<void> {
     const preview = diagramPreview;
@@ -214,6 +224,9 @@ async function refreshDiagram(uri: string, json: any, generation?: number, textM
     if (!currentKey) {
         return;
     }
+    // True when this is the first JSON the open preview receives: the JSON debug
+    // tab opens with it, mirroring the DIAGRAM_PREVIEW warm path.
+    const firstDelivery = preview.isPendingJson();
     // View keys change when the source shifts, so resolve the matching key in the
     // fresh JSON; updateWebView stores it for subsequent refreshes.
     const viewKey = resolveFreshViewKey(json, currentKey) ?? currentKey;
@@ -221,6 +234,13 @@ async function refreshDiagram(uri: string, json: any, generation?: number, textM
     // on the preview (included in every postMessage), so re-rendering the same
     // diagram must not block on re-fetching theme files.
     await preview.deliver(json, viewKey, uri, generation, textMeasurements, getThemesForPreview);
+    if (firstDelivery) {
+        try {
+            await openJsonDebugTab(json);
+        } catch (err) {
+            console.warn('[C4 Preview] failed to open the JSON debug tab:', err);
+        }
+    }
 }
 
 
@@ -374,14 +394,7 @@ export function init(context: ExtensionContext): void {
                     await preview.deliver(payload, viewKey, docUri, generation, textMeasurements, getThemesForPreview);
 
                     // Open a side-panel with the raw JSON for debugging
-                    const content = JSON.stringify(payload, null, 2);
-                    const doc = await workspace.openTextDocument({ content, language: 'json' });
-                    
-                    await window.showTextDocument(doc, {
-                        viewColumn: ViewColumn.Beside,
-                        preview: true
-                    });
-                    
+                    await openJsonDebugTab(payload);
                 } catch (err) {
                     console.error(`[C4 Preview] webview update FAILED for view ${viewKey}:`, err);
                 }

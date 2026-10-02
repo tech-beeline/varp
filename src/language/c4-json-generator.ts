@@ -242,6 +242,39 @@ interface FrameTree {
     clusterKind: Record<string, 'scope' | 'group' | 'deploy'>;
 }
 
+/**
+ * Bounded cache of Graphviz layout results keyed by the DOT graph. graphviz.layout()
+ * is a pure function of the DOT, so the -Tjson result of an unchanged graph can be
+ * reused across generate() calls: an edit that leaves a view's DOT untouched skips
+ * the graphviz run for it.
+ */
+class GraphvizLayoutCache {
+    private readonly entries = new Map<string, any>();
+
+    constructor(private readonly limit = 32) {
+    }
+
+    get(dot: string): any | undefined {
+        const layout = this.entries.get(dot);
+        if (layout !== undefined) {
+            // Promote on read, so the least recently used entry is evicted first.
+            this.entries.delete(dot);
+            this.entries.set(dot, layout);
+        }
+        return layout;
+    }
+
+    set(dot: string, layout: any): void {
+        this.entries.delete(dot);
+        this.entries.set(dot, layout);
+        while (this.entries.size > this.limit) {
+            const oldest = this.entries.keys().next().value;
+            if (oldest === undefined) break;
+            this.entries.delete(oldest);
+        }
+    }
+}
+
 class JsonGenerator {
     private readonly services: C4Services;
     private readonly constants: Map<string, string> = new Map<string, string>();
@@ -349,9 +382,12 @@ class JsonGenerator {
     private readonly themeRelationshipStyles: any[] = [];
     /** Merged element style map (theme + workspace) keyed by tag, built lazily for Graphviz node sizing. */
     private elementStyleMap: Record<string, any> | undefined = undefined;
+    /** Shared across every generate() call, so an unchanged DOT is laid out once. */
+    private readonly layoutCache?: GraphvizLayoutCache;
 
-    constructor(services: C4Services) {
+    constructor(services: C4Services, layoutCache?: GraphvizLayoutCache) {
         this.services = services;
+        this.layoutCache = layoutCache;
     }
 
     /**
@@ -4785,6 +4821,23 @@ class JsonGenerator {
 
 
     /**
+     * Lays out the DOT graph, reusing the shared layout cache when the same DOT
+     * was laid out before. graphviz.layout() is a pure function of the DOT, so a
+     * cached result is always valid for that graph - only the caller's
+     * post-processing (which depends on the model) has to run again.
+     */
+    private async layoutGraphviz(dot: string): Promise<any> {
+        const cached = this.layoutCache?.get(dot);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const graphviz = await Graphviz.load();
+        const json = JSON.parse(graphviz.layout(dot, 'json'));
+        this.layoutCache?.set(dot, json);
+        return json;
+    }
+
+    /**
      * Runs Graphviz on a single view's DOT graph and writes normalized
      * coordinates/sizes/vertices into the view JSON. The pipeline is intentionally
      * clean: build the DOT, run graphviz.layout(dot, 'json'), then copy the
@@ -4797,8 +4850,7 @@ class JsonGenerator {
     private async applyGraphvizLayoutToView(view: any, isDynamic = false): Promise<void> {
         const dot = view.graphviz as string;
         if (!dot) return;
-        const graphviz = await Graphviz.load();
-        const json = JSON.parse(graphviz.layout(dot, 'json'));
+        const json = await this.layoutGraphviz(dot);
 
         const margin = PAPER_MARGIN; // paper margin - the same gap on every side of the diagram
         // Graphviz -Tjson coordinates are in points (72/inch) with the origin at
@@ -7974,6 +8026,8 @@ export class C4JsonGenerator {
      * measured, without rebuilding the DOT graph from the AST.
      */
     private readonly generators = new Map<string, JsonGenerator>();
+    /** Shared by every generate() call so an unchanged DOT is laid out once. */
+    private readonly layoutCache = new GraphvizLayoutCache();
 
     constructor(services: C4Services) {
         this.services = services;
@@ -7986,7 +8040,7 @@ export class C4JsonGenerator {
      * @returns A JSON object matching the Structurizr output format
      */
     public async generate(workspace: Workspace, uri?: string): Promise<any> {
-        const jsonGenerator : JsonGenerator = new JsonGenerator(this.services);
+        const jsonGenerator : JsonGenerator = new JsonGenerator(this.services, this.layoutCache);
         this.generators.set(uri ?? '', jsonGenerator);
         return await jsonGenerator.generate(workspace);
     }

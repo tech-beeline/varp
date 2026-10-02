@@ -97,8 +97,10 @@ export class C4CodeLensProvider implements CodeLensProvider {
                     const viewKey = this.services.workspace.ViewKeyProvider.getKey(node);
 
                     // Skip the lens when the generated diagram is known to have no elements.
+                    // The generator omits the `elements` key entirely for a view with no
+                    // content, so a missing array means the same as an empty one.
                     const generatedView = findViewByKey(cachedJson, viewKey);
-                    if (generatedView && Array.isArray(generatedView.elements) && generatedView.elements.length === 0) {
+                    if (generatedView && (generatedView.elements ?? []).length === 0) {
                         continue;
                     }
 

@@ -92,9 +92,10 @@ export class C4Utils {
     }
 
     /**
-     * Removes surrounding quotes (single, double, or triple-double), joins
+     * Removes surrounding double quotes (or triple-double for text blocks), joins
      * backslash line continuations, unescapes `\"` and `\n`, and trims
-     * whitespace. Returns empty string for undefined/null input.
+     * whitespace. Returns empty string for undefined/null input. Single quotes are
+     * literal characters, matching the reference tokenizer, so they are kept.
      *
      * @param value The raw DSL string value, possibly with quotes
      * @returns Cleaned string without surrounding quotes
@@ -102,7 +103,7 @@ export class C4Utils {
     static stripQuotes(value: string | undefined): string {
         const trimmed = value?.trim();
         if (!trimmed) return '';
-        const match = trimmed.match(/^("""|'|")([\s\S]*?)\1$/);
+        const match = trimmed.match(/^("""|")([\s\S]*?)\1$/);
         const inner = match ? match[2] : trimmed;
         // A trailing backslash continues the value on the next line; the leading
         // whitespace of that line is not part of the value.

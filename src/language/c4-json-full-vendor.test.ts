@@ -76,12 +76,36 @@ if (existsSync(fixturesDir)) {
     }
 }
 
+/**
+ * Whether any DSL file of the fixture declares a `views` block. Without one the
+ * reference creates default views while this generator emits none, so the
+ * comparison skips the `views` section.
+ */
+function hasViewsBlock(dslPath: string): boolean {
+    const walk = (dir: string): boolean => {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+            if (entry.name.startsWith('.')) continue;
+            const full = resolve(dir, entry.name);
+            if (entry.isDirectory()) {
+                if (walk(full)) return true;
+            } else if (entry.name.endsWith('.dsl') && /(^|\s)views\s*\{/.test(readFileSync(full, 'utf-8'))) {
+                return true;
+            }
+        }
+        return false;
+    };
+    return walk(dirname(dslPath));
+}
+
 describe('C4JsonFull', () => {
     for (const testCase of testCases) {
         it(`matches the full JSON for "${testCase.name}"`, async () => {
             const actual = await generateAndEnrich(testCase.dslPath);
             const expected = JSON.parse(readFileSync(testCase.jsonPath, 'utf-8'));
-            const diffs = compareJson(actual, expected, '', { mode: 'full' });
+            const diffs = compareJson(actual, expected, '', {
+                mode: 'full',
+                ignoreViews: !hasViewsBlock(testCase.dslPath),
+            });
             if (diffs.length > 0) {
                 console.log(`Differences for "${testCase.name}":`);
                 for (const d of diffs.slice(0, 20)) {

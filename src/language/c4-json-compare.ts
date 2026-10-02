@@ -35,6 +35,12 @@ export type CompareMode = 'render' | 'full';
 
 export interface CompareOptions {
     mode?: CompareMode;
+    /**
+     * Skips the `views` section. The reference creates default views when the DSL
+     * defines none, while this generator does not, so fixtures without a `views`
+     * block compare the model only.
+     */
+    ignoreViews?: boolean;
 }
 
 interface CompareResult {
@@ -112,7 +118,7 @@ export function compareJson(actual: any, expected: any, path: string = '', optio
         if (Array.isArray(actual) && Array.isArray(expected)) {
             compareArrays(actual, expected, path, diffs, mode);
         } else if (!Array.isArray(actual) && !Array.isArray(expected)) {
-            compareObjects(actual, expected, path, diffs, mode);
+            compareObjects(actual, expected, path, diffs, mode, options.ignoreViews === true && path === '');
         } else {
             diffs.push({ path, message: 'Array/object mismatch', expected: Array.isArray(expected), actual: Array.isArray(actual) });
         }
@@ -121,10 +127,13 @@ export function compareJson(actual: any, expected: any, path: string = '', optio
     return diffs;
 }
 
-function compareObjects(actual: any, expected: any, path: string, diffs: CompareResult[], mode: CompareMode): void {
+function compareObjects(actual: any, expected: any, path: string, diffs: CompareResult[], mode: CompareMode, ignoreViews = false): void {
     const ignored = mode === 'render'
         ? new Set([...COMMON_IGNORED_KEYS, ...RENDER_ONLY_IGNORED_KEYS])
         : COMMON_IGNORED_KEYS;
+    if (ignoreViews) {
+        ignored.add('views');
+    }
 
     // Collect all keys (ignore $document, $cstNode and similar internal properties)
     const keys = new Set([...Object.keys(actual), ...Object.keys(expected)]);

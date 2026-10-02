@@ -1262,11 +1262,13 @@ PropertyValue returns string:
         | ',' | ':' | '$' | '@' | '!' | '+' | '*' | '>' | '<' | '?' | '~' | '|' | '^'
         | ARROW | NO_ARROW)+;
 
+// name/description take a single token on the line, so an unquoted token (which
+// includes a literal single quote) is accepted like in the reference.
 NameProperty:
-    NAME_KW value=STRING;
+    NAME_KW value=(STRING | UNQUOTED_STRING | AnyKeyword);
 
 DescriptionProperty:
-    DESCRIPTION_KW value=STRING;
+    DESCRIPTION_KW value=(STRING | UNQUOTED_STRING | AnyKeyword);
 
 TechnologyProperty:
     TECHNOLOGY_KW value=(STRING | UNQUOTED_STRING | AnyKeyword);
@@ -1477,22 +1479,24 @@ ImplicitRelationship:
 // ═════════════════════════════════════════════════════════════════════════════
 
 // ─── PersonMeta fragment ───────────────────────────────────────────────────
-// Parses description, optional tags (quoted or unquoted) for Person elements
+// Parses description, optional tags (quoted or unquoted) for Person elements.
+// Positional like the reference: the token after the name is the description, the
+// next one is the tags; either may be a literal (unquoted) token.
 fragment PersonMeta:
-    (description=STRING QuotedTag)
+    (description=(STRING | UNQUOTED_STRING) QuotedTag)
     |
-    (description=STRING UnquotedTag)
-    |    
-    (description=STRING);
+    (description=(STRING | UNQUOTED_STRING) UnquotedTag)
+    |
+    (description=(STRING | UNQUOTED_STRING));
 
 // ─── SoftwareSystemMeta fragment ───────────────────────────────────────────
 // Software systems have no technology: softwaresystem <name> [description] [tags]
 fragment SoftwareSystemMeta:
-    (description=STRING QuotedTag)
+    (description=(STRING | UNQUOTED_STRING) QuotedTag)
     |
-    (description=STRING UnquotedTag)
+    (description=(STRING | UNQUOTED_STRING) UnquotedTag)
     |
-    (description=STRING);
+    (description=(STRING | UNQUOTED_STRING));
 
 // Person: person <name> [description] [tags] { ... }
 Person:
@@ -1622,21 +1626,21 @@ DeploymentGroup:
 // Parses description, technology, tags (quoted/unquoted), and instances count
 fragment DeploymentNodeMeta:
     (
-        (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* QuotedTag instances=UNQUOTED_STRING)
+        (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* QuotedTag instances=UNQUOTED_STRING)
         |
-        (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* UnquotedTag instances=UNQUOTED_STRING)
+        (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* UnquotedTag instances=UNQUOTED_STRING)
         |
-        (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* QuotedTag)
+        (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* QuotedTag)
         |
-        (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* UnquotedTag)
+        (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* UnquotedTag)
         |
-        (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))*)
+        (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))*)
         |
-        (description=STRING UnquotedTag instances=UNQUOTED_STRING)
+        (description=(STRING | UNQUOTED_STRING) UnquotedTag instances=UNQUOTED_STRING)
         |
-        (description=STRING UnquotedTag)
+        (description=(STRING | UNQUOTED_STRING) UnquotedTag)
         |
-        (description=STRING)
+        (description=(STRING | UNQUOTED_STRING))
         |
         (instances=UNQUOTED_STRING)
     )?;
@@ -1675,13 +1679,15 @@ DeploymentGroupProp:
 fragment Id:
     id=ElementAssignment;
 
-// Quoted tag: "tag1" "tag2" (quoted strings)
+// Quoted tag: "tag1" or a comma-separated list. The reference takes one whitespace
+// token and splits it on commas, so a literal single-quoted list arrives as several
+// tokens and is collected here.
 fragment QuotedTag:
-    tags+=STRING;
+    tags+=STRING (',' tags+=(STRING | UNQUOTED_STRING))*;
 
-// Unquoted tag: tag1 tag2 (unquoted strings or integers)
+// Unquoted tag: tag1 or a comma-separated list (unquoted strings or integers)
 fragment UnquotedTag:
-    tags+=UNQUOTED_STRING;
+    tags+=UNQUOTED_STRING (',' tags+=(STRING | UNQUOTED_STRING))*;
 
 // Element name: quoted or unquoted string, or integer
 fragment Name:
@@ -1691,10 +1697,10 @@ fragment Name:
 // Shared by Container, Component, InfrastructureNode: the token after the description
 // is the technology, so tags always follow it.
 fragment Meta:
-    (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* QuotedTag)
-    | (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* UnquotedTag)
-    | (description=STRING technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))*)
-    | (description=STRING);
+    (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* QuotedTag)
+    | (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* UnquotedTag)
+    | (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))*)
+    | (description=(STRING | UNQUOTED_STRING));
 
 // InfrastructureNode: infrastructureNode <name> [description] [technology] [tags] { ... }
 InfrastructureNode:
@@ -2168,8 +2174,10 @@ terminal STEP_ORDER: /[0-9]+(\.[0-9]+)*[ \t]*:(?![^\s])/;
 // ─── Base tokens ───────────────────────────────────────────────────────────
 
 // Numeric values (positions, sizes, counts, ranges) are UNQUOTED_STRING tokens;
-// their format is validated in the TypeScript validator.
-terminal UNQUOTED_STRING: /[a-zA-Z0-9_\u00A0-\uFFFF]([\w\u00A0-\uFFFF.\/:]|-(?![>\/]))*/;
+// their format is validated in the TypeScript validator. A single quote is an
+// ordinary character here, like in the reference tokenizer, which only treats
+// double quotes as string delimiters.
+terminal UNQUOTED_STRING: /['a-zA-Z0-9_\u00A0-\uFFFF](['\w\u00A0-\uFFFF.\/:]|-(?![>\/]))*/;
 
 hidden terminal WS: /[ \t]+/;
 
@@ -2177,7 +2185,10 @@ hidden terminal LINE_CONTINUATION: /\\[ \t]*[\r\n][\s\t\r\n]*/;
 
 terminal TEXT_BLOCK: /"""[\s\S]*?"""/;
 
-terminal STRING: /"(\\([\r\n]|\r\n|.)|[^"\\])*"|'(\\([\r\n]|\r\n|.)|[^'\\])*'/;
+// Only double quotes delimit a string, matching the reference tokenizer: a single
+// quote is a literal character (an UNQUOTED_STRING), so `tags 'Tag1'` keeps the
+// quote in the tag and `'a b'` splits into separate tokens.
+terminal STRING: /"(\\([\r\n]|\r\n|.)|[^"\\])*"/;
 
 terminal NL: /[\r\n]+[\s\t\r\n]*/;
 

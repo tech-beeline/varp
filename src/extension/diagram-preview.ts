@@ -207,15 +207,26 @@ export class DiagramPreview {
    * the JSON it holds and asks the webview to rebuild from the patched workspace
    * - no full workspace JSON crosses the wire for the second layout pass.
    */
-  public applyViewUpdates(views: any[], docUri: string | undefined, generation: number | undefined): void {
+   public applyViewUpdates(views: any[], docUri: string | undefined, generation: number | undefined): void {
         if (!views || views.length === 0 || !this.panelReady || !this.panel) {
+          return;
+        }
+        // The server validates a relayout at request time, but the preview may have
+        // moved on before the response arrives: a stale response must not patch a
+        // different document's JSON or merge older coordinates over a newer build
+        // of the same document (the generation is a global monotonic counter, so a
+        // lower one is stale).
+        if (docUri !== undefined && docUri !== this.currentDocUri) {
+          return;
+        }
+        if (generation !== undefined && this.currentJsonGeneration !== undefined && generation < this.currentJsonGeneration) {
           return;
         }
         this.currentJson = mergeViewUpdates(this.currentJson, views);
         this.currentJsonGeneration = generation;
         this.pendingJson = false;
         this.panel.webview.postMessage({ command: 'views-updated', views, uri: docUri, generation, viewKey: this.currentViewKey });
-  }
+    }
 
   /**
    * Delivers a workspace JSON to the webview and, when the preview has no themes
@@ -756,6 +767,11 @@ export class DiagramPreview {
         // built workspace and the Diagram is rebuilt from it.
         function applyViewUpdates(message) {
             if (!structurizr.workspace || !structurizr.workspace.views) return;
+            // Same staleness guard as the extension: the preview may have moved on
+            // (a different document or a newer build) while the relayout response
+            // was in flight - a stale patch must not roll the workspace back.
+            if (message.uri !== undefined && message.uri !== lastUri) return;
+            if (message.generation !== undefined && lastGeneration !== undefined && message.generation < lastGeneration) return;
             var buckets = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'deploymentViews', 'dynamicViews', 'customViews', 'imageViews', 'filteredViews'];
             var patchedAny = false;
             (message.views || []).forEach(function(updated) {

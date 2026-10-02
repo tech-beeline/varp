@@ -1,34 +1,39 @@
 {
-  "configuration": {},
-  "description": "Description",
-  "documentation": {},
-  "id": 0,
-  "model": {
-    "deploymentNodes": [
-      {
-        "environment": "DeploymentEnvironment",
-        "id": "1",
-        "instances": "1",
-        "name": "DeploymentNode",
-        "properties": {
-          "structurizr.dsl.identifier": "dn"
-        },
-        "tags": "Element,Deployment Node"
-      }
-    ]
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "deploymentNodes" : [ {
+      "environment" : "DeploymentEnvironment",
+      "id" : "1",
+      "instances" : "1",
+      "name" : "DeploymentNode",
+      "properties" : {
+        "structurizr.dsl.identifier" : "dn"
+      },
+      "tags" : "Element,Deployment Node"
+    } ]
   },
-  "name": "Name",
-  "properties": {
-    "structurizr.inspection.error": "6",
-    "structurizr.dsl": "d29ya3NwYWNlIHsNCiAgICBtb2RlbCB7DQogICAgICAgIGRlID0gZGVwbG95bWVudEVudmlyb25tZW50ICJEZXBsb3ltZW50RW52aXJvbm1lbnQiDQoNCiAgICAgICAgIWVsZW1lbnQgZGUgew0KICAgICAgICAgICAgZG4gPSBkZXBsb3ltZW50Tm9kZSAiRGVwbG95bWVudE5vZGUiDQogICAgICAgIH0NCiAgICB9DQp9",
-    "structurizr.inspection.info": "0",
-    "structurizr.inspection.ignore": "0",
-    "structurizr.inspection.warning": "0"
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "6",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCiAgICBtb2RlbCB7DQogICAgICAgIGRlID0gZGVwbG95bWVudEVudmlyb25tZW50ICJEZXBsb3ltZW50RW52aXJvbm1lbnQiDQoNCiAgICAgICAgIWVsZW1lbnQgZGUgew0KICAgICAgICAgICAgZG4gPSBkZXBsb3ltZW50Tm9kZSAiRGVwbG95bWVudE5vZGUiDQogICAgICAgIH0NCiAgICB9DQp9",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
   },
-  "views": {
-    "configuration": {
-      "styles": {},
-      "terminology": {}
-    }
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "systemLandscapeViews" : [ {
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-001",
+      "name" : "System Landscape View",
+      "order" : 1
+    } ]
   }
 }

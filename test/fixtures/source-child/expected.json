@@ -1,41 +1,79 @@
 {
-  "configuration": {},
-  "description": "Description",
-  "documentation": {},
-  "id": 0,
-  "model": {
-    "softwareSystems": [
-      {
-        "documentation": {},
-        "id": "1",
-        "name": "A",
-        "properties": {
-          "structurizr.dsl.identifier": "a"
-        },
-        "tags": "Element,Software System"
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "documentation" : { },
+      "id" : "1",
+      "name" : "A",
+      "properties" : {
+        "structurizr.dsl.identifier" : "a"
       },
-      {
-        "documentation": {},
-        "id": "2",
-        "name": "B",
-        "properties": {
-          "structurizr.dsl.identifier": "b"
-        },
-        "tags": "Element,Software System"
-      }
-    ]
+      "tags" : "Element,Software System"
+    }, {
+      "documentation" : { },
+      "id" : "2",
+      "name" : "B",
+      "properties" : {
+        "structurizr.dsl.identifier" : "b"
+      },
+      "tags" : "Element,Software System"
+    } ]
   },
-  "name": "Name",
-  "properties": {
-    "structurizr.inspection.error": "8",
-    "structurizr.inspection.info": "0",
-    "structurizr.inspection.ignore": "0",
-    "structurizr.inspection.warning": "0"
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "8",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
   },
-  "views": {
-    "configuration": {
-      "styles": {},
-      "terminology": {}
-    }
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "systemContextViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemContext-001",
+      "name" : "System Context View: A",
+      "order" : 2,
+      "softwareSystemId" : "1"
+    }, {
+      "elements" : [ {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemContext-002",
+      "name" : "System Context View: B",
+      "order" : 3,
+      "softwareSystemId" : "2"
+    } ],
+    "systemLandscapeViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-001",
+      "name" : "System Landscape View",
+      "order" : 1
+    } ]
   }
 }

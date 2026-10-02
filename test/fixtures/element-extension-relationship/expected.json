@@ -1,69 +1,145 @@
 {
-  "configuration": {},
-  "description": "Description",
-  "documentation": {},
-  "id": 0,
-  "model": {
-    "softwareSystems": [
-      {
-        "containers": [
-          {
-            "documentation": {},
-            "id": "3",
-            "name": "Child storage",
-            "properties": {
-              "structurizr.dsl.identifier": "parent.child"
-            },
-            "relationships": [
-              {
-                "destinationId": "2",
-                "id": "4",
-                "sourceId": "3",
-                "tags": "Relationship"
-              }
-            ],
-            "tags": "Element,Container"
-          }
-        ],
-        "documentation": {},
-        "id": "1",
-        "name": "Parent",
-        "properties": {
-          "structurizr.dsl.identifier": "parent"
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "3",
+        "name" : "Child storage",
+        "properties" : {
+          "structurizr.dsl.identifier" : "parent.child"
         },
-        "relationships": [
-          {
-            "destinationId": "2",
-            "id": "5",
-            "linkedRelationshipId": "4",
-            "sourceId": "1"
-          }
-        ],
-        "tags": "Element,Software System"
+        "relationships" : [ {
+          "destinationId" : "2",
+          "id" : "4",
+          "sourceId" : "3",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "Parent",
+      "properties" : {
+        "structurizr.dsl.identifier" : "parent"
       },
-      {
-        "documentation": {},
-        "id": "2",
-        "name": "Sibling",
-        "properties": {
-          "structurizr.dsl.identifier": "sibling"
-        },
-        "tags": "Element,Software System"
-      }
-    ]
+      "relationships" : [ {
+        "destinationId" : "2",
+        "id" : "5",
+        "linkedRelationshipId" : "4",
+        "sourceId" : "1"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "documentation" : { },
+      "id" : "2",
+      "name" : "Sibling",
+      "properties" : {
+        "structurizr.dsl.identifier" : "sibling"
+      },
+      "tags" : "Element,Software System"
+    } ]
   },
-  "name": "Name",
-  "properties": {
-    "structurizr.inspection.error": "15",
-    "structurizr.dsl": "d29ya3NwYWNlIHsNCiAgICAhaWRlbnRpZmllcnMgaGllcmFyY2hpY2FsDQogICAgbW9kZWwgew0KICAgICAgICBwYXJlbnQgPSBzb2Z0d2FyZVN5c3RlbSAiUGFyZW50Ig0KICAgICAgICBzaWJsaW5nID0gc29mdHdhcmVTeXN0ZW0gIlNpYmxpbmciDQogICAgICAgIC8vICFlbGVtZW50IFBhcmVudCBhZGRzIGEgY29udGFpbmVyICJDaGlsZCIgdG8gdGhlIGV4aXN0aW5nIHNvZnR3YXJlDQogICAgICAgIC8vIHN5c3RlbSAiUGFyZW50Ii4gVGhlIEZRTiAoUGFyZW50LkNoaWxkKSBtdXN0IHJlc29sdmUgZXZlbiBpbiB0aGUNCiAgICAgICAgLy8gZGVmYXVsdCBmbGF0IGlkZW50aWZpZXIgbW9kZSwgc28gYSByZWxhdGlvbnNoaXAgY2FuIHRhcmdldCBpdC4NCiAgICAgICAgIWVsZW1lbnQgcGFyZW50IHsNCiAgICAgICAgICAgIGNoaWxkID0gY29udGFpbmVyICJDaGlsZCBzdG9yYWdlIg0KICAgICAgICB9DQogICAgICAgIHBhcmVudC5jaGlsZCAtPiBzaWJsaW5nDQogICAgfQ0KfQ==",
-    "structurizr.inspection.info": "0",
-    "structurizr.inspection.ignore": "0",
-    "structurizr.inspection.warning": "0"
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "15",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCiAgICAhaWRlbnRpZmllcnMgaGllcmFyY2hpY2FsDQogICAgbW9kZWwgew0KICAgICAgICBwYXJlbnQgPSBzb2Z0d2FyZVN5c3RlbSAiUGFyZW50Ig0KICAgICAgICBzaWJsaW5nID0gc29mdHdhcmVTeXN0ZW0gIlNpYmxpbmciDQogICAgICAgIC8vICFlbGVtZW50IFBhcmVudCBhZGRzIGEgY29udGFpbmVyICJDaGlsZCIgdG8gdGhlIGV4aXN0aW5nIHNvZnR3YXJlDQogICAgICAgIC8vIHN5c3RlbSAiUGFyZW50Ii4gVGhlIEZRTiAoUGFyZW50LkNoaWxkKSBtdXN0IHJlc29sdmUgZXZlbiBpbiB0aGUNCiAgICAgICAgLy8gZGVmYXVsdCBmbGF0IGlkZW50aWZpZXIgbW9kZSwgc28gYSByZWxhdGlvbnNoaXAgY2FuIHRhcmdldCBpdC4NCiAgICAgICAgIWVsZW1lbnQgcGFyZW50IHsNCiAgICAgICAgICAgIGNoaWxkID0gY29udGFpbmVyICJDaGlsZCBzdG9yYWdlIg0KICAgICAgICB9DQogICAgICAgIHBhcmVudC5jaGlsZCAtPiBzaWJsaW5nDQogICAgfQ0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
   },
-  "views": {
-    "configuration": {
-      "styles": {},
-      "terminology": {}
-    }
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "TopBottom",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Container-001",
+      "name" : "Container View: Parent",
+      "order" : 3,
+      "relationships" : [ {
+        "id" : "4"
+      } ],
+      "softwareSystemId" : "1"
+    } ],
+    "systemContextViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemContext-001",
+      "name" : "System Context View: Parent",
+      "order" : 2,
+      "relationships" : [ {
+        "id" : "5"
+      } ],
+      "softwareSystemId" : "1"
+    }, {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemContext-002",
+      "name" : "System Context View: Sibling",
+      "order" : 4,
+      "relationships" : [ {
+        "id" : "5"
+      } ],
+      "softwareSystemId" : "2"
+    } ],
+    "systemLandscapeViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-001",
+      "name" : "System Landscape View",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "5"
+      } ]
+    } ]
   }
 }

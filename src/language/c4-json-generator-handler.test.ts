@@ -350,7 +350,7 @@ describe('text measurement relayout', () => {
 
         const result = await handler.applyTextMeasurements(uri, built.generation, {});
 
-        expect(result).toEqual({ changed: false });
+        expect(result).toEqual({ views: [], changed: false, generation: built.generation });
         // Nothing changed, so the cached generation must stay put (no rebuild).
         expect(handler.getContentForUri(uri)?.generation).toBe(built.generation);
     });

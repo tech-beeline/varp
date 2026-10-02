@@ -360,16 +360,18 @@ export class C4GeneratorHandler {
      * the generation does not match the cached build, so a stale measurement pass can
      * never overwrite a newer layout.
      */
-    public async applyTextMeasurements(uri: string, generation: number, widths: Record<string, number>): Promise<{ changed: boolean } | undefined> {
+    public async applyTextMeasurements(uri: string, generation: number, widths: Record<string, number>): Promise<{ views: any[]; changed: boolean; generation: number } | undefined> {
         const rootUri = this.getRootUri(uri);
         const entry = this.jsonCache.get(rootUri);
         if (!entry || entry.generation !== generation) return undefined;
-        const { changed } = await (this.services as any).generation.C4JsonGenerator.applyTextMeasurements(rootUri, entry.json, widths ?? {});
+        const { views, changed } = await (this.services as any).generation.C4JsonGenerator.applyTextMeasurements(rootUri, entry.json, widths ?? {});
         if (changed) {
             jsonGeneration += 1;
             entry.generation = jsonGeneration;
         }
-        return { changed };
+        // The refined views are returned so the client patches only them instead of
+        // refetching the whole workspace JSON.
+        return { views, changed, generation: entry.generation };
     }
 
     /**

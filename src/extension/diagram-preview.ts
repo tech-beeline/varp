@@ -34,6 +34,33 @@ function getNonce(): string {
   return text;
 }
 
+/**
+ * Replaces views in a workspace JSON by key with the refined ones the language
+ * server re-laid out, so later consumers (view switch, export) see the patched
+ * coordinates instead of the pre-measurement layout.
+ */
+function mergeViewUpdates(json: any, views: any[]): any {
+  if (!json || !json.views) {
+    return json;
+  }
+  for (const updated of views) {
+    if (!updated || typeof updated.key !== 'string') {
+      continue;
+    }
+    for (const bucket of Object.values(json.views as Record<string, unknown>)) {
+      if (!Array.isArray(bucket)) {
+        continue;
+      }
+      for (let i = 0; i < bucket.length; i++) {
+        if (bucket[i] && bucket[i].key === updated.key) {
+          bucket[i] = updated;
+        }
+      }
+    }
+  }
+  return json;
+}
+
 export class DiagramPreview {
   private panel: WebviewPanel | undefined;
   private currentViewKey: string | undefined;
@@ -164,6 +191,22 @@ export class DiagramPreview {
           // deliver it as soon as the webview signals it is ready.
           this.pendingMessage = { uri: docUri, json, viewKey, themes: this.currentThemes, generation, rebuild: !sameWorkspace, textMeasurements: measureText ? textMeasurements : undefined, loadThemes: loadThemes === true || undefined };
         }
+  }
+
+  /**
+   * Applies the views the language server re-laid out with the measured frame
+   * widths. The server already wrote the refined coordinates into its cached
+   * JSON and returned only the changed views, so the preview patches them into
+   * the JSON it holds and asks the webview to rebuild from the patched workspace
+   * - no full workspace JSON crosses the wire for the second layout pass.
+   */
+  public applyViewUpdates(views: any[], docUri: string | undefined, generation: number | undefined): void {
+        if (!views || views.length === 0 || !this.panelReady || !this.panel) {
+          return;
+        }
+        this.currentJson = mergeViewUpdates(this.currentJson, views);
+        this.pendingJson = false;
+        this.panel.webview.postMessage({ command: 'views-updated', views, uri: docUri, generation, viewKey: this.currentViewKey });
   }
 
   /**
@@ -448,6 +491,8 @@ export class DiagramPreview {
               structurizr.diagram.exportCurrentDiagramToSVG({ metadata: true, crop: true }, function(svgMarkup) {
                 vscode.postMessage({ command: 'svg-result', svg: svgMarkup });
               });
+            } else if (message.command === 'views-updated') {
+              applyViewUpdates(message);
             } else if (message.viewKey !== undefined) {
               structurizr.diagram.changeView(message.viewKey);
             }
@@ -682,6 +727,44 @@ export class DiagramPreview {
                 return;
             }
             setTimeout(finish, 10000);
+        }
+
+        // Applies the views the language server re-laid out with the measured frame
+        // widths. Only the changed views cross the wire, so they are merged into the
+        // built workspace and the Diagram is rebuilt from it.
+        function applyViewUpdates(message) {
+            if (!structurizr.workspace || !structurizr.workspace.views) return;
+            var buckets = ['systemLandscapeViews', 'systemContextViews', 'containerViews', 'componentViews', 'deploymentViews', 'dynamicViews', 'customViews', 'imageViews', 'filteredViews'];
+            var patched = false;
+            (message.views || []).forEach(function(updated) {
+                if (!updated || typeof updated.key !== 'string') return;
+                for (var b = 0; b < buckets.length && !patched; b++) {
+                    var list = structurizr.workspace.views[buckets[b]];
+                    if (!Array.isArray(list)) continue;
+                    for (var i = 0; i < list.length; i++) {
+                        if (list[i] && list[i].key === updated.key) {
+                            patchViewInPlace(list[i], updated);
+                            patched = true;
+                            break;
+                        }
+                    }
+                }
+            });
+            if (!patched) return;
+            if (message.generation !== undefined) lastGeneration = message.generation;
+            if (message.uri !== undefined) lastUri = message.uri;
+            // The element positions changed, so rebuild the Diagram from the mutated
+            // workspace; no measurement pass, that would loop.
+            rebuildDiagram(false);
+        }
+
+        // Copies every field of the updated view onto the existing object. The
+        // workspace indexes views by reference (findViewByKey walks its registered
+        // list), so replacing the bucket entry would leave the renderer on the old
+        // object.
+        function patchViewInPlace(target, updated) {
+            Object.keys(updated).forEach(function(k) { target[k] = updated[k]; });
+            Object.keys(target).forEach(function(k) { if (!(k in updated)) delete target[k]; });
         }
 
         // Recreates the Diagram from the (mutated) workspace. A refresh() re-renders in

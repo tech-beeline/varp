@@ -1620,7 +1620,22 @@ class JsonGenerator {
         if (!element) return 'unknown';
         // Resolve through el() so a reference to an ArchetypeInstance and its
         // materialised element produce the same id.
-        return flatId(this.el(element), this.rootDocUri ?? '', {
+        const resolved = this.el(element);
+        if (resolved !== null && typeof resolved === 'object') {
+            const cached = this.idCache.get(resolved);
+            if (cached !== undefined) return cached;
+            const id = this.computeId(resolved);
+            this.idCache.set(resolved, id);
+            return id;
+        }
+        return this.computeId(resolved);
+    }
+
+    /** Per-generate id cache, keyed by the resolved AST node. */
+    private readonly idCache = new WeakMap<object, string>();
+
+    private computeId(resolved: any): string {
+        return flatId(resolved, this.rootDocUri ?? '', {
             source: (rel) => this.resolveSource(rel),
             target: (rel) => this.resolveTarget(rel),
         });
@@ -1969,6 +1984,20 @@ class JsonGenerator {
 
     /** Cached result of collectAllRelationships(). */
     private allRelationshipsCache?: ImpliedRelationship[];
+    /**
+     * The same result indexed by source element id, so relationshipsOwnedBy() is a
+     * map lookup instead of a scan of every relationship per element.
+     */
+    private relationshipsBySourceImplied?: Map<string, ImpliedRelationship[]>;
+
+    /**
+     * Drops both relationship caches. They are derived from the same relationship
+     * list and must always be invalidated together.
+     */
+    private invalidateAllRelationships(): void {
+        this.allRelationshipsCache = undefined;
+        this.relationshipsBySourceImplied = undefined;
+    }
 
     /**
      * Resolves each `-/>` directive into the set of instance ids it targets in its
@@ -2247,6 +2276,22 @@ class JsonGenerator {
         }
 
         this.allRelationshipsCache = ordered;
+
+        // Index the deduplicated result by source id, so relationshipsOwnedBy()
+        // does not rescan every relationship (and recompute every source id) for
+        // each element.
+        const bySource = new Map<string, ImpliedRelationship[]>();
+        for (const rel of ordered) {
+            const sourceId = this.getId(rel.source);
+            const bucket = bySource.get(sourceId);
+            if (bucket) {
+                bucket.push(rel);
+            } else {
+                bySource.set(sourceId, [rel]);
+            }
+        }
+        this.relationshipsBySourceImplied = bySource;
+
         return ordered;
     }
 
@@ -2257,8 +2302,9 @@ class JsonGenerator {
 
     /** Direct and implied relationships whose source is the given element. */
     private relationshipsOwnedBy(element: NamedElement): ImpliedRelationship[] {
-        const id = this.getId(element);
-        return this.collectAllRelationships().filter(rel => this.getId(rel.source) === id);
+        // Builds (and caches) the source index as a side effect.
+        this.collectAllRelationships();
+        return this.relationshipsBySourceImplied?.get(this.getId(element)) ?? [];
     }
 
     /** Extracts the relationships of an element, dispatching on its concrete type. */
@@ -5989,7 +6035,7 @@ class JsonGenerator {
                     }
                 }
             }
-            this.allRelationshipsCache = undefined;
+            this.invalidateAllRelationships();
         }
     }
 

@@ -276,14 +276,11 @@ export function init(context: ExtensionContext): void {
                 return; // stale measurement, or the layout did not change: nothing to re-render
             }
 
-            // The server saved the refined coordinates in the cached JSON and bumped its
-            // generation; rebuild the preview from that cache. No text measurements are
-            // passed, so the rebuild does not start another measurement pass.
-            const content: any = await languageClient.sendRequest('c4/getContentForUri', { uri });
-            if (!content?.json) {
-                return;
-            }
-            await diagramPreview.updateWebView(content.json, diagramPreview.getCurrentViewKey() ?? '', uri, undefined, content.generation, undefined);
+            // The server saved the refined coordinates in the cached JSON, bumped its
+            // generation and returned the views it re-laid out. Only those views are
+            // patched in, instead of refetching the whole workspace JSON. No text
+            // measurements are passed, so the rebuild does not start another pass.
+            await diagramPreview.applyViewUpdates(result.views ?? [], uri, result.generation);
         } catch (err) {
             console.warn('[C4 Preview] Text measurement layout failed:', err);
         }

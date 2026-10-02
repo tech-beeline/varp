@@ -120,9 +120,15 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
     });
 }
 
-/** Returns the configured auto-refresh mode (defaults to onChange). */
-function getAutoRefreshMode(): 'onChange' | 'onSave' {
-    const value = workspace.getConfiguration('varp.diagram').get<string>('autoRefresh', 'onChange');
+/**
+ * Returns the configured auto-refresh mode (defaults to onChange) for the
+ * given resource. The setting is resource scoped, so a resource URI must be
+ * passed to resolve its effective value; without one, the value for any
+ * resource is used.
+ */
+function getAutoRefreshMode(uri?: string): 'onChange' | 'onSave' {
+    const resource = uri ? Uri.parse(uri) : null;
+    const value = workspace.getConfiguration('varp.diagram', resource).get<string>('autoRefresh', 'onChange');
     return value === 'onChange' ? 'onChange' : 'onSave';
 }
 
@@ -139,7 +145,7 @@ function isDocumentDirty(uri: string): boolean {
  * are coalesced via scheduleRefresh so bursts produce one webview update.
  */
 function renderPreviewIfApplicable(uri: string, json: any, generation: number | undefined, preview: DiagramPreview, textMeasurements?: Record<string, any>): void {
-    const mode = getAutoRefreshMode();
+    const mode = getAutoRefreshMode(uri);
     const dirty = isDocumentDirty(uri);
     const pending = preview.isPendingJson();
     if (pending || mode === 'onChange' || !dirty) {

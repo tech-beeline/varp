@@ -303,6 +303,10 @@ class JsonGenerator {
     private readonly noRelationshipSuppressions: Array<{ env: string; sourceIds: Set<string>; targetIds: Set<string>; description?: string }> = [];
     /** URI string of the root workspace document - elements defined there keep the short id hash. */
     private rootDocUri: string | undefined;
+    /** Document URI → depth in the workspace `extends` chain (entry = 0, extended base = 1, ...). */
+    private extendsDepths: Map<string, number> = new Map();
+    /** Element → source position within its extends block, for instance id tie-breaking. */
+    private elementSourcePositions: Map<AstNode, number> = new Map();
     /** Maps include file URI → list of Include directives that reference it (for resolving !elements/!relationships context) */
     private readonly includeContexts: Map<string, Include[]> = new Map();
     /** Range-based impliedRelationships flags per document URI: URI → sorted list of {fromOffset, toOffset, enabled} */
@@ -415,6 +419,10 @@ class JsonGenerator {
             : '/';
 
         this.collectElementsRelationships(workspace);
+        // Document depths in the `extends` chain, for base-first instance ordering.
+        this.extendsDepths = this.computeExtendsDepths(workspace);
+        // Source positions within each extends block, for same-depth instance ordering.
+        this.elementSourcePositions = this.computeElementSourcePositions(workspace);
         // Resolve `-/>` directives and project deployment-context relationships onto
         // instances before indexing relationships by source.
         this.buildNoRelationshipSuppressions();
@@ -1891,7 +1899,7 @@ class JsonGenerator {
         }
         if (isComponentView(view)) {
             const container = this.el(view.container?.ref);
-            const system = container ? this.el(container.$container) : undefined;
+            const system = container ? this.resolveConatinerParent(container as Container) : undefined;
             if (!container || !system) return undefined;
             return `Component View: ${this.substitute((system as any).name)} - ${this.substitute(container.name)}`;
         }
@@ -1907,7 +1915,7 @@ class JsonGenerator {
         if (isDynamicView(view)) {
             const scope = this.el(view.element?.ref);
             if (scope && isContainer(scope)) {
-                const system = this.el(scope.$container);
+                const system = this.resolveConatinerParent(scope as Container);
                 if (system) return `Dynamic View: ${this.substitute((system as any).name)} - ${this.substitute(scope.name)}`;
             }
             if (scope) return `Dynamic View: ${this.substitute((scope as any).name)}`;
@@ -1973,6 +1981,7 @@ class JsonGenerator {
                     relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(p).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(result, p);
+                this.applyElementExtensions(result, p);
                 return result;
             });
         return peoples && peoples.length > 0 ? peoples : undefined;
@@ -3113,12 +3122,14 @@ class JsonGenerator {
         if (isPerson(node)) return `Person://${clean(node.name)}`;
         if (isSoftwareSystem(node)) return `SoftwareSystem://${clean(node.name)}`;
         if (isContainer(node)) {
-            const softwareSystem = (node as any).$container;
+            // resolveConatinerParent follows `!element` targets and !include
+            // contexts, unlike a plain $container climb.
+            const softwareSystem = this.resolveConatinerParent(node as Container);
             return `Container://${clean(softwareSystem?.name)}.${clean(node.name)}`;
         }
         if (isComponent(node)) {
-            const container = (node as any).$container;
-            const softwareSystem = container?.$container;
+            const container = this.resolveComponentParent(node as Component);
+            const softwareSystem = container ? this.resolveConatinerParent(container) : undefined;
             return `Component://${clean(softwareSystem?.name)}.${clean(container?.name)}.${clean(node.name)}`;
         }
         if (isDeploymentNode(node)) return `DeploymentNode://${deploymentNodePath(node)}`;
@@ -3134,7 +3145,7 @@ class JsonGenerator {
         if (isContainerInstance(node)) {
             const parent = this.resolveDeploymentNodeParent(node);
             const container = this.el(node.container?.ref);
-            const softwareSystem = (container as any)?.$container;
+            const softwareSystem = container ? this.resolveConatinerParent(container as Container) : undefined;
             return parent ? `ContainerInstance://${deploymentNodePath(parent)}/${clean(softwareSystem?.name)}.${clean(container?.name)}[${this.instanceId(node)}]` : undefined;
         }
         return undefined;
@@ -3167,48 +3178,44 @@ class JsonGenerator {
     }
 
     /**
-     * Returns the set of deployment group names for an instance node (ContainerInstance,
-     * SoftwareSystemInstance, GenericInstance).
+     * Returns the set of deployment group names an instance node (ContainerInstance,
+     * SoftwareSystemInstance, GenericInstance) belongs to: the union of the groups
+     * declared directly on the instance and the groups of every ancestor deployment
+     * node (climbing the $container chain).
      *
-     * Resolution order:
-     * 1. Direct deploymentGroups references on the instance
-     * 2. If none, inherit from parent DeploymentNode via deploymentGroupProps
-     *    (climbs up the $container chain)
-     *
-     * Deployment groups are used for relationship scoping: implied relationships
-     * are only projected between instances that share a common deployment group.
-     * See: https://docs.structurizr.com/dsl/cookbook/deployment-groups/
+     * Used only for implied-relationship scoping: instances relate when they share
+     * at least one group (or when neither has any). The JSON `deploymentGroups`
+     * field carries only the instance's own groups.
      */
     private getInstanceDeploymentGroupNames(node: any): Set<string> {
         const groups = new Set<string>();
 
-        // 1. Check direct deployment groups declared on the instance
+        // 1. Direct deployment groups declared on the instance
         for (const name of this.directDeploymentGroupNames(node)) {
             groups.add(name);
         }
 
-        // 2. If no direct groups, inherit from parent DeploymentNode chain
-        if (groups.size === 0) {
-            let current: AstNode | undefined = node.$container;
-            while (current) {
-                if (isDeploymentNode(current)) {
-                    const dn = current as any;
-                    if (Array.isArray(dn.deploymentGroupProps)) {
-                        for (const prop of dn.deploymentGroupProps) {
-                            if (Array.isArray(prop.deploymentGroups)) {
-                                for (const ref of prop.deploymentGroups) {
-                                    if (ref.ref && ref.ref.name) {
-                                        const name = C4Utils.stripQuotes(ref.ref.name);
-                                        if (name) groups.add(name);
-                                    }
-                                }
-                            }
-                        }
+        // 2. Deployment groups of every ancestor deployment node
+        let current: AstNode | undefined = node.$container;
+        while (current) {
+            if (isDeploymentNode(current)) {
+                const dn = current as any;
+                for (const prop of dn.deploymentGroupProps ?? []) {
+                    for (const ref of prop.deploymentGroups ?? []) {
+                        const name = ref.ref?.name && C4Utils.stripQuotes(ref.ref.name);
+                        if (name) groups.add(name);
                     }
-                    if (groups.size > 0) break; // found groups, stop climbing
                 }
-                current = current.$container;
             }
+            if (isElementExtension(current)) {
+                // An instance declared inside an `!element` block is nested
+                // under the extended element, not under the directive: jump to
+                // the target and keep climbing from there.
+                const target = this.resolveElementExtensionTarget(current);
+                current = target && isDeploymentNode(target) ? target : undefined;
+                continue;
+            }
+            current = current.$container;
         }
 
         return groups;
@@ -3576,64 +3583,76 @@ class JsonGenerator {
                 return childJson;
             })),
             // Find infrastructure nodes (traversing through groups)
-            infrastructureNodes: this.onlyIfNotEmpty(this.collectNested(node, isInfrastructureNode)?.map(infra => {
-                const infraJson: any = {
-                    id: this.getId(infra),
-                    name: this.substitute(infra.name),
-                    group: this.extractGroup(infra),
-                    tags: this.extractTags(infra, 'Element', 'Infrastructure Node'),
-                    description: this.description(infra),
-                    technology: this.technology(infra),
-                    url: this.url(infra),
-                    environment: this.getEnvironment(infra),
-                    relationships: this.onlyIfNotEmpty(this.extractRelationshipsForInfrastructureNode(infra).map(el => this.relationshipToJson(el)))
-                };
-                this.applyElementOverlay(infraJson, infra);
-                return infraJson;
-            })),
+            infrastructureNodes: this.onlyIfNotEmpty(this.collectNested(node, isInfrastructureNode)?.map(infra => this.infrastructureNodeToJson(infra))),
             // Find software system instances (traversing through groups)
             softwareSystemInstances: this.onlyIfNotEmpty(this.collectNested(node, isSoftwareSystemInstance)?.
             filter((ssi): ssi is typeof ssi & { softwareSystem: { ref: NonNullable<typeof ssi.softwareSystem.ref> } } => ssi.softwareSystem.ref !== undefined).
-            map(ssi => {
-                const ssiJson: any = {
-                    id: this.getId(ssi),
-                    instanceId: this.instanceId(ssi),
-                    group: this.extractGroup(ssi),
-                    tags: this.extractTags(ssi, 'Software System Instance'),
-                    url: this.url(ssi),
-                    deploymentGroups: this.onlyIfNotEmpty(this.directDeploymentGroupNames(ssi)),
-                    softwareSystemId: this.getId(ssi.softwareSystem.ref),
-                    environment: this.getEnvironment(ssi),
-                    relationships: this.onlyIfNotEmpty(this.extractRelationshipsForSoftwareSystemInstance(ssi).map(el => this.relationshipToJson(el)))
-                };
-                this.applyElementOverlay(ssiJson, ssi);
-                return ssiJson;
-            })),
+            map(ssi => this.softwareSystemInstanceToJson(ssi))),
             
             // Find container instances (traversing through groups)
             containerInstances: this.onlyIfNotEmpty(this.collectNested(node, isContainerInstance)?.
-            filter((ci): ci is typeof ci & { container: { ref: NonNullable<typeof ci.container.ref> } } => ci.container.ref !== undefined).map(ci => {
-                const ciJson: any = {
-                    id: this.getId(ci),
-                    containerId: this.getId(ci.container.ref),
-                    instanceId: this.instanceId(ci),
-                    environment: this.getEnvironment(ci),
-                    group: this.extractGroup(ci),
-                    tags: this.extractTags(ci, 'Container Instance'),
-                    url: this.url(ci),
-                    deploymentGroups: this.onlyIfNotEmpty(this.directDeploymentGroupNames(ci)),
-                    relationships: this.onlyIfNotEmpty(this.extractRelationshipsForContainerInstance(ci).map(el => this.relationshipToJson(el))),
-                    parentId: this.getId(this.resolveDeploymentNodeParent(ci))
-                };
-                this.applyElementOverlay(ciJson, ci);
-                return ciJson;
-            })),
+            filter((ci): ci is typeof ci & { container: { ref: NonNullable<typeof ci.container.ref> } } => ci.container.ref !== undefined).map(ci => this.containerInstanceToJson(ci))),
             
             relationships: this.onlyIfNotEmpty(this.extractRelationshipsForDeploymentNode(node).map(el => this.relationshipToJson(el)))
         };
         this.applyElementOverlay(jsonNode, node);
         this.applyElementExtensions(jsonNode, node);
         return jsonNode;
+    }
+
+    /** Transforms an InfrastructureNode AST node into its deployment JSON entry. */
+    private infrastructureNodeToJson(infra: any): any {
+        const infraJson: any = {
+            id: this.getId(infra),
+            name: this.substitute(infra.name),
+            group: this.extractGroup(infra),
+            tags: this.extractTags(infra, 'Element', 'Infrastructure Node'),
+            description: this.description(infra),
+            technology: this.technology(infra),
+            url: this.url(infra),
+            environment: this.getEnvironment(infra),
+            relationships: this.onlyIfNotEmpty(this.extractRelationshipsForInfrastructureNode(infra).map(el => this.relationshipToJson(el)))
+        };
+        this.applyElementOverlay(infraJson, infra);
+        this.applyElementExtensions(infraJson, infra);
+        return infraJson;
+    }
+
+    /** Transforms a SoftwareSystemInstance AST node into its deployment JSON entry. */
+    private softwareSystemInstanceToJson(ssi: any): any {
+        const ssiJson: any = {
+            id: this.getId(ssi),
+            instanceId: this.instanceId(ssi),
+            group: this.extractGroup(ssi),
+            tags: this.extractTags(ssi, 'Software System Instance'),
+            url: this.url(ssi),
+            deploymentGroups: this.onlyIfNotEmpty(this.directDeploymentGroupNames(ssi)),
+            softwareSystemId: this.getId(ssi.softwareSystem.ref),
+            environment: this.getEnvironment(ssi),
+            relationships: this.onlyIfNotEmpty(this.extractRelationshipsForSoftwareSystemInstance(ssi).map(el => this.relationshipToJson(el)))
+        };
+        this.applyElementOverlay(ssiJson, ssi);
+        this.applyElementExtensions(ssiJson, ssi);
+        return ssiJson;
+    }
+
+    /** Transforms a ContainerInstance AST node into its deployment JSON entry. */
+    private containerInstanceToJson(ci: any): any {
+        const ciJson: any = {
+            id: this.getId(ci),
+            containerId: this.getId(ci.container.ref),
+            instanceId: this.instanceId(ci),
+            environment: this.getEnvironment(ci),
+            group: this.extractGroup(ci),
+            tags: this.extractTags(ci, 'Container Instance'),
+            url: this.url(ci),
+            deploymentGroups: this.onlyIfNotEmpty(this.directDeploymentGroupNames(ci)),
+            relationships: this.onlyIfNotEmpty(this.extractRelationshipsForContainerInstance(ci).map(el => this.relationshipToJson(el))),
+            parentId: this.getId(this.resolveDeploymentNodeParent(ci))
+        };
+        this.applyElementOverlay(ciJson, ci);
+        this.applyElementExtensions(ciJson, ci);
+        return ciJson;
     }
 
     /**
@@ -3657,6 +3676,12 @@ class JsonGenerator {
         while (current) {
             if (isDeploymentNode(current)) {
                 return current;
+            }
+            if (isElementExtension(current)) {
+                // A deployment node declared inside an `!element` block is nested
+                // under the extended element, not under the ElementExtension directive.
+                const target = this.resolveElementExtensionTarget(current);
+                return target && isDeploymentNode(target) ? target : undefined;
             }
             current = current.$container;
         }
@@ -4154,20 +4179,28 @@ class JsonGenerator {
             return current!;
         };
 
-        // First pass: deployment nodes become clusters BEFORE leaves attach.
+        // Deployment nodes become clusters BEFORE leaves attach. The view's element
+        // list is not in tree order (children can precede their parent), so register
+        // every cluster first and only then attach it to its parent's cluster.
         const deployCluster: Record<string, string> = {};
+        const deployParent: Record<string, string | undefined> = {};
         for (const el of elements) {
             if (!this.isCompound(el)) continue;
             const id = this.getId(el);
             const cid = 'cluster_deploy_' + id;
             deployCluster[id] = cid;
             clusterKind[cid] = 'deploy';
-            const parentEl = this.resolveFrameParentId(el, scopeElement);
+            deployParent[cid] = this.resolveFrameParentId(el, scopeElement);
+            addElementTexts(cid, el, true);
+        }
+        for (const el of elements) {
+            if (!this.isCompound(el)) continue;
+            const cid = deployCluster[this.getId(el)];
+            const parentEl = deployParent[cid];
             const base = parentEl !== undefined ? deployCluster[parentEl] : scopeClusterId;
             const group = this.extractGroup(el);
             const gid = group && group.length > 0 ? ensureGroupCluster(group, base) : undefined;
             addChild(gid ?? base ?? 'root', cid);
-            addElementTexts(cid, el, true);
         }
 
         // Sizes (in inches at 300dpi) and cluster assignment for the elements that are
@@ -5263,23 +5296,112 @@ class JsonGenerator {
 
     /**
      * 1-based index of an instance among the instances of the same container/software
-     * system in the same environment, in declaration order.
+     * system in the same environment, in the order the reference parser reads the
+     * workspace: base documents first, and within an extends block in source order,
+     * with !include files spliced in at their include directive.
      */
     private instanceId(node: any): number {
         const containerInstance = isContainerInstance(node);
         const reference = containerInstance ? node.container?.ref : node.softwareSystem?.ref;
         const parent = this.resolveDeploymentNodeParent(node);
-        let count = 0;
-        for (const element of this.elements) {
+        const candidates: { rank: number; position: number; index: number }[] = [];
+        this.elements.forEach((element, index) => {
             const matches = containerInstance
                 ? isContainerInstance(element) && element.container?.ref === reference
                 : isSoftwareSystemInstance(element) && element.softwareSystem?.ref === reference;
             if (matches && this.resolveDeploymentNodeParent(element) === parent) {
-                count++;
-                if (element === node) break;
+                candidates.push({
+                    rank: this.extendsDepths.get(AstUtils.getDocument(element)?.uri.toString()) ?? 0,
+                    position: this.elementSourcePositions.get(element) ?? 0,
+                    index
+                });
             }
+        });
+        candidates.sort((a, b) => b.rank - a.rank || a.position - b.position || a.index - b.index);
+        for (let i = 0; i < candidates.length; i++) {
+            if (this.elements[candidates[i].index] === node) return i + 1;
         }
-        return count || 1;
+        return 1;
+    }
+
+    /**
+     * Depth of every document in the workspace `extends` chain reachable from the
+     * entry workspace: the entry document is 0, the workspace it extends is 1, and so on.
+     * `!include` files inherit the depth of the document that includes them, so
+     * instances contributed by them rank at that document's position.
+     */
+    private computeExtendsDepths(entry: Workspace): Map<string, number> {
+        const depths = new Map<string, number>();
+        const visit = (root: AstNode, depth: number) => {
+            const doc = AstUtils.getDocument(root);
+            const uri = doc?.uri.toString();
+            if (!uri || depths.has(uri)) return;
+            depths.set(uri, depth);
+            const tree = doc?.parseResult.value ?? root;
+            for (const content of AstUtils.streamAllContents(tree)) {
+                if (!isInclude(content) || !content.file) continue;
+                const includedRoot = this.resolveIncludedRoot(content, content.file);
+                if (includedRoot) visit(includedRoot, depth);
+            }
+        };
+        const walk = (ws: Workspace, depth: number) => {
+            visit(ws, depth);
+            if (ws.extendsUri) {
+                const parent = this.resolveParentWorkspace(ws, ws.extendsUri);
+                if (parent) walk(parent, depth + 1);
+            }
+        };
+        walk(entry, 0);
+        return depths;
+    }
+
+    /**
+     * Source position of every collected element within its extends block, in the
+     * order the reference parser reads it: `!include` files are spliced into the
+     * including document at the include directive, so an included element's position
+     * is the include offset plus its offset within the included file. Deeper extends
+     * blocks sort before shallower ones via the extends depth.
+     */
+    private computeElementSourcePositions(entry: Workspace): Map<AstNode, number> {
+        const positions = new Map<AstNode, number>();
+        const assign = (docRoot: AstNode, base: number) => {
+            const docUri = AstUtils.getDocument(docRoot)?.uri.toString();
+            if (!docUri) return;
+            for (const content of AstUtils.streamAllContents(docRoot)) {
+                if (isInclude(content) && content.file) {
+                    const includedRoot = this.resolveIncludedRoot(content, content.file);
+                    if (includedRoot) {
+                        assign(includedRoot, base + ((content as any).$cstNode?.offset ?? 0));
+                    }
+                    continue;
+                }
+                if (!isNamedElement(content) || positions.has(content)) continue;
+                if (AstUtils.getDocument(content)?.uri.toString() !== docUri) continue;
+                positions.set(content, base + ((content as any).$cstNode?.offset ?? 0));
+            }
+        };
+        // Chain documents deepest first — the reference loader parses the base
+        // workspace before the extending one.
+        const chain: AstNode[] = [];
+        const seen = new Set<string>();
+        let current: Workspace | undefined = entry;
+        while (current) {
+            const doc = AstUtils.getDocument(current);
+            const uri = doc?.uri.toString();
+            if (!uri || seen.has(uri)) break;
+            seen.add(uri);
+            chain.push(doc?.parseResult.value ?? current);
+            current = current.extendsUri ? this.resolveParentWorkspace(current, current.extendsUri) : undefined;
+        }
+        chain.reverse();
+        for (const docRoot of chain) assign(docRoot, 0);
+        // Materialised instances (e.g. `instanceof`) live in this.elements as
+        // copies, not the streamed AST node — give the copy its original's position.
+        for (const [original, position] of positions) {
+            const copy = this.materialized.get(original);
+            if (copy && !positions.has(copy)) positions.set(copy, position);
+        }
+        return positions;
     }
 
     /**
@@ -5550,7 +5672,13 @@ class JsonGenerator {
                     parts.unshift(id);
                 }
             }
-            current = this.el(current.$container);
+            let next = this.el(current.$container);
+            // A `!element` directive is not a namespace: the extended element is
+            // the logical parent for the hierarchical identifier.
+            while (next && isElementExtension(next)) {
+                next = this.el(this.resolveElementExtensionTarget(next));
+            }
+            current = next;
         }
         return parts.join('.');
     }
@@ -6268,8 +6396,8 @@ class JsonGenerator {
     }
 
     /**
-     * Traverses the workspace AST (including !includes) and processes all
-     * !elements directives.
+     * Traverses the workspace AST (including !includes and the extends chain,
+     * base documents first) and processes all !elements directives.
      */
     private processElementsDirectives(node: AstNode | undefined, visited: Set<string> = new Set()): void {
         if (!node) return;
@@ -6286,8 +6414,20 @@ class JsonGenerator {
             }
         }
 
-        // Handle Workspace — step into model blocks
+        // Handle Workspace — step into the extends parent first (base documents
+        // are processed before the extending one, matching the reference loader)
+        // and into model blocks
         if (isWorkspace(node)) {
+            if (node.extendsUri) {
+                const parentWs = this.resolveParentWorkspace(node, node.extendsUri);
+                if (parentWs) {
+                    const parentDocUri = AstUtils.getDocument(parentWs)?.uri.toString();
+                    if (!parentDocUri || !visited.has(parentDocUri)) {
+                        if (parentDocUri) visited.add(parentDocUri);
+                        this.processElementsDirectives(parentWs, visited);
+                    }
+                }
+            }
             if (node.modelBlocks.at(0)) {
                 this.processElementsDirectives(node.modelBlocks.at(0), visited);
             }
@@ -6329,14 +6469,6 @@ class JsonGenerator {
                 }
             }
         }
-
-        // Handle extends
-        if (isWorkspace(node) && node.extendsUri) {
-            const parentWs = this.resolveParentWorkspace(node, node.extendsUri);
-            if (parentWs) {
-                this.processElementsDirectives(parentWs, visited);
-            }
-        }
     }
 
     /**
@@ -6360,8 +6492,20 @@ class JsonGenerator {
             }
         }
 
-        // Handle Workspace — step into model blocks
+        // Handle Workspace — step into the extends parent first (base documents
+        // are processed before the extending one, matching the reference loader)
+        // and into model blocks
         if (isWorkspace(node)) {
+            if (node.extendsUri) {
+                const parentWs = this.resolveParentWorkspace(node, node.extendsUri);
+                if (parentWs) {
+                    const parentDocUri = AstUtils.getDocument(parentWs)?.uri.toString();
+                    if (!parentDocUri || !visited.has(parentDocUri)) {
+                        if (parentDocUri) visited.add(parentDocUri);
+                        this.collectElementExtensions(parentWs, visited);
+                    }
+                }
+            }
             if (node.modelBlocks.at(0)) {
                 this.collectElementExtensions(node.modelBlocks.at(0), visited);
             }
@@ -6424,6 +6568,27 @@ class JsonGenerator {
                 } else {
                     this.elementExtensionsByTarget.set(key, [ext]);
                 }
+                // description/technology set in the extension body must be visible
+                // to description()/technology() at transform time; register them as
+                // overlays. Non-overwriting, so an !elements directive processed in
+                // an earlier phase still wins when both set the same field.
+                if ((ext.descriptionProps && ext.descriptionProps.length > 0)
+                    || (ext.techProps && ext.techProps.length > 0)) {
+                    const targetId = this.getId(key);
+                    if (targetId) {
+                        let overlay = this.elementOverlays.get(targetId);
+                        if (!overlay) {
+                            overlay = {};
+                            this.elementOverlays.set(targetId, overlay);
+                        }
+                        if (overlay.description === undefined && ext.descriptionProps && ext.descriptionProps.length > 0) {
+                            overlay.description = C4Utils.stripQuotes(ext.descriptionProps[ext.descriptionProps.length - 1].value) || undefined;
+                        }
+                        if (overlay.technology === undefined && ext.techProps && ext.techProps.length > 0) {
+                            overlay.technology = C4Utils.stripQuotes(ext.techProps[ext.techProps.length - 1].value) || undefined;
+                        }
+                    }
+                }
             }
         }
 
@@ -6462,14 +6627,42 @@ class JsonGenerator {
                 }
             }
         }
+    }
 
-        // Handle extends
-        if (isWorkspace(node) && node.extendsUri) {
-            const parentWs = this.resolveParentWorkspace(node, node.extendsUri);
-            if (parentWs) {
-                this.collectElementExtensions(parentWs, visited);
+    /**
+     * Child elements declared in an ElementExtension body, including the children
+     * of groups declared inside the body (recursively). Groups themselves are not
+     * model elements in the JSON - only their children carry the group path.
+     */
+    private extensionChildren(ext: ElementExtension): {
+        containers: any[]; components: any[]; nodes: any[]; infrastructureNodes: any[];
+        containerInstances: any[]; softwareSystemInstances: any[]; genericInstances: any[];
+    } {
+        const out = {
+            containers: [] as any[], components: [] as any[], nodes: [] as any[],
+            infrastructureNodes: [] as any[], containerInstances: [] as any[],
+            softwareSystemInstances: [] as any[], genericInstances: [] as any[]
+        };
+        const collect = (scope: any) => {
+            for (const key of Object.keys(out) as (keyof typeof out)[]) {
+                const value = scope[key];
+                if (Array.isArray(value)) out[key].push(...value);
             }
-        }
+            // Groups carry their children in the mixed `elements` collection.
+            for (const item of scope.elements ?? []) {
+                if (isContainer(item)) out.containers.push(item);
+                else if (isComponent(item)) out.components.push(item);
+                else if (isDeploymentNode(item)) out.nodes.push(item);
+                else if (isInfrastructureNode(item)) out.infrastructureNodes.push(item);
+                else if (isContainerInstance(item)) out.containerInstances.push(item);
+                else if (isSoftwareSystemInstance(item)) out.softwareSystemInstances.push(item);
+                else if (isGenericInstance(item)) out.genericInstances.push(item);
+                else if (isGroup(item)) collect(item);
+            }
+            for (const group of scope.groups ?? []) collect(group);
+        };
+        collect(ext);
+        return out;
     }
 
     /**
@@ -6488,14 +6681,19 @@ class JsonGenerator {
         if (!exts || exts.length === 0) return;
 
         for (const ext of exts) {
+            // Child elements declared in the extension body, including the
+            // children of groups declared inside the body (groups are not
+            // emitted to the JSON; only their children carry the group path).
+            const children = this.extensionChildren(ext);
+
             // Child containers (target is a SoftwareSystem) -> json.containers
-            if (Array.isArray(ext.containers) && ext.containers.length > 0) {
-                const list = ext.containers.map(c => this.transformContainer(c));
+            if (children.containers.length > 0) {
+                const list = children.containers.map(c => this.transformContainer(c));
                 jsonElement.containers = (jsonElement.containers ?? []).concat(list);
             }
             // Child components (target is a Container) -> json.components
-            if (Array.isArray(ext.components) && ext.components.length > 0) {
-                const list = ext.components.map(c => {
+            if (children.components.length > 0) {
+                const list = children.components.map(c => {
                     const json: any = {
                         id: this.getId(c),
                         name: this.substitute(c.name),
@@ -6514,8 +6712,8 @@ class JsonGenerator {
                 jsonElement.components = (jsonElement.components ?? []).concat(list);
             }
             // Child deployment nodes (target is a DeploymentNode) -> json.children
-            if (Array.isArray(ext.nodes) && ext.nodes.length > 0) {
-                const list = ext.nodes.map(n => {
+            if (children.nodes.length > 0) {
+                const list = children.nodes.map(n => {
                     const json = this.transformDeploymentNode(n);
                     this.applyElementOverlay(json, n);
                     return json;
@@ -6524,27 +6722,46 @@ class JsonGenerator {
                 jsonElement.children = (jsonElement.children ?? []).concat(list);
             }
             // Infrastructure nodes -> json.infrastructureNodes
-            if (Array.isArray(ext.infrastructureNodes) && ext.infrastructureNodes.length > 0) {
-                const list = ext.infrastructureNodes.map(infra => {
-                    const infraJson: any = {
-                        id: this.getId(infra),
-                        name: this.substitute(infra.name),
-                        description: this.description(infra),
-                        technology: this.technology(infra),
-                        group: this.extractGroup(infra),
-                        tags: this.extractTags(infra, 'Element', 'Infrastructure Node'),
-                        url: this.url(infra),
-                        relationships: this.onlyIfNotEmpty(this.extractRelationshipsForInfrastructureNode(infra).map(el => this.relationshipToJson(el)))
-                    };
-                    this.applyElementOverlay(infraJson, infra);
-                    return infraJson;
-                });
+            if (children.infrastructureNodes.length > 0) {
+                const list = children.infrastructureNodes.map(infra => this.infrastructureNodeToJson(infra));
                 jsonElement.infrastructureNodes = (jsonElement.infrastructureNodes ?? []).concat(list);
+            }
+            // Child instances (target is a DeploymentNode): `instanceOf` entries
+            // materialise as container/software system instances. Interleave them
+            // in source order, matching the reference parser's addition order
+            // (which drives instanceId assignment).
+            const instancesWithSource = [
+                ...children.containerInstances.map((ci: any) => ({ node: ci, offset: ci.$cstNode?.offset ?? 0 })),
+                ...children.genericInstances.map((gi: any) => ({ node: this.el(gi), offset: gi.$cstNode?.offset ?? 0 })),
+                ...children.softwareSystemInstances.map((ssi: any) => ({ node: ssi, offset: ssi.$cstNode?.offset ?? 0 })),
+            ].sort((a: any, b: any) => a.offset - b.offset);
+            const containerInstances = instancesWithSource
+                .filter((e: any) => isContainerInstance(e.node))
+                .map((e: any) => e.node);
+            const softwareSystemInstances = instancesWithSource
+                .filter((e: any) => isSoftwareSystemInstance(e.node))
+                .map((e: any) => e.node);
+            if (containerInstances.length > 0) {
+                const list = containerInstances
+                    .filter((ci: any) => ci.container?.ref !== undefined)
+                    .map((ci: any) => this.containerInstanceToJson(ci));
+                jsonElement.containerInstances = (jsonElement.containerInstances ?? []).concat(list);
+            }
+            if (softwareSystemInstances.length > 0) {
+                const list = softwareSystemInstances
+                    .filter((ssi: any) => ssi.softwareSystem?.ref !== undefined)
+                    .map((ssi: any) => this.softwareSystemInstanceToJson(ssi));
+                jsonElement.softwareSystemInstances = (jsonElement.softwareSystemInstances ?? []).concat(list);
             }
             // Relationships added inside the extension body
             if (Array.isArray(ext.relationships) && ext.relationships.length > 0) {
                 const rels = ext.relationships
-                    .map(r => this.relationshipToJson(r as any))
+                    .map((r: any) => {
+                        const source = this.resolveSource(r);
+                        const target = this.resolveTarget(r);
+                        if (!source || !target) return undefined;
+                        return this.relationshipToJson({ relationship: r, linked: undefined, source, target } as ImpliedRelationship);
+                    })
                     .filter(Boolean);
                 jsonElement.relationships = this.onlyIfNotEmpty((jsonElement.relationships ?? []).concat(rels));
             }
@@ -6572,16 +6789,20 @@ class JsonGenerator {
             }
             if (tags.length > 0) { mods ??= {}; mods.tags = tags; }
         }
-        if (Array.isArray(ext.urlProps) && ext.urlProps.length > 0 && (ext.urlProps[0] as any)?.value) {
+        if (Array.isArray(ext.urlProps) && ext.urlProps.length > 0 && (ext.urlProps.at(-1) as any)?.value) {
             mods ??= {};
-            mods.url = C4Utils.stripQuotes(String((ext.urlProps[0] as any).value));
+            mods.url = C4Utils.stripQuotes(String((ext.urlProps.at(-1) as any).value));
         }
-        if (Array.isArray(ext.properties) && ext.properties.length > 0 && (ext.properties[0] as any)?.items) {
+        // Properties lines accumulate; on a key collision the later line wins,
+        // matching the reference parser's per-line setProperty.
+        if (Array.isArray(ext.properties) && ext.properties.length > 0) {
             const props: Record<string, string> = {};
-            for (const item of (ext.properties[0] as any).items ?? []) {
-                const name = C4Utils.stripQuotes(String(item?.name ?? ''));
-                const value = C4Utils.stripQuotes(String(item?.value ?? ''));
-                if (name) props[name] = value;
+            for (const line of ext.properties) {
+                for (const item of (line as any)?.items ?? []) {
+                    const name = C4Utils.stripQuotes(String(item?.name ?? ''));
+                    const value = C4Utils.stripQuotes(String(item?.value ?? ''));
+                    if (name) props[name] = value;
+                }
             }
             if (Object.keys(props).length > 0) { mods ??= {}; mods.properties = props; }
         }
@@ -6609,8 +6830,8 @@ class JsonGenerator {
     }
 
     /**
-     * Traverses the workspace AST (including !includes) and processes all
-     * !relationships directives.
+     * Traverses the workspace AST (including !includes and the extends chain,
+     * base documents first) and processes all !relationships directives.
      */
     private processRelationshipsDirectives(node: AstNode | undefined, visited: Set<string> = new Set()): void {
         if (!node) return;
@@ -6627,15 +6848,27 @@ class JsonGenerator {
             }
         }
 
-        // Handle Workspace — step into model blocks
+        // Handle Workspace — step into the extends parent first (base documents
+        // are processed before the extending one, matching the reference loader)
+        // and into model blocks
         if (isWorkspace(node)) {
+            if (node.extendsUri) {
+                const parentWs = this.resolveParentWorkspace(node, node.extendsUri);
+                if (parentWs) {
+                    const parentDocUri = AstUtils.getDocument(parentWs)?.uri.toString();
+                    if (!parentDocUri || !visited.has(parentDocUri)) {
+                        if (parentDocUri) visited.add(parentDocUri);
+                        this.processRelationshipsDirectives(parentWs, visited);
+                    }
+                }
+            }
             if (node.modelBlocks.at(0)) {
                 this.processRelationshipsDirectives(node.modelBlocks.at(0), visited);
             }
             return;
         }
 
-        // Note: visited is used ONLY for !include cycle prevention.
+        // Note: visited is used ONLY for !include and extends cycle prevention.
 
         const anyNode = node as any;
 
@@ -6674,14 +6907,6 @@ class JsonGenerator {
                         this.processRelationshipsDirectives(includedRoot, visited);
                     }
                 }
-            }
-        }
-
-        // Handle extends
-        if (isWorkspace(node) && node.extendsUri) {
-            const parentWs = this.resolveParentWorkspace(node, node.extendsUri);
-            if (parentWs) {
-                this.processRelationshipsDirectives(parentWs, visited);
             }
         }
     }
@@ -7223,6 +7448,12 @@ class JsonGenerator {
         let current: any = el.$container;
         while (current) {
             if (isDeploymentEnvironment(current)) break;
+            // An element contributed via `!element` is parented by the extended
+            // element, not by the directive.
+            if (isElementExtension(current)) {
+                current = this.resolveElementExtensionTarget(current);
+                continue;
+            }
             addParent(current);
             if (isDeploymentNode(current)) break; // only Groups above DeploymentNode, stop here
             current = current.$container;
@@ -7402,6 +7633,12 @@ class JsonGenerator {
         // try climbing the AST container chain first (works for inline relationships)
         let parent: AstNode | undefined = rel.$container;
         while (parent) {
+            // A relationship declared directly inside an `!element` block is
+            // contexted by the extended element, not by the directive.
+            if (isElementExtension(parent)) {
+                parent = this.resolveElementExtensionTarget(parent);
+                continue;
+            }
             // check for logical C4 elements
             const el = this.el(parent);
             if (isPerson(el) || isSoftwareSystem(el) || isContainer(el) || isComponent(el) || isCustomElement(el)) {

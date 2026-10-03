@@ -17,6 +17,14 @@
             "Name2" : "Value2"
           },
           "tags" : "Element,Component"
+        }, {
+          "documentation" : { },
+          "id" : "4",
+          "name" : "D",
+          "properties" : {
+            "structurizr.dsl.identifier" : "a.b.d"
+          },
+          "tags" : "Element,Component"
         } ],
         "documentation" : { },
         "id" : "2",
@@ -37,8 +45,8 @@
   },
   "name" : "Name",
   "properties" : {
-    "structurizr.inspection.error" : "15",
-    "structurizr.dsl" : "d29ya3NwYWNlIHsNCg0KICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgIGEgPSBzb2Z0d2FyZVN5c3RlbSAiQSIgew0KICAgICAgICAgICAgYiA9IGNvbnRhaW5lciAiQiIgew0KICAgICAgICAgICAgICAgIGMgPSBjb21wb25lbnQgIkMiDQoNCiAgICAgICAgICAgICAgICAhZWxlbWVudCBjIHsNCiAgICAgICAgICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgICAgICAgICAiTmFtZTEiICJWYWx1ZTEiDQogICAgICAgICAgICAgICAgICAgIH0NCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgICFlbGVtZW50IGIuYyB7DQogICAgICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgICAgICJOYW1lMiIgIlZhbHVlMiINCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICAhZWxlbWVudCBhLmIuYyB7DQogICAgICAgICAgICBwcm9wZXJ0aWVzIHsNCiAgICAgICAgICAgICAgICAiTmFtZTMiICJWYWx1ZTMiDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQoNCn0=",
+    "structurizr.inspection.error" : "19",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCg0KICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgIGEgPSBzb2Z0d2FyZVN5c3RlbSAiQSIgew0KICAgICAgICAgICAgYiA9IGNvbnRhaW5lciAiQiIgew0KICAgICAgICAgICAgICAgIGMgPSBjb21wb25lbnQgIkMiDQoNCiAgICAgICAgICAgICAgICAhZWxlbWVudCBjIHsNCiAgICAgICAgICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgICAgICAgICAiTmFtZTEiICJWYWx1ZTEiDQogICAgICAgICAgICAgICAgICAgIH0NCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgICFlbGVtZW50IGIuYyB7DQogICAgICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgICAgICJOYW1lMiIgIlZhbHVlMiINCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgICFlbGVtZW50IGIgew0KICAgICAgICAgICAgICAgIGQgPSBjb21wb25lbnQgIkQiDQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICAhZWxlbWVudCBhLmIuYyB7DQogICAgICAgICAgICBwcm9wZXJ0aWVzIHsNCiAgICAgICAgICAgICAgICAiTmFtZTMiICJWYWx1ZTMiDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQoNCn0=",
     "structurizr.inspection.info" : "0",
     "structurizr.inspection.ignore" : "0",
     "structurizr.inspection.warning" : "0"
@@ -48,6 +56,10 @@
       "containerId" : "2",
       "elements" : [ {
         "id" : "3",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
         "x" : 0,
         "y" : 0
       } ],
@@ -107,4 +119,4 @@
       "order" : 1
     } ]
   }
-}
+}

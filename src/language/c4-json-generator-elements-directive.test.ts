@@ -135,3 +135,48 @@ describe('!elements directive', () => {
         }
     });
 });
+
+describe('!element repeated properties', () => {
+    it('uses the last value for repeated description and url', async () => {
+        const json = await generate(`workspace {
+    model {
+        app = softwareSystem "App" {
+            b = container "B"
+            !element b {
+                description "First"
+                description "Second"
+                url "https://first"
+                url "https://second"
+            }
+        }
+    }
+}
+`);
+        const b = json.model.softwareSystems.find((s: any) => s.name === 'App').containers.find((c: any) => c.name === 'B');
+        expect(b.description).toBe('Second');
+        expect(b.url).toBe('https://second');
+    });
+
+    it('merges properties lines with later keys winning', async () => {
+        const json = await generate(`workspace {
+    model {
+        app = softwareSystem "App" {
+            b = container "B"
+            !element b {
+                properties {
+                    a 1
+                    shared fromFirst
+                }
+                properties {
+                    b 2
+                    shared fromSecond
+                }
+            }
+        }
+    }
+}
+`);
+        const b = json.model.softwareSystems.find((s: any) => s.name === 'App').containers.find((c: any) => c.name === 'B');
+        expect(b.properties).toMatchObject({ a: '1', b: '2', shared: 'fromSecond' });
+    });
+});

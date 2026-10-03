@@ -1,0 +1,96 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "deploymentNodes" : [ {
+      "containerInstances" : [ {
+        "containerId" : "2",
+        "environment" : "Prod",
+        "id" : "4",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "ia"
+        },
+        "tags" : "Container Instance"
+      } ],
+      "environment" : "Prod",
+      "id" : "3",
+      "instances" : "1",
+      "name" : "N1",
+      "properties" : {
+        "structurizr.dsl.identifier" : "n1"
+      },
+      "tags" : "Element,Deployment Node"
+    }, {
+      "containerInstances" : [ {
+        "containerId" : "2",
+        "environment" : "Prod",
+        "id" : "6",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "ib"
+        },
+        "tags" : "Container Instance"
+      } ],
+      "environment" : "Prod",
+      "id" : "5",
+      "instances" : "1",
+      "name" : "N2",
+      "properties" : {
+        "structurizr.dsl.identifier" : "n2"
+      },
+      "tags" : "Element,Deployment Node"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "2",
+        "name" : "A",
+        "properties" : {
+          "structurizr.dsl.identifier" : "a"
+        },
+        "tags" : "Element,Container"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "X",
+      "properties" : {
+        "structurizr.dsl.identifier" : "x"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Audit B",
+  "properties" : {
+    "structurizr.inspection.error" : "20",
+    "structurizr.dsl" : "d29ya3NwYWNlICJBdWRpdCBCIiB7DQoNCiAgICBtb2RlbCB7DQogICAgICAgIHggPSBzb2Z0d2FyZXN5c3RlbSAiWCIgew0KICAgICAgICAgICAgYSA9IGNvbnRhaW5lciAiQSINCiAgICAgICAgfQ0KDQogICAgICAgIHByb2QgPSBkZXBsb3ltZW50RW52aXJvbm1lbnQgIlByb2QiIHsNCiAgICAgICAgICAgIG4xID0gZGVwbG95bWVudE5vZGUgIk4xIiB7DQogICAgICAgICAgICAgICAgaWEgPSBjb250YWluZXJJbnN0YW5jZSBhDQogICAgICAgICAgICB9DQogICAgICAgICAgICBuMiA9IGRlcGxveW1lbnROb2RlICJOMiINCiAgICAgICAgfQ0KDQogICAgICAgICFlbGVtZW50ICJEZXBsb3ltZW50Tm9kZTovL1Byb2QvTjIiIHsNCiAgICAgICAgICAgIGliID0gY29udGFpbmVySW5zdGFuY2UgYQ0KICAgICAgICB9DQogICAgfQ0KDQogICAgdmlld3Mgew0KICAgICAgICBkZXBsb3ltZW50IHggIlByb2QiIHsNCiAgICAgICAgICAgIGluY2x1ZGUgaWINCiAgICAgICAgfQ0KICAgIH0NCg0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "deploymentViews" : [ {
+      "elements" : [ {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "Prod",
+      "generatedKey" : true,
+      "key" : "Deployment-001",
+      "name" : "Deployment View: X - Prod",
+      "order" : 1,
+      "softwareSystemId" : "1"
+    } ]
+  }
+}

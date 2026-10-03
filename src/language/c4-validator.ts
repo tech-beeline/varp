@@ -15,7 +15,7 @@
 */
 
 import { AstNode, AstUtils, type ValidationAcceptor, type ValidationChecks } from 'langium';
-import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty } from '../generated/ast';
+import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
 import * as includeResolver from './c4-include-resolver';
@@ -325,7 +325,8 @@ export function registerValidationChecks(services: C4Services) {
             (node, accept) => validator.checkIncludeElements(node, accept, 'AnimationProperty')
         ],
         ElementExtension: [
-            (node, accept) => validator.checkIncludeElements(node, accept, 'ElementExtension')
+            (node, accept) => validator.checkIncludeElements(node, accept, 'ElementExtension'),
+            (node, accept) => validator.checkElementExtensionTarget(node, accept)
         ],
         ElementsDirective: [
             (node, accept) => validator.checkIncludeElements(node, accept, 'ElementsDirective')
@@ -485,6 +486,103 @@ export class C4Validator {
                 accept('error', 'instanceof can only reference a SoftwareSystem or Container element.', { node: node, property: 'element' });
             }
         }
+    }
+
+    /**
+     * Validates that !element only targets model elements. The vendor resolves
+     * the target against elements only and errors when it is not one, so mirror
+     * that for both grammar forms.
+     *
+     * Form 1 (`<id> = !element <QualifiedName>`) carries a linked `target`
+     * reference, so the resolved node is checked directly. Form 2
+     * (`!element <id>`) carries only a plain identifier that the generator
+     * resolves at generation time, so it is resolved here against the declared
+     * ids of the document's element / group / deployment-group nodes.
+     */
+    checkElementExtensionTarget(node: any, accept: ValidationAcceptor): void {
+        const targetRef = node.target?.ref;
+        // Form 1 (`<id> = !element <QualifiedName>`) always carries a `target`
+        // reference. An unresolved reference is already reported by Langium, so we
+        // only add the "not a model element" diagnostic when the reference resolves
+        // to a non-element; a dangling form-1 reference must not fall through to the
+        // form-2 path (which would name the left-hand assignment, not the target).
+        if (node.target) {
+            if (targetRef) {
+                if (isRelationship(targetRef)) {
+                    accept('error', '!element cannot target a relationship. Use the !relationship directive instead.', { node: node.target, property: 'ref' });
+                } else if (isGroup(targetRef) || isDeploymentGroup(targetRef)) {
+                    accept('error', `!element cannot target a ${isGroup(targetRef) ? 'group' : 'deployment group'}.`, { node: node.target, property: 'ref' });
+                }
+            }
+            return;
+        }
+        // Form 2 (`!element <id>`, no reference): the id is a plain identifier that
+        // the generator resolves at generation time.
+        if (!node.id) return;
+        const raw = C4Utils.stripQuotes(String(node.id));
+        // Canonical (`Type://path`) and hierarchical (`a.b.c`) targets are resolved
+        // by the generator through canonical-name / qualified-identifier matching,
+        // which is not reproduced here; skip to avoid false positives.
+        if (raw.includes('://') || raw.includes('.')) return;
+
+        const scope = this.collectElementExtensionScope(node);
+        // A declared element id or name is a valid target.
+        if (scope.elementKeys.has(raw)) return;
+        // The target may live in an !include or extends parent that is not searched
+        // here, so stay silent rather than risk a false positive.
+        if (scope.hasIncludes || scope.hasExtends) return;
+
+        // Self-contained workspace: the generator would skip the extension, but the
+        // vendor errors, so flag it.
+        if (scope.groupIds.has(raw)) {
+            accept('error', '!element cannot target a group.', { node, property: 'id' });
+        } else if (scope.deploymentGroupIds.has(raw)) {
+            accept('error', '!element cannot target a deployment group.', { node, property: 'id' });
+        } else {
+            accept('error', `!element target "${raw}" could not be found.`, { node, property: 'id' });
+        }
+    }
+
+    /**
+     * Collects, from the document containing an `!element` directive, the declared
+     * ids of the element / group / deployment-group nodes the identifier could
+     * resolve to, plus whether the workspace pulls in other files (!include /
+     * extends) that are not searched here.
+     */
+    private collectElementExtensionScope(ext: any): {
+        elementKeys: Set<string>; groupIds: Set<string>; deploymentGroupIds: Set<string>;
+        hasIncludes: boolean; hasExtends: boolean;
+    } {
+        const elementKeys = new Set<string>();
+        const groupIds = new Set<string>();
+        const deploymentGroupIds = new Set<string>();
+        let hasIncludes = false;
+        let hasExtends = false;
+        const root = AstUtils.getDocument(ext)?.parseResult.value;
+        if (!root) return { elementKeys, groupIds, deploymentGroupIds, hasIncludes, hasExtends };
+        for (const node of AstUtils.streamAllContents(root)) {
+            const anyNode = node as any;
+            if (isGroup(anyNode) && anyNode.id) {
+                groupIds.add(String(anyNode.id));
+            } else if (isDeploymentGroup(anyNode) && anyNode.id) {
+                deploymentGroupIds.add(String(anyNode.id));
+            } else if (this.isElementExtensionElement(anyNode)) {
+                if (anyNode.id) elementKeys.add(String(anyNode.id));
+                const name = C4Utils.stripQuotes(String(anyNode.name ?? ''));
+                if (name) elementKeys.add(name);
+            }
+            if (Array.isArray(anyNode.includes) && anyNode.includes.length > 0) hasIncludes = true;
+            if (anyNode.extendsUri) hasExtends = true;
+        }
+        return { elementKeys, groupIds, deploymentGroupIds, hasIncludes, hasExtends };
+    }
+
+    /** True for the model-element node types an `!element` directive may target. */
+    private isElementExtensionElement(node: any): boolean {
+        return isPerson(node) || isSoftwareSystem(node) || isContainer(node) || isComponent(node)
+            || isCustomElement(node) || isDeploymentEnvironment(node) || isDeploymentNode(node)
+            || isInfrastructureNode(node) || isSoftwareSystemInstance(node) || isContainerInstance(node)
+            || isGenericInstance(node);
     }
 
     /**

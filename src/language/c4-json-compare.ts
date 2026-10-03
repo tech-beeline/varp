@@ -128,9 +128,12 @@ export function compareJson(actual: any, expected: any, path: string = '', optio
 }
 
 function compareObjects(actual: any, expected: any, path: string, diffs: CompareResult[], mode: CompareMode, ignoreViews = false): void {
-    const ignored = mode === 'render'
-        ? new Set([...COMMON_IGNORED_KEYS, ...RENDER_ONLY_IGNORED_KEYS])
-        : COMMON_IGNORED_KEYS;
+    // Always a fresh set: `ignoreViews` adds 'views' to it, and sharing the module
+    // COMMON_IGNORED_KEYS by reference would leak that addition into every later
+    // comparison in the same process.
+    const ignored = new Set(mode === 'render'
+        ? [...COMMON_IGNORED_KEYS, ...RENDER_ONLY_IGNORED_KEYS]
+        : [...COMMON_IGNORED_KEYS]);
     if (ignoreViews) {
         ignored.add('views');
     }

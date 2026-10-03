@@ -1,0 +1,156 @@
+{
+  "configuration" : { },
+  "description" : "Base workspace",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "deploymentNodes" : [ {
+      "containerInstances" : [ {
+        "containerId" : "2",
+        "environment" : "Prod",
+        "id" : "6",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "ia"
+        },
+        "relationships" : [ {
+          "description" : "calls",
+          "destinationId" : "8",
+          "id" : "9",
+          "linkedRelationshipId" : "4",
+          "sourceId" : "6"
+        } ],
+        "tags" : "Container Instance"
+      }, {
+        "containerId" : "2",
+        "environment" : "Prod",
+        "id" : "10",
+        "instanceId" : 2,
+        "properties" : {
+          "structurizr.dsl.identifier" : "ic"
+        },
+        "relationships" : [ {
+          "description" : "calls",
+          "destinationId" : "8",
+          "id" : "11",
+          "linkedRelationshipId" : "4",
+          "sourceId" : "10"
+        } ],
+        "tags" : "Container Instance"
+      } ],
+      "deploymentGroups" : [ "Group" ],
+      "environment" : "Prod",
+      "id" : "5",
+      "instances" : "1",
+      "name" : "Node 1",
+      "properties" : {
+        "structurizr.dsl.identifier" : "n1"
+      },
+      "tags" : "Element,Deployment Node"
+    }, {
+      "containerInstances" : [ {
+        "containerId" : "3",
+        "environment" : "Prod",
+        "id" : "8",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "ib"
+        },
+        "tags" : "Container Instance"
+      } ],
+      "deploymentGroups" : [ "Group" ],
+      "environment" : "Prod",
+      "id" : "7",
+      "instances" : "1",
+      "name" : "Node 2",
+      "properties" : {
+        "structurizr.dsl.identifier" : "n2"
+      },
+      "tags" : "Element,Deployment Node"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "description" : "Container A",
+        "documentation" : { },
+        "id" : "2",
+        "name" : "A",
+        "properties" : {
+          "structurizr.dsl.identifier" : "a"
+        },
+        "relationships" : [ {
+          "description" : "calls",
+          "destinationId" : "3",
+          "id" : "4",
+          "sourceId" : "2",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container"
+      }, {
+        "description" : "Container B",
+        "documentation" : { },
+        "id" : "3",
+        "name" : "B",
+        "properties" : {
+          "structurizr.dsl.identifier" : "b"
+        },
+        "tags" : "Element,Container"
+      } ],
+      "description" : "System X",
+      "documentation" : { },
+      "id" : "1",
+      "name" : "X",
+      "properties" : {
+        "structurizr.dsl.identifier" : "x"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Base",
+  "properties" : {
+    "structurizr.inspection.error" : "18",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "deploymentViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "8",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "Prod",
+      "generatedKey" : true,
+      "key" : "Deployment-001",
+      "name" : "Deployment View: X - Prod",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "9"
+      } ],
+      "softwareSystemId" : "1"
+    } ]
+  }
+}

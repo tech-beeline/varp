@@ -19,6 +19,10 @@ workspace {
                     "Name2" "Value2"
                 }
             }
+
+            !element b {
+                d = component "D"
+            }
         }
 
         !element a.b.c {

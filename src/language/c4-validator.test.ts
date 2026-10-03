@@ -954,3 +954,242 @@ workspace {
         expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
     });
 });
+
+describe('!element target validation', () => {
+    it('rejects a relationship target, pointing to !relationship', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A" {
+            b = container "B"
+            c = container "C"
+            r1 = b -> c "uses"
+            ext1 = !element r1 {
+                tags "X"
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toContain(
+            '!element cannot target a relationship. Use the !relationship directive instead.'
+        );
+    });
+
+    it('rejects a group target', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A" {
+            g1 = group "G" {
+                b = container "B"
+            }
+            ext1 = !element g1 {
+                tags "X"
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toContain(
+            '!element cannot target a group.'
+        );
+    });
+
+    it('rejects a deployment group target', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A" {
+            b = container "B"
+        }
+        prod = deploymentEnvironment "Prod" {
+            g1 = deploymentGroup "Group"
+        }
+        ext1 = !element g1 {
+            tags "X"
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toContain(
+            '!element cannot target a deployment group.'
+        );
+    });
+
+    it('accepts an element target', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A" {
+            b = container "B"
+            ext1 = !element b {
+                tags "X"
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+
+    // Form 2 (`!element <id>`, no `<x> =` prefix): the identifier is resolved
+    // against the document's declared ids, matching the vendor's "could not be
+    // found" behaviour for non-element targets.
+
+    it('form 2: rejects a relationship target as not found', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A" {
+            b = container "B"
+            c = container "C"
+            r1 = b -> c "uses"
+            !element r1 {
+                tags "X"
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toContain(
+            '!element target "r1" could not be found.'
+        );
+    });
+
+    it('form 2: rejects a group target', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A" {
+            g1 = group "G" {
+                b = container "B"
+            }
+            !element g1 {
+                tags "X"
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toContain(
+            '!element cannot target a group.'
+        );
+    });
+
+    it('form 2: rejects a deployment group target', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A" {
+            b = container "B"
+        }
+        prod = deploymentEnvironment "Prod" {
+            g1 = deploymentGroup "Group"
+        }
+        !element g1 {
+            tags "X"
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toContain(
+            '!element cannot target a deployment group.'
+        );
+    });
+
+    it('form 2: rejects an unknown target', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A" {
+            b = container "B"
+            !element zzz {
+                tags "X"
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toContain(
+            '!element target "zzz" could not be found.'
+        );
+    });
+
+    it('form 2: accepts an element target', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A" {
+            b = container "B"
+            !element b {
+                tags "X"
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+
+    it('form 2: accepts an instanceof (generic instance) target', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A"
+        prod = deploymentEnvironment "Prod" {
+            node1 = deploymentNode "Node 1" {
+                gi = instanceof a
+                !element gi {
+                    tags "X"
+                }
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+    });
+
+    it('form 1: a dangling reference is not misreported with the assignment id', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A" {
+            b = container "B"
+            ext1 = !element zzz {
+                tags "X"
+            }
+        }
+    }
+}
+`);
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        // A dangling form-1 reference must not be reported as a form-2 lookup of the
+        // left-hand assignment id; Langium reports the unresolved reference itself.
+        expect(messages(doc, ERROR_SEVERITY)).not.toContain(
+            '!element target "ext1" could not be found.'
+        );
+    });
+});

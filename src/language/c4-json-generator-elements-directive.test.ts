@@ -18,85 +18,13 @@ import { describe, it, expect } from 'vitest';
 import { EmptyFileSystem } from 'langium';
 import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
-import { C4JsonGenerator } from './c4-json-generator';
-import { isWorkspace } from '../generated/ast';
 
-async function generate(dsl: string): Promise<any> {
-    const services = createC4Services({ connection: undefined as any, ...EmptyFileSystem }).C4;
-    const doc = services.shared.workspace.LangiumDocumentFactory.fromString(dsl, URI.parse('file:///elements.dsl'));
-    services.shared.workspace.LangiumDocuments.addDocument(doc);
-    await services.shared.workspace.DocumentBuilder.build([doc]);
-    const root = doc.parseResult.value;
-    if (isWorkspace(root)) {
-        return new C4JsonGenerator(services).generate(root);
-    }
-    const anyRoot = root as any;
-    if (anyRoot.$type === 'C4Document' && anyRoot.workspaces?.length > 0) {
-        return new C4JsonGenerator(services).generate(anyRoot.workspaces[0]);
-    }
-    throw new Error('No workspace found');
-}
-
-const dsl = `workspace {
-    model {
-        app = softwareSystem "App" {
-            c1 = container "C1"
-            c2 = container "C2"
-        }
-        db = softwareSystem "DB"
-
-        !elements element.type==Container {
-            description "Bulk description"
-            technology "Bulk technology"
-            this -> db "Uses"
-        }
-    }
-}
-`;
-
+// Positive !elements / !element output is covered by the vendor-verified
+// fixtures elements-directive-bulk, elements-directive-implicit-relationship,
+// elements-directive-this-target, element-extension-repeated-fields, and
+// element-extension-props-merge. Only the parser diagnostic that has no
+// vendor JSON output is asserted here.
 describe('!elements directive', () => {
-    it('applies description and technology to the matched elements', async () => {
-        const json = await generate(dsl);
-        const app = json.model.softwareSystems.find((s: any) => s.name === 'App');
-        for (const container of app.containers) {
-            expect(container.description).toBe('Bulk description');
-            expect(container.technology).toBe('Bulk technology');
-        }
-    });
-
-    it('creates a relationship from every matched element', async () => {
-        const json = await generate(dsl);
-        const app = json.model.softwareSystems.find((s: any) => s.name === 'App');
-        const db = json.model.softwareSystems.find((s: any) => s.name === 'DB');
-        for (const container of app.containers) {
-            const relationships = container.relationships.filter((r: any) => r.destinationId === db.id);
-            expect(relationships).toHaveLength(1);
-            expect(relationships[0].description).toBe('Uses');
-        }
-    });
-
-    it('creates an implicit relationship from every matched element', async () => {
-        const json = await generate(`workspace {
-    model {
-        app = softwareSystem "App" {
-            c1 = container "C1"
-            c2 = container "C2"
-        }
-        db = softwareSystem "DB"
-
-        !elements element.type==Container {
-            -> db "Uses"
-        }
-    }
-}
-`);
-        const app = json.model.softwareSystems.find((s: any) => s.name === 'App');
-        const db = json.model.softwareSystems.find((s: any) => s.name === 'DB');
-        for (const container of app.containers) {
-            expect(container.relationships.some((r: any) => r.destinationId === db.id)).toBe(true);
-        }
-    });
-
     it('rejects an !include inside !elements', async () => {
         const services = createC4Services({ connection: undefined as any, ...EmptyFileSystem }).C4;
         const doc = services.shared.workspace.LangiumDocumentFactory.fromString(`workspace {
@@ -111,72 +39,5 @@ describe('!elements directive', () => {
         await services.shared.workspace.DocumentBuilder.build([doc]);
 
         expect(doc.parseResult.parserErrors.length).toBeGreaterThan(0);
-    });
-
-    it('uses every matched element as the target of a `user -> this` relationship', async () => {
-        const json = await generate(`workspace {
-    model {
-        user = person "User"
-        app = softwareSystem "App" {
-            c1 = container "C1"
-            c2 = container "C2"
-        }
-
-        !elements element.type==Container {
-            user -> this "Uses"
-        }
-    }
-}
-`);
-        const user = json.model.people[0];
-        const app = json.model.softwareSystems.find((s: any) => s.name === 'App');
-        for (const container of app.containers) {
-            expect(user.relationships.some((r: any) => r.destinationId === container.id)).toBe(true);
-        }
-    });
-});
-
-describe('!element repeated properties', () => {
-    it('uses the last value for repeated description and url', async () => {
-        const json = await generate(`workspace {
-    model {
-        app = softwareSystem "App" {
-            b = container "B"
-            !element b {
-                description "First"
-                description "Second"
-                url "https://first"
-                url "https://second"
-            }
-        }
-    }
-}
-`);
-        const b = json.model.softwareSystems.find((s: any) => s.name === 'App').containers.find((c: any) => c.name === 'B');
-        expect(b.description).toBe('Second');
-        expect(b.url).toBe('https://second');
-    });
-
-    it('merges properties lines with later keys winning', async () => {
-        const json = await generate(`workspace {
-    model {
-        app = softwareSystem "App" {
-            b = container "B"
-            !element b {
-                properties {
-                    a 1
-                    shared fromFirst
-                }
-                properties {
-                    b 2
-                    shared fromSecond
-                }
-            }
-        }
-    }
-}
-`);
-        const b = json.model.softwareSystems.find((s: any) => s.name === 'App').containers.find((c: any) => c.name === 'B');
-        expect(b.properties).toMatchObject({ a: '1', b: '2', shared: 'fromSecond' });
     });
 });

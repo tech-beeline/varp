@@ -1,0 +1,172 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "description" : "Bulk description",
+        "documentation" : { },
+        "id" : "2",
+        "name" : "C1",
+        "properties" : {
+          "structurizr.dsl.identifier" : "c1"
+        },
+        "relationships" : [ {
+          "description" : "Uses",
+          "destinationId" : "4",
+          "id" : "5",
+          "sourceId" : "2",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container",
+        "technology" : "Bulk technology"
+      }, {
+        "description" : "Bulk description",
+        "documentation" : { },
+        "id" : "3",
+        "name" : "C2",
+        "properties" : {
+          "structurizr.dsl.identifier" : "c2"
+        },
+        "relationships" : [ {
+          "description" : "Uses",
+          "destinationId" : "4",
+          "id" : "7",
+          "sourceId" : "3",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container",
+        "technology" : "Bulk technology"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "App",
+      "properties" : {
+        "structurizr.dsl.identifier" : "app"
+      },
+      "relationships" : [ {
+        "description" : "Uses",
+        "destinationId" : "4",
+        "id" : "6",
+        "linkedRelationshipId" : "5",
+        "sourceId" : "1"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "documentation" : { },
+      "id" : "4",
+      "name" : "DB",
+      "properties" : {
+        "structurizr.dsl.identifier" : "db"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "13",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCiAgICBtb2RlbCB7DQogICAgICAgIGFwcCA9IHNvZnR3YXJlU3lzdGVtICJBcHAiIHsNCiAgICAgICAgICAgIGMxID0gY29udGFpbmVyICJDMSINCiAgICAgICAgICAgIGMyID0gY29udGFpbmVyICJDMiINCiAgICAgICAgfQ0KICAgICAgICBkYiA9IHNvZnR3YXJlU3lzdGVtICJEQiINCg0KICAgICAgICAhZWxlbWVudHMgZWxlbWVudC50eXBlPT1Db250YWluZXIgew0KICAgICAgICAgICAgZGVzY3JpcHRpb24gIkJ1bGsgZGVzY3JpcHRpb24iDQogICAgICAgICAgICB0ZWNobm9sb2d5ICJCdWxrIHRlY2hub2xvZ3kiDQogICAgICAgICAgICB0aGlzIC0+IGRiICJVc2VzIg0KICAgICAgICB9DQogICAgfQ0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "TopBottom",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Container-001",
+      "name" : "Container View: App",
+      "order" : 3,
+      "relationships" : [ {
+        "id" : "5"
+      }, {
+        "id" : "7"
+      } ],
+      "softwareSystemId" : "1"
+    } ],
+    "systemContextViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemContext-001",
+      "name" : "System Context View: App",
+      "order" : 2,
+      "relationships" : [ {
+        "id" : "6"
+      } ],
+      "softwareSystemId" : "1"
+    }, {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemContext-002",
+      "name" : "System Context View: DB",
+      "order" : 4,
+      "relationships" : [ {
+        "id" : "6"
+      } ],
+      "softwareSystemId" : "4"
+    } ],
+    "systemLandscapeViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-001",
+      "name" : "System Landscape View",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "6"
+      } ]
+    } ]
+  }
+}

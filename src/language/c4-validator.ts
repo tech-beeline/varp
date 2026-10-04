@@ -14,8 +14,8 @@
 	limitations under the License.
 */
 
-import { AstNode, AstUtils, type ValidationAcceptor, type ValidationChecks } from 'langium';
-import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty } from '../generated/ast';
+import { AstNode, AstUtils, isAstNode, type ValidationAcceptor, type ValidationChecks } from 'langium';
+import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, ModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
 import * as includeResolver from './c4-include-resolver';
@@ -415,29 +415,27 @@ export class C4Validator {
             const docUri = AstUtils.getDocument(includedRoot)?.uri.toString();
             if (docUri && visited.has(docUri)) continue;
             if (docUri) visited.add(docUri);
-            const anyRoot = includedRoot as any;
-            for (const key of Object.keys(anyRoot)) {
+            const root = includedRoot as any;
+            for (const key of Object.keys(includedRoot)) {
                 if (key.startsWith('$')) continue;
-                const val = anyRoot[key];
+                const val = root[key];
                 if (Array.isArray(val)) {
                     for (const item of val) {
-                        if (item && typeof item === 'object' && item.$type) {
-                            if (!isTypeAllowedInBlock(item.$type, blockType)) {
-                                accept('error', this.formatIncludeError(blockType, item), { node: inc, property: 'file' });
-                            }
+                        if (isAstNode(item) && !isTypeAllowedInBlock(item.$type, blockType)) {
+                            accept('error', this.formatIncludeError(blockType, item), { node: inc, property: 'file' });
                         }
                     }
                 }
             }
-            if (anyRoot.includes && Array.isArray(anyRoot.includes)) {
-                this.collectAndCheckIncludes(anyRoot.includes, visited, accept, blockType, depth + 1);
+            if (root.includes) {
+                this.collectAndCheckIncludes(root.includes, visited, accept, blockType, depth + 1);
             }
         }
     }
 
     /** Validates !include directives inside Relationship or ImplicitRelationship blocks */
     checkRelationshipBlockIncludeElements(rel: any, accept: ValidationAcceptor): void {
-        const blockType = (rel as any).$type === 'ImplicitRelationship' ? 'ImplicitRelationship' : 'Relationship';
+        const blockType = isImplicitRelationship(rel) ? 'ImplicitRelationship' : 'Relationship';
         this.checkIncludeElements(rel, accept, blockType);
     }
 
@@ -561,18 +559,19 @@ export class C4Validator {
         const root = AstUtils.getDocument(ext)?.parseResult.value;
         if (!root) return { elementKeys, groupIds, deploymentGroupIds, hasIncludes, hasExtends };
         for (const node of AstUtils.streamAllContents(root)) {
-            const anyNode = node as any;
-            if (isGroup(anyNode) && anyNode.id) {
-                groupIds.add(String(anyNode.id));
-            } else if (isDeploymentGroup(anyNode) && anyNode.id) {
-                deploymentGroupIds.add(String(anyNode.id));
-            } else if (this.isElementExtensionElement(anyNode)) {
-                if (anyNode.id) elementKeys.add(String(anyNode.id));
-                const name = C4Utils.stripQuotes(String(anyNode.name ?? ''));
+            if (isGroup(node) && node.id) {
+                groupIds.add(String(node.id));
+            } else if (isDeploymentGroup(node) && node.id) {
+                deploymentGroupIds.add(String(node.id));
+            } else if (this.isElementExtensionElement(node)) {
+                const el = node as any;
+                if (el.id) elementKeys.add(String(el.id));
+                const name = C4Utils.stripQuotes(String(el.name ?? ''));
                 if (name) elementKeys.add(name);
             }
-            if (Array.isArray(anyNode.includes) && anyNode.includes.length > 0) hasIncludes = true;
-            if (anyNode.extendsUri) hasExtends = true;
+            const record = node as any;
+            if (Array.isArray(record.includes) && record.includes.length > 0) hasIncludes = true;
+            if (record.extendsUri) hasExtends = true;
         }
         return { elementKeys, groupIds, deploymentGroupIds, hasIncludes, hasExtends };
     }
@@ -590,13 +589,13 @@ export class C4Validator {
      * For groups in !include files, follows the Include directive's container chain.
      */
     private getParentBlockType(node: any, visited: Set<string> = new Set()): string | undefined {
-        let current: any = node.$container;
+        let current: AstNode | undefined = node.$container;
         while (current) {
             if (isGroup(current)) {
                 current = current.$container;
                 continue;
             }
-            const $type = (current as any).$type;
+            const $type = current.$type;
             if ($type !== 'C4Document' && $type !== 'Workspace') {
                 if (getBlockTokens($type)) return $type;
             }
@@ -628,13 +627,13 @@ export class C4Validator {
             const docUri = AstUtils.getDocument(includedRoot)?.uri.toString();
             if (docUri && visited.has(docUri)) continue;
             if (docUri) visited.add(docUri);
-            const anyRoot = includedRoot as any;
-            for (const key of Object.keys(anyRoot)) {
+            const root = includedRoot as any;
+            for (const key of Object.keys(includedRoot)) {
                 if (key.startsWith('$')) continue;
-                const val = anyRoot[key];
+                const val = root[key];
                 if (Array.isArray(val)) {
                     for (const item of val) {
-                        if (item && typeof item === 'object' && item.$type) {
+                        if (isAstNode(item)) {
                             if (item.$type === 'Group' || item.$type === 'Relationship' || item.$type === 'ImplicitRelationship') continue;
                             if (!isTypeAllowedInBlock(item.$type, parentBlockType)) {
                                 accept('error', this.formatIncludeError(parentBlockType, item), { node: inc, property: 'file' });
@@ -643,8 +642,8 @@ export class C4Validator {
                     }
                 }
             }
-            if (anyRoot.includes && Array.isArray(anyRoot.includes)) {
-                this.collectAndCheckGroupIncludes(anyRoot.includes, visited, accept, parentBlockType, depth + 1);
+            if (root.includes) {
+                this.collectAndCheckGroupIncludes(root.includes, visited, accept, parentBlockType, depth + 1);
             }
         }
     }
@@ -695,7 +694,8 @@ export class C4Validator {
     /** Returns a human-readable name for any NamedElement or relationship for error messages */
     private getElementName(element: NamedElement): string {
         if (isArchetypeDefinition(element)) {
-            if ((element as any).name) return (element as any).name;
+            const name = (element as any).name;
+            if (name) return name;
             if (element.baseType) return element.baseType;
             if (element.baseArrow) return element.baseArrow;
             return 'Unnamed Archetype';
@@ -723,10 +723,13 @@ export class C4Validator {
             return element.description || `${sourceName} -> ${targetName}`;
         }
         if (isSoftwareSystemInstance(element) || isContainerInstance(element)) {
-            const baseName = (element as any).softwareSystem?.ref?.name || (element as any).container?.ref?.name;
-            return (element as any).id || (baseName ? `Instance of ${baseName}` : 'Unnamed Instance');
+            const baseName = isSoftwareSystemInstance(element)
+                ? element.softwareSystem?.ref?.name
+                : element.container?.ref?.name;
+            return element.id || (baseName ? `Instance of ${baseName}` : 'Unnamed Instance');
         }
-        return (element as any).id || (element as any).name || `Unnamed ${element.$type}`;
+        const record = element as any;
+        return record.id || record.name || `Unnamed ${element.$type}`;
     }
 
     /** Warns when a views block declares both theme and themes */
@@ -754,7 +757,7 @@ export class C4Validator {
         if (rootUri) visitedDocuments.add(rootUri);
 
         const collected: CollectedTopLevelElement[] = [];
-        this.collectTopLevelElements(doc as any, collected, visitedDocuments, undefined);
+        this.collectTopLevelElements(doc, collected, visitedDocuments, undefined);
 
         const personOrSystemNames = new Map<string, DuplicateOccurrence>();
         const customElementNames = new Map<string, DuplicateOccurrence>();
@@ -833,7 +836,7 @@ export class C4Validator {
                 if (visitedDocuments.has(docUri)) continue;
                 visitedDocuments.add(docUri);
             }
-            this.collectTopLevelElements(includedRoot as any, collected, visitedDocuments, anchor ?? inc);
+            this.collectTopLevelElements(includedRoot, collected, visitedDocuments, anchor ?? inc);
         }
     }
 
@@ -853,7 +856,7 @@ export class C4Validator {
      * single character, and the property only carries that meaning on the model.
      */
     checkGroupSeparatorProperty(item: PropertyItem, accept: ValidationAcceptor): void {
-        const properties = item.$container as any;
+        const properties = item.$container;
         if (!isPropertiesBlock(properties) || !isModelBlock(properties.$container)) return;
         if (C4Utils.stripQuotes(item.name).toLowerCase() !== 'structurizr.groupseparator') return;
         if (C4Utils.stripQuotes(item.value).length !== 1) {
@@ -896,7 +899,7 @@ export class C4Validator {
     checkUniqueContainersInSystem(softwareSystem: SoftwareSystem, accept: ValidationAcceptor): void {
         const containerNames = new Set<string>();
         const containerIds = new Set<string>();
-        const containers = (softwareSystem as any).elements || [];
+        const containers = softwareSystem.elements;
         for (const container of containers) {
             const name = C4Utils.stripQuotes(container.name);
             if (name) {
@@ -991,7 +994,7 @@ export class C4Validator {
             .filter(isImpliedRelationshipsProperty)
             .map(property => ({
                 offset: property.$cstNode?.offset ?? 0,
-                enabled: C4Utils.stripQuotes((property as any).value ?? '').toLowerCase() === 'true'
+                enabled: C4Utils.stripQuotes(property.value ?? '').toLowerCase() === 'true'
             }))
             .toArray()
             .sort((a, b) => a.offset - b.offset);
@@ -1044,13 +1047,14 @@ export class C4Validator {
      * declares a workspace keeps its model content inside it.
      */
     checkRootContentOutsideWorkspace(doc: C4Document, accept: ValidationAcceptor): void {
-        if (((doc as any).workspaces ?? []).length === 0) return;
-        for (const key of Object.keys(doc as any)) {
+        if (doc.workspaces.length === 0) return;
+        const record = doc as unknown as Record<string, readonly AstNode[] | undefined>;
+        for (const key of Object.keys(doc)) {
             if (ROOT_ALLOWED_KEYS.has(key) || key.startsWith('$')) continue;
-            const value = (doc as any)[key];
+            const value = record[key];
             if (!Array.isArray(value)) continue;
             for (const node of value) {
-                if (!node || typeof node !== 'object' || !node.$type) continue;
+                if (!isAstNode(node)) continue;
                 accept('error', 'Unexpected tokens outside the workspace block.', { node });
             }
         }
@@ -1061,8 +1065,7 @@ export class C4Validator {
      * sets are rejected per workspace by checkWorkspaceMetadata.
      */
     checkSingleWorkspace(doc: C4Document, accept: ValidationAcceptor): void {
-        const workspaces: any[] = (doc as any).workspaces ?? [];
-        for (let index = 1; index < workspaces.length; index++) {
+        for (let index = 1; index < doc.workspaces.length; index++) {
             accept('error', 'Multiple workspaces are not permitted in a DSL definition.', { node: doc, property: 'workspaces', index });
         }
     }
@@ -1079,7 +1082,7 @@ export class C4Validator {
             }
         };
         collect(doc);
-        for (const workspace of (doc as any).workspaces ?? []) {
+        for (const workspace of doc.workspaces) {
             collect(workspace);
         }
         return views;
@@ -1092,7 +1095,7 @@ export class C4Validator {
             const key = this.safeGetKey(view);
             if (!key) continue;
             if (seenKeys.has(key)) {
-                accept('error', `A view with the key '${key}' already exists.`, { node: view, property: 'key' as any });
+                accept('error', `A view with the key '${key}' already exists.`, { node: view, property: 'key' });
             } else {
                 seenKeys.add(key);
             }
@@ -1327,7 +1330,7 @@ export class C4Validator {
         const detectedDefaultMarkers: any[] = [];
         for (const view of this.collectDocumentViews(doc)) {
             // Filtered views carry the marker as `defaultView`, every other view type as `defaultViews`.
-            for (const marker of [...((view as any).defaultViews ?? []), ...((view as any).defaultView ?? [])]) {
+            for (const marker of [...(view.defaultViews ?? []), ...(view.defaultView ?? [])]) {
                 detectedDefaultMarkers.push(marker);
             }
         }

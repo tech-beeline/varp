@@ -256,7 +256,7 @@ async function getThemesForPreview(themeUrls: string[] | undefined): Promise<{ u
     }
     try {
         const res: any = await languageClient.sendRequest('c4/getThemes', { themes: urls });
-        const fetched = (Array.isArray(res?.themes) ? res.themes : []) as { url: string; content: string }[];
+        const fetched = (Array.isArray(res?.themes) ? res.themes : []) as any[];
         // Returning undefined means "could not get themes" - the caller then
         // leaves the preview's themes unset so the webview falls back to
         // loadThemes() instead of rendering without any theme.
@@ -425,7 +425,7 @@ export function init(context: ExtensionContext): void {
 
             // Wait for the webview to export to DrawIO format via postMessage
             const drawioResult = await new Promise<any>((resolve) => {
-                const panel = (preview as any).panel;
+                const panel = preview.getPanel();
                 if (!panel) {
                     resolve(null);
                     return;
@@ -531,7 +531,7 @@ export function init(context: ExtensionContext): void {
 
             // Wait for the webview to render and export SVG via postMessage
             const svgResult = await new Promise<string | null>((resolve) => {
-                const panel = (preview as any).panel;
+                const panel = preview.getPanel();
                 if (!panel) { resolve(null); return; }
 
                 const disposable = panel.webview.onDidReceiveMessage((message: any) => {

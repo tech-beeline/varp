@@ -370,7 +370,12 @@ export class DiagramPreview {
 
   public isOpen(): boolean {
         return this.panel !== undefined;
-  }
+    }
+
+  /** The backing webview panel, or undefined while the preview is closed. */
+  public getPanel(): WebviewPanel | undefined {
+        return this.panel;
+    }
 
   private createPanel(): WebviewPanel {
     const panel = window.createWebviewPanel(

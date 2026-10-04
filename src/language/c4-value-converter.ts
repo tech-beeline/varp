@@ -14,7 +14,7 @@
 	limitations under the License.
 */
 
-import { ValueConverter, CstNode, ValueType, GrammarAST } from "langium";
+import { isLeafCstNode, ValueConverter, CstNode, ValueType, GrammarAST } from "langium";
 
 /**
  * Custom value converter for C4 DSL.
@@ -24,7 +24,7 @@ import { ValueConverter, CstNode, ValueType, GrammarAST } from "langium";
  */
 export class C4ValueConverter implements ValueConverter {
     convert(input: string, cstNode: CstNode): ValueType {
-        const tokenName = (cstNode as any).tokenType?.name;
+        const tokenName = isLeafCstNode(cstNode) ? cstNode.tokenType.name : undefined;
 
         // Ordered dynamic step: `1:` carries its delimiter in the token; the order
         // value itself is stored without it.

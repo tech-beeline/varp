@@ -83,8 +83,13 @@ function documentationFormat(name: string): 'Markdown' | 'AsciiDoc' {
  * A random version 4 UUID, the identifier used for an element that declares none.
  * Uses the platform generator when available and falls back to random bytes.
  */
+interface CryptoLike {
+    randomUUID?: () => string;
+    getRandomValues?: (array: Uint8Array) => Uint8Array;
+}
+
 function generateUuid(): string {
-    const cryptoApi = (globalThis as any).crypto;
+    const cryptoApi: CryptoLike | undefined = (globalThis as any).crypto;
     if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
 
     const bytes = new Uint8Array(16);
@@ -510,7 +515,7 @@ export class C4JsonEnricher {
      */
     private resolveOwner(directive: AdrsDirective | DocsDirective): { kind: 'workspace' } | { kind: 'element'; pathKey: string } {
         const names: string[] = [];
-        let node = directive.$container as any;
+        let node: AstNode | undefined = directive.$container;
         while (node) {
             if (isWorkspace(node) || isC4Document(node)) {
                 return names.length > 0
@@ -532,7 +537,7 @@ export class C4JsonEnricher {
 
     /** Returns the AST name of a model element, with quotes stripped. */
     private elementName(node: SoftwareSystem | Container | Component): string {
-        const name = (node as any).name;
+        const name = node.name;
         return typeof name === 'string' ? name.replace(/^["']|["']$/g, '') : '';
     }
 

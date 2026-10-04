@@ -23,7 +23,7 @@ import {
     type LangiumSharedCoreServices,
 } from 'langium';
 import { URI } from 'vscode-uri';
-import { isInclude, Include } from '../generated/ast';
+import { isC4Document, isInclude, isWorkspace, Include, Workspace } from '../generated/ast';
 import * as includeResolver from './c4-include-resolver';
 
 /**
@@ -293,14 +293,14 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
      * Returns the loaded document URI if successful, undefined otherwise.
      */
     private async loadExtendsUri(doc: LangiumDocument, newUris: URI[]): Promise<URI | undefined> {
-        const root = doc.parseResult.value as any;
+        const root = doc.parseResult.value;
         let extendsUri: string | undefined;
-        let workspaceNode: any;
+        let workspaceNode: Workspace | undefined;
 
-        if (root.$type === 'C4Document') {
-            workspaceNode = root.workspaces?.[0];
+        if (isC4Document(root)) {
+            workspaceNode = root.workspaces[0];
             extendsUri = workspaceNode?.extendsUri;
-        } else if (root.$type === 'Workspace') {
+        } else if (isWorkspace(root)) {
             workspaceNode = root;
             extendsUri = root.extendsUri;
         }

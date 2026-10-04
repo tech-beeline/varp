@@ -14,7 +14,7 @@
 	limitations under the License.
 */
 
-import { AstNode, AstUtils, Reference } from 'langium';
+import { AstNode, AstUtils, Reference, isReference } from 'langium';
 import { URI } from 'vscode-uri';
 import { flatId, C4Utils, OVERLAY_PROPERTY_KEYS, archetypeChain, archetypeInstanceType, declaredIdentifier, type FlatIdResolvers } from './c4-utils';
 import { encodePlantUml } from './plantuml-encoder';
@@ -41,11 +41,13 @@ import {
     isDeploymentEnvironment, DeploymentNode,
     ViewsBlock, SystemContextView, isWorkspace, isC4Document,
     isViewsBlock, ElementStyle, RelationshipStyle, isStylesBlock,
+    PropertiesBlock, TerminologyBlock,
     StylesBlock, isModelBlock, isConstant, Include, isInclude, isGroup, isDeploymentNode,
-    isArchetypesBlock, isArchetypeInstance, isImageView, isPlantUMLSource, isImageSource,
+    isArchetypesBlock, isArchetypeInstance, isArchetypeNamed, isImageView, isPlantUMLSource, isImageSource,
     isDeploymentView, DynamicMember, isDynamicStep, isParallelStepBlock,
     DynamicView, isContainerView,
     isSystemLandscapeView, isSystemContextView,
+    C4Document,
     SoftwareSystem,
     Component,
     RelationshipMember,
@@ -54,6 +56,7 @@ import {
     isDynamicView,
     isCustomElement,
     SoftwareSystemInstance,
+    GenericInstance,
     ContainerInstance,
     InfrastructureNode,
     Group,
@@ -520,33 +523,26 @@ class JsonGenerator {
         if (nodeUri && visited.has(nodeUri)) return;
         if (nodeUri) visited.add(nodeUri);
 
-        const anyNode = node as any;
-
-        // Terminology blocks live inside `views` and `configuration` blocks, so
-        // inspect the node itself plus any wrapped workspaces.
-        const containers: any[] = [anyNode];
-        if (Array.isArray(anyNode.workspaces)) {
-            containers.push(...anyNode.workspaces);
-        }
+        // Terminology blocks live inside `views` blocks, so inspect the node itself
+        // plus any wrapped workspaces (a C4Document root wraps its workspaces).
+        const containers: (C4Document | Workspace)[] = [];
+        if (isC4Document(node)) containers.push(node, ...node.workspaces);
+        else if (isWorkspace(node)) containers.push(node);
         for (const container of containers) {
-            if (container.terminology) {
+            if (isC4Document(container)) {
                 this.extractTerminologyBlock(container.terminology);
             }
-            container.viewsBlocks?.forEach((views: any) => {
+            container.viewsBlocks.forEach((views) => {
                 if (views.terminology) {
                     this.extractTerminologyBlock(views.terminology);
-                }
-            });
-            container.configurationBlocks?.forEach((configuration: any) => {
-                if (configuration.terminology) {
-                    this.extractTerminologyBlock(configuration.terminology);
                 }
             });
         }
 
         // Recurse into includes
-        if (anyNode.includes) {
-            for (const inc of anyNode.includes as Include[]) {
+        const includes = isC4Document(node) || isWorkspace(node) ? node.includes : undefined;
+        if (includes) {
+            for (const inc of includes) {
                 if (!inc.file) continue;
                 const resolved = this.resolveIncludedRoot(node, inc.file);
                 if (resolved) {
@@ -562,10 +558,9 @@ class JsonGenerator {
      * deploymentNode, infrastructureNode, relationship. The metadata symbol is
      * not part of terminology: it maps to configuration.metadataSymbols.
      */
-    private extractTerminologyBlock(blocks: any[]): void {
+    private extractTerminologyBlock(blocks: TerminologyBlock[]): void {
         const term = (value: string) => C4Utils.stripQuotes(value);
-        for (const block of blocks) {
-            const termBlock = block as any;
+        for (const termBlock of blocks) {
             if (termBlock.person?.length > 0) {
                 this.terminology['person'] = term(termBlock.person[0]);
             }
@@ -624,37 +619,17 @@ class JsonGenerator {
         // Current flag value
         let currentFlag = inheritedFlag ?? true;
         let currentOffset = inheritFromOffset;
-        const allNodes: AstNode[] = [];
-        const collectChildren = (parent: AstNode) => {
-            const anyParent = parent as any;
-            const directChildren: AstNode[] = [];
-            for (const key of Object.keys(parent)) {
-                if (key.startsWith('$')) continue;
-                const val = (parent as any)[key];
-                if (Array.isArray(val)) {
-                    for (const item of val) {
-                        if (item && typeof item === 'object' && item.$type) {
-                            directChildren.push(item);
-                        }
-                    }
-                } else if (val && typeof val === 'object' && val.$type) {
-                    directChildren.push(val);
-                }
-            }
-            directChildren.sort((a, b) => (a.$cstNode?.offset ?? 0) - (b.$cstNode?.offset ?? 0));
-            
-            for (const child of directChildren) {
-                allNodes.push(child);
-                collectChildren(child);
-            }
-        };
-        collectChildren(node);
+        // Every descendant node of this document (Langium streams feature children,
+        // not cross-reference targets, so the set matches the structural tree). The
+        // traversal order is irrelevant: directives are sorted by offset and the
+        // document end is a max over all nodes.
+        const allNodes: AstNode[] = [...AstUtils.streamAllContents(node)];
 
         // Collect all ImpliedRelationshipsProperty nodes with their offset and value
         const directiveOffsets: Array<{ offset: number; enabled: boolean }> = [];
         for (const currentNode of allNodes) {
             if (isImpliedRelationshipsProperty(currentNode)) {
-                const rawVal = (currentNode as any).value;
+                const rawVal = currentNode.value;
                 const val = this.substitute(rawVal);
                 const enabled = val === 'true';
                 const offset = currentNode.$cstNode?.offset ?? 0;
@@ -699,9 +674,9 @@ class JsonGenerator {
         }
 
         // Process !include files with the current flag
-        const anyNode = node as any;
-        if (Array.isArray(anyNode.includes)) {
-            for (const includeDirective of anyNode.includes) {
+        const includes = isC4Document(node) || isWorkspace(node) ? node.includes : undefined;
+        if (includes) {
+            for (const includeDirective of includes) {
                 if (includeDirective.file) {
                     const includedRoot = this.resolveIncludedRoot(node, includeDirective.file);
                     if (includedRoot) {
@@ -798,7 +773,8 @@ class JsonGenerator {
         });
 
         // Constants and variables are inherited from an extended workspace.
-        const workspace = isWorkspace(root) ? root : (root as any).workspaces?.find(isWorkspace);
+        const workspace = isWorkspace(root) ? root
+            : (isC4Document(root) ? root.workspaces.find(isWorkspace) : undefined);
         if (workspace?.extendsUri) {
             const parent = this.resolveParentWorkspace(workspace, workspace.extendsUri);
             if (parent) this.collectConstants(parent, visited);
@@ -837,7 +813,7 @@ class JsonGenerator {
         for (const content of AstUtils.streamAllContents(node)) {
             if (!isArchetypesBlock(content)) continue;
             for (const definition of content.definitions ?? []) {
-                if ((definition as any).name !== undefined) continue;
+                if (isArchetypeNamed(definition)) continue;
                 const key = this.archetypeTypeKey(definition);
                 if (key && !this.defaultArchetypes.has(key)) {
                     this.defaultArchetypes.set(key, definition);
@@ -978,8 +954,8 @@ class JsonGenerator {
             for (const light of node.lightBlocks ?? []) this.addStyleBlock(light, 'Light');
             for (const dark of node.darkBlocks ?? []) this.addStyleBlock(dark, 'Dark');
         }
-        const anyNode = node as any;
-        anyNode.includes?.forEach((includeDirective: Include) => {
+        const includes = isC4Document(node) || isWorkspace(node) ? node.includes : undefined;
+        includes?.forEach((includeDirective: Include) => {
             if (includeDirective.file) {
                 const includedRoot = this.resolveIncludedRoot(node, includeDirective.file);
                 if (includedRoot) {
@@ -1186,10 +1162,10 @@ class JsonGenerator {
             if (views) extractThemes(views);
         }
 
-        const anyNode = node as any;
-
         // Recurse into includes
-        anyNode.includes?.forEach((includeDirective : Include) => {
+        const includes = isC4Document(node) || isWorkspace(node) || isViewsBlock(node) || isStylesBlock(node)
+            ? node.includes : undefined;
+        includes?.forEach((includeDirective : Include) => {
             if (includeDirective.file) {
                 const includedRoot = this.resolveIncludedRoot(node, includeDirective.file);
                 if (includedRoot) {
@@ -1312,10 +1288,11 @@ class JsonGenerator {
             }
         }
 
-        const anyNode = node as any;
         // Recurse into included files
-        if (Array.isArray(anyNode.includes)) {
-            for (const includeDirective of anyNode.includes) {
+        const includes = isModelBlock(node) || isWorkspace(node) || isC4Document(node) || isViewsBlock(node)
+            ? node.includes : undefined;
+        if (includes) {
+            for (const includeDirective of includes) {
                 if (includeDirective.file) {
                     const includedRoot = this.resolveIncludedRoot(node, includeDirective.file);
                     if (includedRoot) {
@@ -1595,13 +1572,13 @@ class JsonGenerator {
             $type: 'Relationship', // override type for isRelationship type guard checks
             source: {
                 ref: source,
-                $refText: (source as any)?.name || ""
+                $refText: (source as any)?.name ?? ""
             },
             target: implicit.target,
             targetThis: implicit.targetThis,
             description: implicit.description,
             technology: implicit.technology,
-            tags: (implicit as any).tags || []
+            tags: implicit.tags
         };
         // ensure $cstNode and $document are preserved (they may not be enumerable via spread)
         result.$cstNode = implicit.$cstNode;
@@ -1622,17 +1599,20 @@ class JsonGenerator {
             if (visited.has(docUri)) return;
             visited.add(docUri);
         }
+        // A document/workspace/model/element root may carry nested `elements` and
+        // `!include` directives; the set of node types that do is open, so read them
+        // through a structural shape.
         const anyNode = node as any;
         // Collect elements and relationships from the current node (works for Workspace, ModelBlock, included files)
         this.collectLocal(anyNode);
         // Recursively process nested elements (SoftwareSystem → Containers, etc.)
-        if (anyNode.elements && Array.isArray(anyNode.elements)) {
+        if (anyNode.elements) {
             for (const el of anyNode.elements) {
                 this.collectElementsRelationships(el, visited);
             }
         }
         // Universal include processing (works for any root type)
-        if (anyNode.includes && Array.isArray(anyNode.includes)) {
+        if (anyNode.includes) {
             for (const includeDirective of anyNode.includes) {
                 if (includeDirective.file) {
                     const includedRoot = this.resolveIncludedRoot(node, includeDirective.file);
@@ -1724,6 +1704,33 @@ class JsonGenerator {
      */
     private el<T>(node: T): T {
         return (this.materialized.get(node) ?? node) as T;
+    }
+
+    /**
+     * Display name of a resolved element. Only some element types declare a `name`
+     * (instances and the like carry none), so read it through the common shape.
+     */
+    private displayName(node: NamedElement | undefined): string {
+        if (!node) return '';
+        return (node as any).name ?? '';
+    }
+
+    /** The element's declared `id` (a string), when the type declares one. */
+    private elementId(node: NamedElement | undefined): string | undefined {
+        return (node as any)?.id;
+    }
+
+    /** The element's first `properties` block, when the type declares one. */
+    private firstProperties(node: NamedElement | undefined): PropertiesBlock | undefined {
+        return (node as any)?.properties?.at(0);
+    }
+
+    /** Whether a relationship declares a property with the given (unquoted) name and value. */
+    private relationshipHasProperty(rel: Relationship | undefined, name: string, value: string): boolean {
+        const props = (rel as any)?.properties;
+        if (!props) return false;
+        return props.some((block: any) => block.items.some((item: any) =>
+            C4Utils.stripQuotes(item.name) === name && C4Utils.stripQuotes(item.value) === value));
     }
 
     /**
@@ -1938,7 +1945,7 @@ class JsonGenerator {
             const container = this.el(view.container?.ref);
             const system = container ? this.resolveConatinerParent(container as Container) : undefined;
             if (!container || !system) return undefined;
-            return `Component View: ${this.substitute((system as any).name)} - ${this.substitute(container.name)}`;
+            return `Component View: ${this.substitute(system.name)} - ${this.substitute(container.name)}`;
         }
         if (isDeploymentView(view)) {
             const scope = this.el(view.softwareSystem?.ref);
@@ -1953,9 +1960,9 @@ class JsonGenerator {
             const scope = this.el(view.element?.ref);
             if (scope && isContainer(scope)) {
                 const system = this.resolveConatinerParent(scope as Container);
-                if (system) return `Dynamic View: ${this.substitute((system as any).name)} - ${this.substitute(scope.name)}`;
+                if (system) return `Dynamic View: ${this.substitute(system.name)} - ${this.substitute(scope.name)}`;
             }
-            if (scope) return `Dynamic View: ${this.substitute((scope as any).name)}`;
+            if (scope) return `Dynamic View: ${this.substitute(this.displayName(scope))}`;
             return 'Dynamic View';
         }
         if (isCustomView(view)) {
@@ -2088,7 +2095,7 @@ class JsonGenerator {
      */
     private buildNoRelationshipSuppressions(): void {
         for (const noRelationship of this.noRelationshipNodes) {
-            const env = this.getEnvironment(noRelationship as any);
+            const env = this.getEnvironment(noRelationship);
             if (!env) continue;
             this.noRelationshipInheritance.set(noRelationship, this.findInheritedRelationship(noRelationship));
             const sources = this.resolveDeploymentEndpoints(noRelationship, noRelationship.source?.ref, noRelationship.sourceThis, env, true);
@@ -2194,7 +2201,7 @@ class JsonGenerator {
      */
     private expandDeploymentContextRelationships(): void {
         for (const { rel, noRelationship } of this.deploymentContextRelationships) {
-            const env = noRelationship ? this.getEnvironment(noRelationship as any) : this.getEnvironment(rel as any);
+            const env = noRelationship ? this.getEnvironment(noRelationship) : this.getEnvironment(rel);
             if (!env) {
                 this.relationships.push(rel);
                 continue;
@@ -2997,12 +3004,11 @@ class JsonGenerator {
             if (!isContainerInstance(el) && !isSoftwareSystemInstance(el) && !isGenericInstance(el)) {
                 continue;
             }
-            const node = el as any;
-            if (!node.value) continue;
+            if (!el.value) continue;
 
-            const val = C4Utils.stripQuotes(node.value);
+            const val = C4Utils.stripQuotes(el.value);
             if (!val) {
-                node.value = undefined;
+                el.value = undefined;
                 continue;
             }
 
@@ -3012,23 +3018,23 @@ class JsonGenerator {
                 // keeps this single value separate because it cannot tell a group from a
                 // tag, so record the resolved name for the JSON output and for relationship
                 // scoping (ContainerInstanceParser resolves that token as a deployment
-                // group).
-                const resolved: string[] = node.resolvedDeploymentGroups ?? (node.resolvedDeploymentGroups = []);
+                // group). `resolvedDeploymentGroups` is a runtime property, not in the grammar.
+                const ext = el as any;
+                const resolved = ext.resolvedDeploymentGroups ?? (ext.resolvedDeploymentGroups = []);
                 if (!resolved.includes(groupName)) {
                     resolved.push(groupName);
                 }
             } else if (isGenericInstance(el)) {
                 // GenericInstance is an extension: a single value is a tag.
-                if (!node.tags) node.tags = [];
-                if (!node.tags.includes(val)) {
-                    node.tags.push(val);
+                if (!el.tags.includes(val)) {
+                    el.tags.push(val);
                 }
             } else {
                 // The value occupies the deployment group slot of a container/software
                 // system instance; a reference to no known group is ignored.
             }
             // Clear value after resolution
-            node.value = undefined;
+            el.value = undefined;
         }
     }
 
@@ -3056,8 +3062,9 @@ class JsonGenerator {
             const includedRoot = this.resolveIncludedRoot(node, content.file);
             if (includedRoot) this.collectViewSourceDocuments(includedRoot, documents, visited);
         }
-        if (isWorkspace(node) || (node as any).workspaces?.length > 0) {
-            const workspace = isWorkspace(node) ? node : (node as any).workspaces.find(isWorkspace);
+        if (isWorkspace(node) || (isC4Document(node) && node.workspaces.length > 0)) {
+            const workspace = isWorkspace(node) ? node
+                : (isC4Document(node) ? node.workspaces.find(isWorkspace) : undefined);
             if (workspace?.extendsUri) {
                 const parent = this.resolveParentWorkspace(workspace, workspace.extendsUri);
                 if (parent) this.collectViewSourceDocuments(parent, documents, visited);
@@ -3236,9 +3243,8 @@ class JsonGenerator {
         let current: AstNode | undefined = node.$container;
         while (current) {
             if (isDeploymentNode(current)) {
-                const dn = current as any;
-                for (const prop of dn.deploymentGroupProps ?? []) {
-                    for (const ref of prop.deploymentGroups ?? []) {
+                for (const prop of current.deploymentGroupProps) {
+                    for (const ref of prop.deploymentGroups) {
                         const name = ref.ref?.name && C4Utils.stripQuotes(ref.ref.name);
                         if (name) groups.add(name);
                     }
@@ -3480,7 +3486,7 @@ class JsonGenerator {
                 // Get base group path (e.g., "a-api.jar")
                 let compGroup = this.extractGroup(comp);
                 // Extract inline GroupProperty from grammar
-                const groupProperty = (comp as any).groupProps?.at(0);
+                const groupProperty = comp.groupProps?.at(0);
                 if (groupProperty?.value) {
                     const inlineGroupName = C4Utils.stripQuotes(groupProperty.value);
                     if (inlineGroupName) {
@@ -3571,22 +3577,19 @@ class JsonGenerator {
             element.elements.forEach(child => this.collectLeafElements(child, result, visited));
             
             // Process !include directives within the group
-            const groupAny = element as any;
-            if (Array.isArray(groupAny.includes)) {
-                for (const inc of groupAny.includes) {
-                    if (!inc.file) continue;
-                    const root = this.resolveIncludedRoot(element, inc.file);
-                    if (root) {
-                        const docUri = AstUtils.getDocument(root)?.uri.toString();
-                        if (docUri && visited.has(docUri)) continue;
-                        if (docUri) visited.add(docUri);
-                        // Recursively traverse all contents of the included file
-                        AstUtils.streamAllContents(root).forEach(child => {
-                            if (isNamedElement(child) && !isGroup(child) && !isRelationship(child) && !isImplicitRelationship(child)) {
-                                result.add(child);
-                            }
-                        });
-                    }
+            for (const inc of element.includes) {
+                if (!inc.file) continue;
+                const root = this.resolveIncludedRoot(element, inc.file);
+                if (root) {
+                    const docUri = AstUtils.getDocument(root)?.uri.toString();
+                    if (docUri && visited.has(docUri)) continue;
+                    if (docUri) visited.add(docUri);
+                    // Recursively traverse all contents of the included file
+                    AstUtils.streamAllContents(root).forEach(child => {
+                        if (isNamedElement(child) && !isGroup(child) && !isRelationship(child) && !isImplicitRelationship(child)) {
+                            result.add(child);
+                        }
+                    });
                 }
             }
         } else {
@@ -4388,7 +4391,7 @@ class JsonGenerator {
         // misleading parallel edges). Deduplicated by (id + direction): dynamic views
         // emit forward AND response edges that share the same id.
         const seen = new Set<string>();
-        for (const item of relationships as any[]) {
+        for (const item of relationships) {
             const relationship = item?.relationship ?? item;
             const rawSourceId = this.getId(this.resolveSource(relationship));
             const rawTargetId = this.getId(this.resolveTarget(relationship));
@@ -4400,7 +4403,7 @@ class JsonGenerator {
             const targetId = deployCluster[rawTargetId] !== undefined ? innerOf[rawTargetId] : rawTargetId;
             if (sourceId === undefined || targetId === undefined) continue;
             if (sizes[sourceId] === undefined || sizes[targetId] === undefined) continue;
-            const edgeId = (item as any)?.id ?? this.getId(item);
+            const edgeId = item?.id ?? this.getId(item);
             const dedupeKey = `${edgeId}\u0000${sourceId}\u0000${targetId}`;
             if (seen.has(dedupeKey)) continue;
             seen.add(dedupeKey);
@@ -4505,7 +4508,7 @@ class JsonGenerator {
             }
         };
         for (const themeDef of this.themeStyles) merge(themeDef);
-        for (const raw of this.styles.elements) merge(raw as any);
+        for (const raw of this.styles.elements) merge(raw);
         this.elementStyleMap = map;
         return map;
     }
@@ -4565,9 +4568,9 @@ class JsonGenerator {
 
     /** Display name for the DOT node label (instances inherit their container/system name). */
     private dotElementName(el: any): string {
-        if (isContainerInstance(el)) return String((el as any).container?.ref?.name ?? (el as any)?.name ?? this.getId(el));
-        if (isSoftwareSystemInstance(el)) return String((el as any).softwareSystem?.ref?.name ?? (el as any)?.name ?? this.getId(el));
-        return String((el as any)?.name ?? this.getId(el));
+        if (isContainerInstance(el)) return String(el.container?.ref?.name ?? this.getId(el));
+        if (isSoftwareSystemInstance(el)) return String(el.softwareSystem?.ref?.name ?? this.getId(el));
+        return String(el?.name ?? this.getId(el));
     }
 
     /** Finds the frame parent of a view element, if any. */
@@ -4643,8 +4646,8 @@ class JsonGenerator {
                 }
             }
         };
-        for (const themeDef of this.themeRelationshipStyles) merge(themeDef as any);
-        for (const raw of this.styles.relationships) merge(raw as any);
+        for (const themeDef of this.themeRelationshipStyles) merge(themeDef);
+        for (const raw of this.styles.relationships) merge(raw);
         for (const tag of this.relationshipTagsFor(rel)) {
             const s = map[tag];
             if (s) {
@@ -4962,7 +4965,7 @@ class JsonGenerator {
         const nodeById: Record<string, { x: number; y: number; w: number; h: number }> = {};
         const idByGvid: Record<number, string> = {};
         const clusters: { name: string; gvid: number; bb: { x1: number; y1: number; x2: number; y2: number }; nodes: number[] }[] = [];
-        for (const obj of (json.objects ?? []) as any[]) {
+        for (const obj of (json.objects ?? [])) {
             if (!obj) continue;
             if (obj.pos && obj.width && obj.height && obj.id !== undefined) {
                 const [cx, cy] = parsePoint(obj.pos); // center, points
@@ -5071,7 +5074,7 @@ class JsonGenerator {
             for (const rel of view.relationships) { if (rel && rel.id) relById[rel.id] = rel; }
         }
         const rawVerticesById: Record<string, { x: number; y: number }[]> = {};
-        for (const ge of (json.edges ?? []) as any[]) {
+        for (const ge of (json.edges ?? [])) {
             if (!ge.pos) continue;
             const pts = parseSpline(ge.pos);
             if (pts.length < 2) continue;
@@ -5233,7 +5236,7 @@ class JsonGenerator {
         }
 
         // Group steps by undirected pair, preserving the order they appear in.
-        const steps = view.relationships.filter((r: any) => r && r.id !== undefined) as any[];
+        const steps = view.relationships.filter((r: any) => r && r.id !== undefined);
         const groups = new Map<string, any[]>();
         const orderOf: string[] = [];
         for (const rel of steps) {
@@ -5408,13 +5411,13 @@ class JsonGenerator {
                 if (isInclude(content) && content.file) {
                     const includedRoot = this.resolveIncludedRoot(content, content.file);
                     if (includedRoot) {
-                        assign(includedRoot, base + ((content as any).$cstNode?.offset ?? 0));
+                        assign(includedRoot, base + (content.$cstNode?.offset ?? 0));
                     }
                     continue;
                 }
                 if (!isNamedElement(content) || positions.has(content)) continue;
                 if (AstUtils.getDocument(content)?.uri.toString() !== docUri) continue;
-                positions.set(content, base + ((content as any).$cstNode?.offset ?? 0));
+                positions.set(content, base + (content.$cstNode?.offset ?? 0));
             }
         };
         // Chain documents deepest first — the reference loader parses the base
@@ -5613,9 +5616,9 @@ class JsonGenerator {
 
     /** Marks every reference inside a quoted-filter expression as unlinked. */
     private registerQuotedFilterReferences(expression: ViewExpression): void {
-        for (const node of AstUtils.streamAllContents(expression) as any) {
+        for (const node of AstUtils.streamAllContents(expression)) {
             for (const value of Object.values(node)) {
-                if (value && typeof value === 'object' && typeof (value as any).$refText === 'string') {
+                if (value && typeof value === 'object' && isReference(value)) {
                     this.quotedFilterReferences.add(value);
                 }
             }
@@ -5686,16 +5689,18 @@ class JsonGenerator {
         // The qualified path only identifies an element that declares its own id;
         // for id-less children it would degenerate to the parent's identifier and
         // steal references meant for the parent (e.g. a group).
-        const exact = this.elements.find(element =>
-            (element as any).id === name
-            || C4Utils.stripQuotes((element as any).name ?? '') === name
-            || (typeof (element as any).id === 'string' && (element as any).id.length > 0
-                && this.qualifiedIdentifier(element) === name));
+        const exact = this.elements.find(element => {
+            const id = this.elementId(element);
+            return id === name
+                || C4Utils.stripQuotes(this.displayName(element)) === name
+                || (typeof id === 'string' && id.length > 0
+                    && this.qualifiedIdentifier(element) === name);
+        });
         if (exact) return exact;
         const lastSegment = name.split('.').pop() ?? name;
         return this.elements.find(element =>
-            (element as any).id === lastSegment
-            || C4Utils.stripQuotes((element as any).name ?? '') === lastSegment);
+            this.elementId(element) === lastSegment
+            || C4Utils.stripQuotes(this.displayName(element)) === lastSegment);
     }
 
     /** Hierarchical identifier of an element, built from its ancestors' ids (groups skipped). */
@@ -5990,9 +5995,9 @@ class JsonGenerator {
             const propName = C4Utils.stripQuotes(e.name);
             const propValue = C4Utils.stripQuotes(e.value);
             this.elements.forEach(el => {
-                const props = (el as any).properties?.at(0);
-                if (props && Array.isArray(props.items)) {
-                    const match = props.items.find((item: any) =>
+                const props = this.firstProperties(el);
+                if (props) {
+                    const match = props.items.find(item =>
                         C4Utils.stripQuotes(item.name) === propName &&
                         C4Utils.stripQuotes(item.value) === propValue
                     );
@@ -6040,15 +6045,15 @@ class JsonGenerator {
             const propName = C4Utils.stripQuotes(e.name);
             const propValue = C4Utils.stripQuotes(e.value);
             relationshipsAtScope.forEach(r => {
-                const props = (r as any).properties?.at(0);
-                if (props && Array.isArray(props.items)) {
-                    const match = props.items.find((item: any) =>
-                        C4Utils.stripQuotes(item.name) === propName &&
-                        C4Utils.stripQuotes(item.value) === propValue
-                    );
-                    if (match) {
-                        if(elementsAtView.has(r.source) && elementsAtView.has(r.target)) res.add(r.relationship);
-                    }
+                // Mirror the vendor's ExpressionParser.hasProperty: match the
+                // relationship's own properties first, then fall back to the linked
+                // (source) relationship. For an implied relationship r.relationship is
+                // a synthetic node without properties and r.linked is the real AST
+                // relationship it derives from.
+                const matched = this.relationshipHasProperty(r.relationship, propName, propValue)
+                    || this.relationshipHasProperty(r.linked, propName, propValue);
+                if (matched && elementsAtView.has(r.source) && elementsAtView.has(r.target)) {
+                    res.add(r.relationship);
                 }
             });
         }
@@ -6181,19 +6186,8 @@ class JsonGenerator {
             if (extension.tagsProps && extension.tagsProps.length > 0) {
                 const newTags: string[] = [];
                 for (const tagProp of extension.tagsProps) {
-                    const values = (tagProp as any).values || (tagProp as any).value;
-                    if (Array.isArray(values)) {
-                        for (const v of values) {
-                            const stripped = C4Utils.stripQuotes(typeof v === 'string' ? v : v.value);
-                            if (stripped) {
-                                for (const t of stripped.split(',')) {
-                                    const trimmed = t.trim();
-                                    if (trimmed) newTags.push(trimmed);
-                                }
-                            }
-                        }
-                    } else if (typeof values === 'string') {
-                        const stripped = C4Utils.stripQuotes(values);
+                    for (const v of tagProp.values) {
+                        const stripped = C4Utils.stripQuotes(v);
                         if (stripped) {
                             for (const t of stripped.split(',')) {
                                 const trimmed = t.trim();
@@ -6345,7 +6339,7 @@ class JsonGenerator {
         if (source.tagsProps && source.tagsProps.length > 0) {
             const newTags: string[] = [];
             for (const tagProp of source.tagsProps) {
-                const values = (tagProp as any).values || (tagProp as any).value;
+                const values = tagProp.values;
                 if (Array.isArray(values)) {
                     for (const v of values) {
                         const stripped = C4Utils.stripQuotes(typeof v === 'string' ? v : v.value);
@@ -6457,14 +6451,14 @@ class JsonGenerator {
         // Structural recursion (into elements, model blocks) does NOT use visited,
         // because elements within the same document must be traversed freely.
 
+        // The node may be any element/model/workspace root carrying `!elements`
+        // directives and `!include`s; read them through a structural shape.
         const anyNode = node as any;
 
         // Process elementsDirectives found on this node (!elements)
-        if (Array.isArray(anyNode.elementsDirectives)) {
+        if (anyNode.elementsDirectives) {
             for (const ext of anyNode.elementsDirectives) {
-                if (isElementsDirective(ext)) {
-                    this.applyElementsExtension(ext);
-                }
+                this.applyElementsExtension(ext);
             }
         }
 
@@ -6472,7 +6466,7 @@ class JsonGenerator {
         this.forEachNestedElement(anyNode, (child) => this.processElementsDirectives(child, visited));
 
         // Recurse into !include directives (with visited check for cycle prevention)
-        if (Array.isArray(anyNode.includes)) {
+        if (anyNode.includes) {
             for (const inc of anyNode.includes) {
                 if (inc.file) {
                     const includedRoot = this.resolveIncludedRoot(node, inc.file);
@@ -6531,13 +6525,14 @@ class JsonGenerator {
             return;
         }
 
+        // The node may be any element/model/workspace root carrying `!element`
+        // extensions and `!include`s; read them through a structural shape.
         const anyNode = node as any;
 
         // Register every ElementExtension on this node by its target AST node.
-        if (Array.isArray(anyNode.elementExtensions)) {
+        if (anyNode.elementExtensions) {
             for (const ext of anyNode.elementExtensions) {
-                if (!isElementExtension(ext)) continue;
-                const target = (ext.target as any)?.ref as NamedElement | undefined;
+                const target = ext.target?.ref;
                 let key: NamedElement | undefined = target;
                 // Form 2 (`!element <id>`): `ext.id` is a plain identifier string
                 // (not a resolved reference). The docs say it "finds a previously
@@ -6546,7 +6541,7 @@ class JsonGenerator {
                 // this.elements includes elements from ALL documents (the root
                 // workspace and every !include fragment), so the extended element
                 // can live in a different fragment than the !element itself.
-                if (!key && !(ext.target as any) && ext.id) {
+                if (!key && !ext.target && ext.id) {
                     const raw = C4Utils.stripQuotes(String(ext.id));
                     // Resolves the declared id, the name, and the hierarchical
                     // identifier (e.g. `b.c` / `a.b.c` under `!identifiers hierarchical`).
@@ -6555,18 +6550,19 @@ class JsonGenerator {
                 }
                 // Deployment environments, deployment nodes and groups are not part
                 // of this.elements, so resolve those identifiers against the AST.
-                if (!key && !(ext.target as any) && ext.id) {
+                if (!key && !ext.target && ext.id) {
                     const raw = C4Utils.stripQuotes(String(ext.id));
                     const root = AstUtils.getDocument(ext)?.parseResult.value;
                     if (root) {
-                        const astTarget = AstUtils.streamAllContents(root).find((node: any) =>
-                            node !== ext && node.id === raw
-                            && (isDeploymentEnvironment(node) || isDeploymentNode(node) || isGroup(node)));
+                        const astTarget = AstUtils.streamAllContents(root).find((node) =>
+                            node !== ext
+                            && (isDeploymentEnvironment(node) || isDeploymentNode(node) || isGroup(node))
+                            && this.elementId(node) === raw);
                         if (astTarget) key = astTarget as NamedElement;
                     }
                 }
                 // Canonical name form (`!element "DeploymentNode://Live/..."`).
-                if (!key && !(ext.target as any) && ext.id) {
+                if (!key && !ext.target && ext.id) {
                     const raw = C4Utils.stripQuotes(String(ext.id));
                     if (raw.includes('://')) {
                         const root = AstUtils.getDocument(ext)?.parseResult.value;
@@ -6615,16 +6611,15 @@ class JsonGenerator {
         this.forEachNestedElement(anyNode, (child) => this.collectElementExtensions(child, visited));
 
         // Recurse into elementExtensions' own children (groups/containers/etc.)
-        if (Array.isArray(anyNode.elementExtensions)) {
+        if (anyNode.elementExtensions) {
             for (const ext of anyNode.elementExtensions) {
-                if (!isElementExtension(ext)) continue;
-                const extAny = ext as any;
-                for (const key of ['containers', 'components', 'nodes', 'infrastructureNodes',
-                    'softwareSystemInstances', 'containerInstances', 'genericInstances', 'groups']) {
-                    if (Array.isArray(extAny[key])) {
-                        for (const child of extAny[key]) {
-                            this.collectElementExtensions(child, visited);
-                        }
+                const childArrays: AstNode[][] = [
+                    ext.containers, ext.components, ext.nodes, ext.infrastructureNodes,
+                    ext.softwareSystemInstances, ext.containerInstances, ext.genericInstances, ext.groups,
+                ];
+                for (const arr of childArrays) {
+                    for (const child of arr) {
+                        this.collectElementExtensions(child, visited);
                     }
                 }
             }
@@ -6654,21 +6649,34 @@ class JsonGenerator {
      * model elements in the JSON - only their children carry the group path.
      */
     private extensionChildren(ext: ElementExtension): {
-        containers: any[]; components: any[]; nodes: any[]; infrastructureNodes: any[];
-        containerInstances: any[]; softwareSystemInstances: any[]; genericInstances: any[];
+        containers: Container[]; components: Component[]; nodes: DeploymentNode[];
+        infrastructureNodes: InfrastructureNode[];
+        containerInstances: ContainerInstance[]; softwareSystemInstances: SoftwareSystemInstance[];
+        genericInstances: GenericInstance[];
     } {
-        const out = {
-            containers: [] as any[], components: [] as any[], nodes: [] as any[],
-            infrastructureNodes: [] as any[], containerInstances: [] as any[],
-            softwareSystemInstances: [] as any[], genericInstances: [] as any[]
+        const out: {
+            containers: Container[]; components: Component[]; nodes: DeploymentNode[];
+            infrastructureNodes: InfrastructureNode[];
+            containerInstances: ContainerInstance[]; softwareSystemInstances: SoftwareSystemInstance[];
+            genericInstances: GenericInstance[];
+        } = {
+            containers: [], components: [], nodes: [],
+            infrastructureNodes: [], containerInstances: [],
+            softwareSystemInstances: [], genericInstances: []
         };
-        const collect = (scope: any) => {
-            for (const key of Object.keys(out) as (keyof typeof out)[]) {
-                const value = scope[key];
-                if (Array.isArray(value)) out[key].push(...value);
-            }
+        // An ElementExtension and a Group expose their children through different
+        // fields, so read the per-type arrays through a structural shape.
+        const collect = (scope: ElementExtension | Group) => {
+            const host = scope as any;
+            out.containers.push(...(host.containers ?? []));
+            out.components.push(...(host.components ?? []));
+            out.nodes.push(...(host.nodes ?? []));
+            out.infrastructureNodes.push(...(host.infrastructureNodes ?? []));
+            out.containerInstances.push(...(host.containerInstances ?? []));
+            out.softwareSystemInstances.push(...(host.softwareSystemInstances ?? []));
+            out.genericInstances.push(...(host.genericInstances ?? []));
             // Groups carry their children in the mixed `elements` collection.
-            for (const item of scope.elements ?? []) {
+            for (const item of host.elements ?? []) {
                 if (isContainer(item)) out.containers.push(item);
                 else if (isComponent(item)) out.components.push(item);
                 else if (isDeploymentNode(item)) out.nodes.push(item);
@@ -6678,7 +6686,7 @@ class JsonGenerator {
                 else if (isGenericInstance(item)) out.genericInstances.push(item);
                 else if (isGroup(item)) collect(item);
             }
-            for (const group of scope.groups ?? []) collect(group);
+            for (const group of host.groups ?? []) collect(group);
         };
         collect(ext);
         return out;
@@ -6808,16 +6816,17 @@ class JsonGenerator {
             }
             if (tags.length > 0) { mods ??= {}; mods.tags = tags; }
         }
-        if (Array.isArray(ext.urlProps) && ext.urlProps.length > 0 && (ext.urlProps.at(-1) as any)?.value) {
+        const urlProp = ext.urlProps.at(-1);
+        if (urlProp?.value) {
             mods ??= {};
-            mods.url = C4Utils.stripQuotes(String((ext.urlProps.at(-1) as any).value));
+            mods.url = C4Utils.stripQuotes(String(urlProp.value));
         }
         // Properties lines accumulate; on a key collision the later line wins,
         // matching the reference parser's per-line setProperty.
-        if (Array.isArray(ext.properties) && ext.properties.length > 0) {
+        if (ext.properties.length > 0) {
             const props: Record<string, string> = {};
             for (const line of ext.properties) {
-                for (const item of (line as any)?.items ?? []) {
+                for (const item of line.items) {
                     const name = C4Utils.stripQuotes(String(item?.name ?? ''));
                     const value = C4Utils.stripQuotes(String(item?.value ?? ''));
                     if (name) props[name] = value;
@@ -6889,23 +6898,21 @@ class JsonGenerator {
 
         // Note: visited is used ONLY for !include and extends cycle prevention.
 
+        // The node may be any element/model/workspace root carrying `!relationships`
+        // directives and extensions; read them through a structural shape.
         const anyNode = node as any;
 
         // Process relationshipsDirectives found on this node
-        if (Array.isArray(anyNode.relationshipsDirectives)) {
+        if (anyNode.relationshipsDirectives) {
             for (const dir of anyNode.relationshipsDirectives) {
-                if (isRelationshipsDirective(dir)) {
-                    this.applyRelationshipsDirective(dir);
-                }
+                this.applyRelationshipsDirective(dir);
             }
         }
 
         // Process !relationship directives declared on this element
-        if (Array.isArray(anyNode.relationshipExtensions)) {
+        if (anyNode.relationshipExtensions) {
             for (const extension of anyNode.relationshipExtensions) {
-                if (isRelationshipExtension(extension)) {
-                    this.applyRelationshipExtension(extension);
-                }
+                this.applyRelationshipExtension(extension);
             }
         }
 
@@ -7813,11 +7820,11 @@ class JsonGenerator {
     private expandDeploymentAnimationElement(element: NamedElement): NamedElement[] {
         if (isSoftwareSystem(element)) {
             return this.elements.filter(el =>
-                isSoftwareSystemInstance(el) && this.el((el as any).softwareSystem?.ref) === element) as NamedElement[];
+                isSoftwareSystemInstance(el) && this.el(el.softwareSystem?.ref) === element);
         }
         if (isContainer(element)) {
             return this.elements.filter(el =>
-                isContainerInstance(el) && this.el((el as any).container?.ref) === element) as NamedElement[];
+                isContainerInstance(el) && this.el(el.container?.ref) === element);
         }
         return [element];
     }
@@ -7976,7 +7983,7 @@ class JsonGenerator {
      * the AST $container chain. For !include files, looks up the Include directive context
      * since $container points to the document root rather than the logical parent.
      */
-    private getEnvironment(deploymentNode: DeploymentNode | SoftwareSystemInstance | ContainerInstance | InfrastructureNode | Group): string | undefined {
+    private getEnvironment(deploymentNode: AstNode): string | undefined {
         const parent = deploymentNode.$container;
         if(parent) {
             if(isDeploymentEnvironment(parent)) {
@@ -7991,9 +7998,9 @@ class JsonGenerator {
                 const target = this.resolveElementExtensionTarget(parent);
                 if (target && target !== deploymentNode) {
                     if (isDeploymentEnvironment(target)) {
-                        return C4Utils.stripQuotes((target as any).name);
+                        return C4Utils.stripQuotes(target.name);
                     }
-                    return this.getEnvironment(target as any);
+                    return this.getEnvironment(target);
                 }
             }
         }
@@ -8007,7 +8014,7 @@ class JsonGenerator {
                     let current: AstNode | undefined = includeDirective.$container;
                     while (current) {
                         if (isDeploymentEnvironment(current)) {
-                            return C4Utils.stripQuotes((current as any).name);
+                            return C4Utils.stripQuotes(current.name);
                         }
                         if (isDeploymentNode(current) || isSoftwareSystemInstance(current) || isContainerInstance(current) || isInfrastructureNode(current) || isGroup(current)) {
                             return this.getEnvironment(current);

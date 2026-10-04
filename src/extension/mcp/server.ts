@@ -132,7 +132,7 @@ export async function startC4McpServer(
         });
     });
 
-    const actualPort = (httpServer.address() as { port: number }).port;
+    const actualPort = (httpServer.address() as any).port;
 
     return {
         port: actualPort,

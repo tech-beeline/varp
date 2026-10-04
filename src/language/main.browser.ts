@@ -34,9 +34,10 @@
  * Both versions share the same service creation logic via createC4Services().
  */
 
-import { EmptyFileSystem } from 'langium';
+import { EmptyFileSystem, type FileSystemProvider } from 'langium';
 import { startLanguageServer } from 'langium/lsp';
 import { BrowserMessageReader, BrowserMessageWriter, createConnection } from 'vscode-languageserver/browser';
+import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
 import { HttpCache, defaultFetcher, validateTheme } from './http-cache';
 import { withClientFileSystem, withUnsupportedSyncMethods } from './c4-binary-file-system';
@@ -54,7 +55,7 @@ const connection = createConnection(messageReader, messageWriter);
 // c4/read* requests. This is what makes !include, extendsUri, !docs and
 // documentation images work in the web version.
 
-const baseProvider = EmptyFileSystem.fileSystemProvider();
+const baseProvider: FileSystemProvider = EmptyFileSystem.fileSystemProvider();
 
 // Shared cache for fetched URL content (http/https). A single TTL applies to
 // every downloaded document (includes, extendsUri targets and remote themes).
@@ -63,7 +64,7 @@ const baseProvider = EmptyFileSystem.fileSystemProvider();
 const httpCache = new HttpCache(defaultFetcher);
 
 // Replace readFile with fetch-based implementation for URL support
-(baseProvider as any).readFile = async function(uri: any) {
+baseProvider.readFile = async function (uri: URI): Promise<string> {
     const uriString = uri.toString();
 
     // Handle http/https URLs via fetch with caching (no theme validation here -
@@ -73,7 +74,7 @@ const httpCache = new HttpCache(defaultFetcher);
     }
 
     // Workspace files are read by the extension host.
-    return await connection.sendRequest('c4/readFile', { uri: uriString });
+    return await connection.sendRequest<string>('c4/readFile', { uri: uriString });
 };
 
 // Binary content, directory listings, file types and existence checks also go to the
@@ -91,7 +92,7 @@ withUnsupportedSyncMethods(baseProvider);
 // Create C4 language services. The monkey-patched fileSystemProvider handles all file reads.
 const { shared, C4 } = createC4Services({
     connection,
-    fileSystemProvider: () => baseProvider as any
+    fileSystemProvider: () => baseProvider
 });
 
 // ─── JSON Generated Notification ───────────────────────────────────────────

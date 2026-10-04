@@ -4,7 +4,7 @@ import { EmptyFileSystem } from 'langium';
 import { URI } from 'vscode-uri';
 import { createC4Services } from '../../language/c4-module';
 import { C4JsonGenerator } from '../../language/c4-json-generator';
-import { isWorkspace } from '../../generated/ast';
+import { isC4Document, isWorkspace } from '../../generated/ast';
 
 /**
  * Loads a test fixture DSL (`test/fixtures/<name>/input.dsl`) through the real
@@ -14,11 +14,11 @@ export async function loadWorkspaceJson(fixtureDir: string): Promise<any> {
     const filePath = resolve(__dirname, '../../../test/fixtures', fixtureDir, 'input.dsl');
     const content = readFileSync(filePath, 'utf-8');
     const uri = URI.file(resolve(filePath));
-    const services = createC4Services({ connection: undefined as any, ...EmptyFileSystem }).C4;
+    const services = createC4Services({ ...EmptyFileSystem }).C4;
     const doc = services.shared.workspace.LangiumDocumentFactory.fromString(content, uri);
     await services.shared.workspace.DocumentBuilder.build([doc]);
     const root = doc.parseResult.value;
-    const workspace = isWorkspace(root) ? root : (root as any).workspaces?.[0];
+    const workspace = isWorkspace(root) ? root : (isC4Document(root) ? root.workspaces[0] : undefined);
     if (!workspace) {
         throw new Error(`No workspace found in fixture ${fixtureDir}`);
     }

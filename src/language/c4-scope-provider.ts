@@ -51,6 +51,16 @@ interface LocalScopePackage {
  */
 const IDENTIFIER_DESCRIPTION_TAG = Symbol('c4IdentifierDescription');
 
+/** Marks a description as carrying an identifier (for the case-insensitive fallback). */
+function markIdentifierDescription(desc: AstNodeDescription): void {
+    (desc as unknown as Record<symbol, boolean>)[IDENTIFIER_DESCRIPTION_TAG] = true;
+}
+
+/** Whether a description was marked as carrying an identifier. */
+function isIdentifierDescription(desc: AstNodeDescription): boolean {
+    return (desc as unknown as Record<symbol, boolean | undefined>)[IDENTIFIER_DESCRIPTION_TAG] === true;
+}
+
 /**
  * Per-document identifier-style regions: a base region at offset -1 (inherited
  * from the extendsUri chain) plus one region per !identifiers directive, sorted
@@ -242,11 +252,12 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     ): AstNodeDescription[] {
         const descriptions: AstNodeDescription[] = [];
 
-        let elementId = (element as any).id;
+        const elementRecord = element as any;
+        let elementId = elementRecord.id;
         if (!elementId && isArchetypeDefinition(element)) {
-            elementId = (element as any).name;
+            elementId = elementRecord.name;
         }
-        const elementName = (element as any).name;
+        const elementName = elementRecord.name;
 
         // 1. Register by ID (if present)
         if (elementId) {
@@ -256,7 +267,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 const fqn = parts.join('.');
                 const fqnDesc = this.services.workspace.AstNodeDescriptionProvider.createDescription(element, fqn, document);
                 // Tag as identifier: FQN lookup is case-insensitive.
-                (fqnDesc as any)[IDENTIFIER_DESCRIPTION_TAG] = true;
+                markIdentifierDescription(fqnDesc);
                 descriptions.push(fqnDesc);
 
                 // Create suffix aliases for ancestor scopes.
@@ -271,7 +282,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                         if (!scopeOwner) break;
                         const list = suffixAliasesByScope.get(scopeOwner) ?? [];
                         const aliasDesc = { ...fqnDesc, name: suffix };
-                        (aliasDesc as any)[IDENTIFIER_DESCRIPTION_TAG] = true;
+                        markIdentifierDescription(aliasDesc);
                         list.push(aliasDesc);
                         suffixAliasesByScope.set(scopeOwner, list);
                     }
@@ -279,7 +290,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             } else {
                 // Flat mode: just use the bare ID
                 const fqnDesc = this.services.workspace.AstNodeDescriptionProvider.createDescription(element, elementId, document);
-                (fqnDesc as any)[IDENTIFIER_DESCRIPTION_TAG] = true;
+                markIdentifierDescription(fqnDesc);
                 descriptions.push(fqnDesc);
 
                 // Elements nested inside an `!element` (ElementExtension) are
@@ -293,7 +304,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                     if (parts.length > 1) {
                         const fqn = parts.join('.');
                         const fqnExt = this.services.workspace.AstNodeDescriptionProvider.createDescription(element, fqn, document);
-                        (fqnExt as any)[IDENTIFIER_DESCRIPTION_TAG] = true;
+                        markIdentifierDescription(fqnExt);
                         descriptions.push(fqnExt);
                     }
                 }
@@ -319,7 +330,8 @@ export class C4ScopeProvider extends DefaultScopeProvider {
         const parts: string[] = [nodeId];
         let current = node.$container;
         while (current) {
-            const parentId = (current as any).id || (current as any).name;
+            const currentRecord = current as any;
+            const parentId = currentRecord.id || currentRecord.name;
             if (parentId && isNamedElement(current) && !isGroup(current)) {
                 parts.unshift(parentId);
             }
@@ -336,7 +348,8 @@ export class C4ScopeProvider extends DefaultScopeProvider {
         const ancestors: AstNode[] = [];
         let current = node.$container;
         while (current) {
-            const parentId = (current as any).id || (current as any).name;
+            const currentRecord = current as any;
+            const parentId = currentRecord.id || currentRecord.name;
             if (parentId && isNamedElement(current) && !isGroup(current)) {
                 ancestors.push(current);
             }
@@ -487,7 +500,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 // linker.
                 const archetypesByName = new Map<string, AstNode>();
                 for (const desc of globalDescriptions) {
-                    const node = (desc as any).node as AstNode | undefined;
+                    const node = desc.node;
                     // Accepts ArchetypeDefinition and its ArchetypeNamed subtype.
                     if (!node || !isArchetypeDefinition(node)) {
                         continue;
@@ -528,7 +541,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                     // An ArchetypeInstance is assignable through the base type of its
                     // archetype (e.g. `b = externalSoftwareSystem "B"` behaves as a
                     // SoftwareSystem), resolved via $refText.
-                    const effective = archetypeInstanceTypeByRefText((desc as any).node, lookupArchetype);
+                    const effective = archetypeInstanceTypeByRefText(desc.node, lookupArchetype);
                     return !!effective && this.reflection.isSubtype(effective, referenceType);
                 };
 
@@ -562,7 +575,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 const tagged: AstNodeDescription[] = [];
                 const collectTagged = (descs: Iterable<AstNodeDescription>) => {
                     for (const d of descs) {
-                        if ((d as any)[IDENTIFIER_DESCRIPTION_TAG] && isAssignable(d)) tagged.push(d);
+                        if (isIdentifierDescription(d) && isAssignable(d)) tagged.push(d);
                     }
                 };
                 collectTagged(globalDescriptions);

@@ -32,6 +32,7 @@
 import { startLanguageServer } from 'langium/lsp';
 import { NodeFileSystem } from 'langium/node';
 import { createConnection, ProposedFeatures } from 'vscode-languageserver/node';
+import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
 import { HttpCache, defaultFetcher, validateTheme } from './http-cache';
 
@@ -54,18 +55,18 @@ const baseProvider = NodeFileSystem.fileSystemProvider();
 const httpCache = new HttpCache(defaultFetcher);
 
 // Store reference to the original readFile for non-URL fallback
-const originalReadFile = (baseProvider as any).readFile.bind(baseProvider);
+const originalReadFile = baseProvider.readFile.bind(baseProvider);
 
 // Replace readFile with an async version that handles both local files and URLs
-(baseProvider as any).readFile = async function(uri: any) {
+baseProvider.readFile = async function (uri: URI) {
     const uriString = uri.toString();
-    
+
     // Handle http/https URLs via fetch with caching (no theme validation here -
     // include/extendsUri documents are not themes).
     if (uriString.startsWith('http://') || uriString.startsWith('https://')) {
         return await httpCache.readRemoteWithCache(uriString);
     }
-    
+
     // For local files, delegate to the original Node.js readFile
     return originalReadFile(uri);
 };
@@ -77,7 +78,7 @@ const originalReadFile = (baseProvider as any).readFile.bind(baseProvider);
 // URL-aware readFile wrapper.
 const { shared, C4 } = createC4Services({
     connection,
-    fileSystemProvider: () => baseProvider as any
+    fileSystemProvider: () => baseProvider
 });
 
 // ─── JSON Generated Notification ───────────────────────────────────────────

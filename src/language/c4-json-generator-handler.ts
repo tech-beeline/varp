@@ -16,9 +16,9 @@
 
 import { DocumentState, LangiumDocument, WorkspaceCache } from 'langium';
 import { isWorkspace, C4Document, isC4Document } from '../generated/ast';
-import { LangiumServices } from 'langium/lsp';
 import { URI } from 'vscode-uri';
 import * as includeResolver from './c4-include-resolver';
+import type { C4Services } from './c4-module';
 import { C4JsonEnricher } from './c4-json-enricher';
 import { applyDrawioLayoutToView } from './c4-drawio-layout';
 
@@ -52,7 +52,7 @@ let jsonGeneration = 0;
  */
 export class C4GeneratorHandler {
     private jsonCache: WorkspaceCache<string, GeneratedJson>;
-    private services: LangiumServices;
+    private services: C4Services;
     /**
      * Root workspace URIs that currently have cached JSON. Kept in sync with
      * jsonCache: on every workspace update the WorkspaceCache is wiped wholesale,
@@ -91,7 +91,7 @@ export class C4GeneratorHandler {
      */
     public onJsonGenerated?: (uri: string, json: any, generation: number) => void;
 
-    constructor(services: LangiumServices) {
+    constructor(services: C4Services) {
         this.services = services;
         this.jsonCache = new WorkspaceCache<string, any>(services.shared);
         this.enricher = new C4JsonEnricher(services.shared);
@@ -238,7 +238,7 @@ export class C4GeneratorHandler {
 
     private async doGenerateAndCache(uri: string, workspace: any): Promise<void> {
         try {
-            const generator = (this.services as any).generation.C4JsonGenerator;
+            const generator = this.services.generation.C4JsonGenerator;
             const json = await generator.generate(workspace, uri);
             // Cache the json WITHOUT mutating it. The generation identifies this
             // build and stays stable across every delivery of the same payload.
@@ -279,7 +279,7 @@ export class C4GeneratorHandler {
      * C4Document), or undefined if the document has no workspace.
      */
     private getWorkspaceNode(doc: LangiumDocument): any | undefined {
-        const root = doc.parseResult.value as any;
+        const root = doc.parseResult.value;
         if (isWorkspace(root)) {
             return root;
         }
@@ -349,7 +349,7 @@ export class C4GeneratorHandler {
     public getTextMeasurements(uri: string): Record<string, any> {
         const rootUri = this.getRootUri(uri);
         if (!this.jsonCache.get(rootUri)) return {};
-        return (this.services as any).generation.C4JsonGenerator.getTextMeasurements(rootUri);
+        return this.services.generation.C4JsonGenerator.getTextMeasurements(rootUri);
     }
 
     /**
@@ -364,7 +364,7 @@ export class C4GeneratorHandler {
         const rootUri = this.getRootUri(uri);
         const entry = this.jsonCache.get(rootUri);
         if (!entry || entry.generation !== generation) return undefined;
-        const { views, changed } = await (this.services as any).generation.C4JsonGenerator.applyTextMeasurements(rootUri, entry.json, widths ?? {});
+        const { views, changed } = await this.services.generation.C4JsonGenerator.applyTextMeasurements(rootUri, entry.json, widths ?? {});
         if (changed) {
             jsonGeneration += 1;
             entry.generation = jsonGeneration;
@@ -391,7 +391,7 @@ export class C4GeneratorHandler {
 
         // Size the paper to the imported content the same way the graphviz layout does,
         // including the auto-drawn frames (deployment nodes, groups, scope boundaries).
-        (this.services as any).generation.C4JsonGenerator.fitImportedView(rootUri, viewKey, view);
+        this.services.generation.C4JsonGenerator.fitImportedView(rootUri, viewKey, view);
 
         jsonGeneration += 1;
         entry.generation = jsonGeneration;

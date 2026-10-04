@@ -13,7 +13,13 @@ workspace {
             autolayout
         }
 
+        systemContext softwareSystem {
+            include *
+            exclude "* -> element.tag==Software System"
+            autolayout
+        }
+
         theme default
     }
-    
+
 }

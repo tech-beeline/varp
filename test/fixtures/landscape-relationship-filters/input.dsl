@@ -15,6 +15,11 @@ workspace {
     views {
         systemLandscape {
             include *
+            exclude r
+        }
+
+        systemLandscape {
+            include *
             exclude *->*
             include r
         }

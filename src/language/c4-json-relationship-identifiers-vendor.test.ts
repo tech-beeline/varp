@@ -82,8 +82,7 @@ function relationshipIdentifiers(json: any): string[] {
 describe('c4-json-relationship-identifiers-vendor', () => {
 	it.each<[string, string[]]>([
 		['dynamic-view-with-explicit-relationships', ['r1', 'r2']],
-		['exclude-implied-relationship', ['r']],
-		['include-implied-relationship', ['r']],
+		['landscape-relationship-filters', ['r']],
 		['identifiers', ['rel']],
 	])('emits the declared relationship identifiers for %s', async (name, expected) => {
 		const json = await generateAndEnrich(resolve(__dirname, '../../test/fixtures', name));

@@ -16,7 +16,7 @@
 
 import { AstNode, AstUtils, Reference } from 'langium';
 import { URI } from 'vscode-uri';
-import { flatId, C4Utils, archetypeChain, archetypeInstanceType, declaredIdentifier, type FlatIdResolvers } from './c4-utils';
+import { flatId, C4Utils, OVERLAY_PROPERTY_KEYS, archetypeChain, archetypeInstanceType, declaredIdentifier, type FlatIdResolvers } from './c4-utils';
 import { encodePlantUml } from './plantuml-encoder';
 import { Graphviz } from '@hpcc-js/wasm-graphviz';
 
@@ -1074,6 +1074,28 @@ class JsonGenerator {
     }
 
     /**
+     * Collects a list of properties blocks into a flat record; a later line wins
+     * on a key collision and entries with an empty name or value are skipped.
+     */
+    private propertiesToRecord(blocks: Array<{ items?: Array<{ name?: string; value?: string }> }> | undefined): Record<string, string> | undefined {
+        if (!Array.isArray(blocks) || blocks.length === 0) return undefined;
+        const props: Record<string, string> = {};
+        for (const block of blocks) {
+            for (const item of block?.items ?? []) {
+                const name = C4Utils.stripQuotes(item?.name);
+                const value = C4Utils.stripQuotes(item?.value);
+                if (name && value) props[name] = value;
+            }
+        }
+        return Object.keys(props).length > 0 ? props : undefined;
+    }
+
+    /** Collects a style's user properties; a later line wins on a key collision. */
+    private styleProperties(style: { properties?: Array<{ items?: Array<{ name?: string; value?: string }> }> }): Record<string, string> | undefined {
+        return this.propertiesToRecord(style?.properties);
+    }
+
+    /**
      * Transforms an ElementStyle AST node into the JSON object the viewer expects:
      * integer fields stay numbers, hex colours are lower-cased, and shape/border/icon
      * position are normalised to the PascalCase the model serialises.
@@ -1096,6 +1118,8 @@ class JsonGenerator {
         this.addClampedNumberIfDefined(result, 'opacity', style.opacityProps, 0, 100);
         this.addBooleanIfDefined(result, 'metadata', style.metadataProps);
         this.addBooleanIfDefined(result, 'description', style.descriptionProp);
+        const props = this.styleProperties(style);
+        if (props) result.properties = props;
         return result;
     }
 
@@ -1120,6 +1144,8 @@ class JsonGenerator {
         this.addEnumIfDefined(result, 'style', style.styleProps, BORDER_NORMALIZE);
         this.addBooleanIfDefined(result, 'metadata', style.metadataProps);
         this.addBooleanIfDefined(result, 'description', style.descriptionProp);
+        const props = this.styleProperties(style);
+        if (props) result.properties = props;
         return result;
     }
     
@@ -1458,6 +1484,13 @@ class JsonGenerator {
         }
     }
 
+    /** Overlay tags as a comma-separated string (deduplicated), for implied relationships. */
+    private overlayTagsOnly(overlay: { tags?: string[] } | undefined): string | undefined {
+        if (!overlay?.tags || overlay.tags.length === 0) return undefined;
+        const merged = Array.from(new Set(overlay.tags.map(t => t.trim()).filter(Boolean)));
+        return merged.length > 0 ? merged.join(',') : undefined;
+    }
+
     /**
      * Converts an ImpliedRelationship into a JSON object. Applies overlay modifications
      * from !relationships directives (tags, URL, properties, perspectives).
@@ -1472,8 +1505,9 @@ class JsonGenerator {
             destinationId: this.getId(this.resolveTarget(relationship.relationship)),
             description: this.description(relationship.relationship),
             technology: overlay?.technology ?? this.technology(relationship.relationship),
-            // Implied relationships carry no tags.
-            tags: relationship.linked ? undefined : this.extractTags(relationship.relationship, 'Relationship'),
+            // Implied relationships carry no default tags, only the ones an
+            // overlay (!relationships/!relationship) contributed.
+            tags: relationship.linked ? this.overlayTagsOnly(overlay) : this.extractTags(relationship.relationship, 'Relationship'),
             url: this.url(relationship.relationship),
             linkedRelationshipId: relationship.linked ? this.getId(relationship.linked) : undefined
         };
@@ -1772,7 +1806,10 @@ class JsonGenerator {
             result.url = overlay.url;
         }
         if (overlay.properties && Object.keys(overlay.properties).length > 0) {
-            result.properties = { ...overlay.properties };
+            // Overlay properties override the values set so far (archetype
+            // properties); keys the overlay does not touch are kept.
+            result.properties = { ...(result.properties ?? {}), ...overlay.properties };
+            result[OVERLAY_PROPERTY_KEYS] = new Set(Object.keys(overlay.properties));
         }
         if (overlay.perspectives) {
             result.perspectives = overlay.perspectives;
@@ -6177,19 +6214,10 @@ class JsonGenerator {
             }
 
             // Apply properties (merge)
-            if (extension.properties && extension.properties.length > 0) {
-                for (const propBlock of extension.properties) {
-                    if (propBlock.items) {
-                        for (const item of propBlock.items) {
-                            const name = C4Utils.stripQuotes(item.name);
-                            const value = C4Utils.stripQuotes(item.value);
-                            if (name && value) {
-                                if (!overlay.properties) overlay.properties = {};
-                                overlay.properties[name] = value;
-                            }
-                        }
-                    }
-                }
+            const overlayProps = this.propertiesToRecord(extension.properties);
+            if (overlayProps) {
+                if (!overlay.properties) overlay.properties = {};
+                Object.assign(overlay.properties, overlayProps);
             }
 
             // Apply perspectives
@@ -6355,19 +6383,10 @@ class JsonGenerator {
         }
 
         // Apply properties (merge)
-        if (source.properties && source.properties.length > 0) {
-            for (const propBlock of source.properties) {
-                if (propBlock.items) {
-                    for (const item of propBlock.items) {
-                        const name = C4Utils.stripQuotes(item.name);
-                        const value = C4Utils.stripQuotes(item.value);
-                        if (name && value) {
-                            if (!overlay.properties) overlay.properties = {};
-                            overlay.properties[name] = value;
-                        }
-                    }
-                }
-            }
+        const sourceProps = this.propertiesToRecord(source.properties);
+        if (sourceProps) {
+            if (!overlay.properties) overlay.properties = {};
+            Object.assign(overlay.properties, sourceProps);
         }
 
         // Apply perspectives

@@ -21,12 +21,21 @@ import {
     isContainer,
     isContainerInstance,
     isDeploymentNode,
+    isGenericInstance,
     isImplicitRelationship,
     isInfrastructureNode,
     isRelationship,
     isSoftwareSystem,
     isSoftwareSystemInstance,
 } from '../generated/ast';
+
+/**
+ * A symbol key the generator sets on an emitted element to mark which property
+ * keys came from a `!elements` overlay. The enricher reads it while merging the
+ * element's own properties and then removes it. Symbol keys are ignored by
+ * JSON.stringify and by structured clone, so they never reach consumers.
+ */
+export const OVERLAY_PROPERTY_KEYS = Symbol('overlayPropertyKeys');
 
 export class C4Utils {
 
@@ -154,6 +163,7 @@ export function flatId(element: any, rootDocUri: string, resolvers?: FlatIdResol
     }
 
     const offset = element?.$cstNode?.offset ?? '0';
+    const type = canonicalElementType(element);
     let hashInput: string;
 
     if (isImplicitRelationship(element)) {
@@ -169,7 +179,6 @@ export function flatId(element: any, rootDocUri: string, resolvers?: FlatIdResol
         const targetId = target ? flatId(target, rootDocUri, resolvers) : 'unknown_dst';
         hashInput = `relationship|${sourceId}|${targetId}|${docPart}${offset}`;
     } else {
-        const type = element?.$type || 'element';
         hashInput = `${type}|${docPart}${offset}`;
     }
 
@@ -179,9 +188,29 @@ export function flatId(element: any, rootDocUri: string, resolvers?: FlatIdResol
     if (isRelationship(element) || isImplicitRelationship(element)) {
         prefix = 'relationship';
     } else if (element?.$type) {
-        prefix = element.$type.toLowerCase();
+        prefix = type.toLowerCase();
     }
     return `${prefix}_${hash}`;
+}
+
+/**
+ * The element type a flat id is computed from. `GenericInstance` (the
+ * `instanceOf` form) and `ArchetypeInstance` nodes are materialised by the
+ * generator as a concrete base type, so their id must use that effective type;
+ * otherwise the enricher — which sees the original AST node — would compute a
+ * different id for the same emitted element.
+ */
+function canonicalElementType(element: any): string {
+    if (isGenericInstance(element)) {
+        const ref = element?.element?.ref;
+        if (isSoftwareSystem(ref)) return 'SoftwareSystemInstance';
+        if (isContainer(ref)) return 'ContainerInstance';
+    }
+    if (isArchetypeInstance(element)) {
+        const effective = archetypeInstanceType(element);
+        if (effective && effective !== 'Relationship') return effective;
+    }
+    return element?.$type || 'element';
 }
 
 /**

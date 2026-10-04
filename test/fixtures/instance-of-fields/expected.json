@@ -1,0 +1,118 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "deploymentNodes" : [ {
+      "containerInstances" : [ {
+        "containerId" : "2",
+        "environment" : "Live",
+        "id" : "4",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "7ce3fb0a-5114-40f9-ae4e-2ace6422ce25",
+          "explicit" : "true"
+        },
+        "tags" : "Container Instance",
+        "url" : "https://explicit.example"
+      }, {
+        "containerId" : "2",
+        "environment" : "Live",
+        "healthChecks" : [ {
+          "interval" : 60,
+          "name" : "Check 1",
+          "timeout" : 0,
+          "url" : "https://example.com/health"
+        }, {
+          "interval" : 60,
+          "name" : "Check 2",
+          "timeout" : 0,
+          "url" : "https://example.com/health"
+        } ],
+        "id" : "5",
+        "instanceId" : 2,
+        "perspectives" : [ {
+          "description" : "An implied perspective",
+          "name" : "Security"
+        } ],
+        "properties" : {
+          "structurizr.dsl.identifier" : "96c0d237-16ed-4dfa-afe8-a2f9e5cb8298",
+          "implied" : "true"
+        },
+        "tags" : "Container Instance",
+        "url" : "https://implied.example"
+      } ],
+      "description" : "Description",
+      "environment" : "Live",
+      "id" : "3",
+      "instances" : "1",
+      "name" : "Web Server",
+      "properties" : {
+        "structurizr.dsl.identifier" : "225c7943-de2e-4015-a419-a871884371db"
+      },
+      "tags" : "Element,Deployment Node",
+      "technology" : "Technology"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "description" : "Description",
+        "documentation" : { },
+        "id" : "2",
+        "name" : "Web Application",
+        "properties" : {
+          "structurizr.dsl.identifier" : "webapp"
+        },
+        "tags" : "Element,Container",
+        "technology" : "Technology"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "Software System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "softwareSystem"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Instance Of Fields",
+  "properties" : {
+    "structurizr.inspection.error" : "10",
+    "structurizr.dsl" : "d29ya3NwYWNlICJJbnN0YW5jZSBPZiBGaWVsZHMiIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gPSBzb2Z0d2FyZVN5c3RlbSAiU29mdHdhcmUgU3lzdGVtIiB7DQogICAgICAgICAgICB3ZWJhcHAgPSBjb250YWluZXIgIldlYiBBcHBsaWNhdGlvbiIgIkRlc2NyaXB0aW9uIiAiVGVjaG5vbG9neSINCiAgICAgICAgfQ0KDQogICAgICAgIGRlcGxveW1lbnRFbnZpcm9ubWVudCAiTGl2ZSIgew0KICAgICAgICAgICAgZGVwbG95bWVudE5vZGUgIldlYiBTZXJ2ZXIiICJEZXNjcmlwdGlvbiIgIlRlY2hub2xvZ3kiIHsNCiAgICAgICAgICAgICAgICBjb250YWluZXJJbnN0YW5jZSB3ZWJhcHAgew0KICAgICAgICAgICAgICAgICAgICB1cmwgImh0dHBzOi8vZXhwbGljaXQuZXhhbXBsZSINCiAgICAgICAgICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgICAgICAgICAiZXhwbGljaXQiICJ0cnVlIg0KICAgICAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgICAgIGluc3RhbmNlT2Ygd2ViYXBwIHsNCiAgICAgICAgICAgICAgICAgICAgdXJsICJodHRwczovL2ltcGxpZWQuZXhhbXBsZSINCiAgICAgICAgICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgICAgICAgICAiaW1wbGllZCIgInRydWUiDQogICAgICAgICAgICAgICAgICAgIH0NCiAgICAgICAgICAgICAgICAgICAgcGVyc3BlY3RpdmVzIHsNCiAgICAgICAgICAgICAgICAgICAgICAgICJTZWN1cml0eSIgIkFuIGltcGxpZWQgcGVyc3BlY3RpdmUiDQogICAgICAgICAgICAgICAgICAgIH0NCiAgICAgICAgICAgICAgICAgICAgaGVhbHRoQ2hlY2sgIkNoZWNrIDEiICJodHRwczovL2V4YW1wbGUuY29tL2hlYWx0aCINCiAgICAgICAgICAgICAgICAgICAgaGVhbHRoQ2hlY2sgIkNoZWNrIDEiICJodHRwczovL2V4YW1wbGUuY29tL2hlYWx0aCIgMTIwDQogICAgICAgICAgICAgICAgICAgIGhlYWx0aENoZWNrICJDaGVjayAyIiAiaHR0cHM6Ly9leGFtcGxlLmNvbS9oZWFsdGgiDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQogICAgfQ0KDQogICAgdmlld3Mgew0KICAgICAgICBkZXBsb3ltZW50ICogIkxpdmUiICJEZXBsb3ltZW50IiB7DQogICAgICAgICAgICBpbmNsdWRlICoNCiAgICAgICAgICAgIGF1dG9sYXlvdXQNCiAgICAgICAgfQ0KICAgIH0NCg0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "deploymentViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "Live",
+      "key" : "Deployment",
+      "name" : "Deployment View: Live",
+      "order" : 1
+    } ]
+  }
+}

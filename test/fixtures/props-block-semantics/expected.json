@@ -1,0 +1,99 @@
+{
+  "configuration" : { },
+  "description" : "Pinned semantics of the shared properties-block collector",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "people" : [ {
+      "id" : "1",
+      "name" : "User",
+      "properties" : {
+        "structurizr.dsl.identifier" : "user"
+      },
+      "relationships" : [ {
+        "description" : "Uses",
+        "destinationId" : "3",
+        "id" : "4",
+        "properties" : {
+          "rdup" : "rsecond"
+        },
+        "sourceId" : "1",
+        "tags" : "Relationship",
+        "technology" : "HTTPS"
+      }, {
+        "description" : "Uses",
+        "destinationId" : "2",
+        "id" : "5",
+        "linkedRelationshipId" : "4",
+        "properties" : {
+          "rdup" : "rsecond"
+        },
+        "sourceId" : "1",
+        "technology" : "HTTPS"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "3",
+        "name" : "Container",
+        "properties" : {
+          "structurizr.dsl.identifier" : "c",
+          "single" : "single-value",
+          "block2" : "block2-value",
+          "dup" : "third"
+        },
+        "tags" : "Element,Container"
+      } ],
+      "documentation" : { },
+      "id" : "2",
+      "name" : "System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "system"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Props Semantics",
+  "properties" : {
+    "structurizr.inspection.error" : "8",
+    "structurizr.dsl" : "d29ya3NwYWNlICJQcm9wcyBTZW1hbnRpY3MiICJQaW5uZWQgc2VtYW50aWNzIG9mIHRoZSBzaGFyZWQgcHJvcGVydGllcy1ibG9jayBjb2xsZWN0b3IiIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgdXNlciA9IHBlcnNvbiAiVXNlciINCiAgICAgICAgc3lzdGVtID0gc29mdHdhcmVTeXN0ZW0gIlN5c3RlbSIgew0KICAgICAgICAgICAgYyA9IGNvbnRhaW5lciAiQ29udGFpbmVyIg0KICAgICAgICB9DQogICAgICAgIHVzZXIgLT4gYyAiVXNlcyIgIkhUVFBTIg0KDQogICAgICAgICFlbGVtZW50cyBlbGVtZW50LnR5cGU9PUNvbnRhaW5lciB7DQogICAgICAgICAgICBwcm9wZXJ0aWVzIHsNCiAgICAgICAgICAgICAgICAiZHVwIiAiZmlyc3QiDQogICAgICAgICAgICAgICAgImR1cCIgInNlY29uZCINCiAgICAgICAgICAgICAgICAic2luZ2xlIiAic2luZ2xlLXZhbHVlIg0KICAgICAgICAgICAgfQ0KICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgImR1cCIgInRoaXJkIg0KICAgICAgICAgICAgICAgICJibG9jazIiICJibG9jazItdmFsdWUiDQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICAhcmVsYXRpb25zaGlwcyAqLT4qIHsNCiAgICAgICAgICAgIHByb3BlcnRpZXMgew0KICAgICAgICAgICAgICAgICJyZHVwIiAicmZpcnN0Ig0KICAgICAgICAgICAgICAgICJyZHVwIiAicnNlY29uZCINCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIHZpZXdzIHsNCiAgICAgICAgc3lzdGVtY29udGV4dCBzeXN0ZW0gIk92ZXJ2aWV3IiB7DQogICAgICAgICAgICBpbmNsdWRlICoNCiAgICAgICAgfQ0KICAgICAgICBzdHlsZXMgew0KICAgICAgICAgICAgZWxlbWVudCAiQ29udGFpbmVyIiB7DQogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjZmZmZmZmDQogICAgICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgICAgICJzZHVwIiAic2ZpcnN0Ig0KICAgICAgICAgICAgICAgICAgICAic2R1cCIgInNzZWNvbmQiDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQogICAgfQ0KDQp9",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : {
+        "elements" : [ {
+          "background" : "#ffffff",
+          "properties" : {
+            "sdup" : "ssecond"
+          },
+          "tag" : "Container"
+        } ]
+      },
+      "terminology" : { }
+    },
+    "systemContextViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "Overview",
+      "name" : "System Context View: System",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "5"
+      } ],
+      "softwareSystemId" : "2"
+    } ]
+  }
+}

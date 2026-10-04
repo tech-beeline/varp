@@ -24,7 +24,7 @@
 import { AstUtils, LangiumSharedCoreServices, type AstNode, type FileSystemNode } from 'langium';
 import { base64EncodeBytes } from './c4-base64';
 import { Utils, URI } from 'vscode-uri';
-import { flatId, declaredIdentifier, contextElement } from './c4-utils';
+import { flatId, declaredIdentifier, contextElement, OVERLAY_PROPERTY_KEYS } from './c4-utils';
 import { base64EncodeUtf8, isDslPortable, isDslSourceRetained, retainedDslText } from './c4-dsl-source';
 import {
     AdrsDirective,
@@ -371,13 +371,36 @@ export class C4JsonEnricher {
             const url = this.firstPropValue(node.urlProps);
             if (url !== undefined) target.url = url;
         }
-        if (target.properties === undefined) {
-            const props = this.collectProperties(node.properties);
-            if (props) target.properties = props;
+        // Merge the element's own properties with the values the generator set.
+        // The reference parser applies archetype properties at element creation,
+        // the element's own properties afterwards, and a `!elements` overlay last,
+        // so on a key collision the overlay wins, then the element's own value,
+        // then the archetype's.
+        const ownProps = this.collectProperties(node.properties);
+        const overlayKeys = target[OVERLAY_PROPERTY_KEYS];
+        delete target[OVERLAY_PROPERTY_KEYS];
+        if (ownProps) {
+            const current: Record<string, string> = target.properties ?? {};
+            const merged: Record<string, string> = {};
+            for (const [k, v] of Object.entries(current)) {
+                if (!(overlayKeys instanceof Set) || !overlayKeys.has(k)) merged[k] = v;
+            }
+            for (const [k, v] of Object.entries(ownProps)) merged[k] = v;
+            if (overlayKeys instanceof Set) {
+                for (const k of overlayKeys) {
+                    if (k in current) merged[k] = current[k];
+                }
+            }
+            target.properties = merged;
         }
-        if (target.perspectives === undefined) {
-            const perspectives = this.collectPerspectives(node.perspectivesBlocks);
-            if (perspectives && perspectives.length > 0) target.perspectives = perspectives;
+        // Merge the element's own perspectives with the generator's (overlay), keeping
+        // the parse order (own first) and the first value seen for a duplicated name.
+        const ownPerspectives = this.collectPerspectives(node.perspectivesBlocks);
+        if (ownPerspectives && ownPerspectives.length > 0) {
+            const existing = Array.isArray(target.perspectives) ? target.perspectives : [];
+            const ownNames = new Set(ownPerspectives.map((p: any) => p?.name).filter((n: any) => typeof n === 'string'));
+            const additions = existing.filter((p: any) => typeof p?.name !== 'string' || !ownNames.has(p.name));
+            target.perspectives = [...ownPerspectives, ...additions];
         }
         if (target.technology === undefined) {
             const tech = this.firstPropValue(node.techProps);

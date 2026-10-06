@@ -42,8 +42,8 @@ import {
     ViewsBlock, SystemContextView, isWorkspace, isC4Document,
     isViewsBlock, ElementStyle, RelationshipStyle, isStylesBlock,
     PropertiesBlock, TerminologyBlock,
-    StylesBlock, isModelBlock, isConstant, Include, isInclude, isGroup, isDeploymentNode,
-    isArchetypesBlock, isArchetypeInstance, isArchetypeNamed, isImageView, isPlantUMLSource, isImageSource,
+    StylesBlock, isModelBlock, isConstant, Constant, Include, isInclude, isGroup, isDeploymentNode,
+    isArchetypesBlock, ArchetypesBlock, isArchetypeInstance, isArchetypeNamed, ArchetypeDefinition, isImageView, isPlantUMLSource, isImageSource,
     isDeploymentView, DynamicMember, isDynamicStep, isParallelStepBlock,
     DynamicView, isContainerView,
     isSystemLandscapeView, isSystemContextView,
@@ -422,10 +422,11 @@ class JsonGenerator {
             : '/';
 
         this.collectElementsRelationships(workspace);
-        // Document depths in the `extends` chain, for base-first instance ordering.
-        this.extendsDepths = this.computeExtendsDepths(workspace);
-        // Source positions within each extends block, for same-depth instance ordering.
-        this.elementSourcePositions = this.computeElementSourcePositions(workspace);
+        // Extends depths (base-first instance ordering) and source positions within
+        // each extends block (same-depth instance ordering), computed in one walk.
+        const extendsInfo = this.computeExtendsInfo(workspace);
+        this.extendsDepths = extendsInfo.depths;
+        this.elementSourcePositions = extendsInfo.positions;
         // Resolve `-/>` directives and project deployment-context relationships onto
         // instances before indexing relationships by source.
         this.buildNoRelationshipSuppressions();
@@ -468,8 +469,8 @@ class JsonGenerator {
             // playground and prints the current date, so any other value keeps the
             // diagram metadata block on the workspace's own timestamp.
             id: 1,
-            name: this.substitute(this.inheritedWorkspaceValue(workspace, ws => ws.name)) || "Name",
-            description: this.substitute(this.inheritedWorkspaceValue(workspace, ws => this.description(ws))) || "Description",
+            name: this.workspaceName(workspace),
+            description: this.workspaceDescription(workspace),
             // Documentable nodes always carry a documentation object (empty when the
             // workspace has none), because clients read `documentation.sections`.
             documentation: {},
@@ -751,26 +752,29 @@ class JsonGenerator {
             visited.add(docUri);
         }
 
-        // Collect constants from anywhere in the document subtree. Constants may be
-        // declared at document, workspace, model, or element level, so a plain
-        // node.constants scan (workspace-level only) would miss them
-        AstUtils.streamAllContents(root).filter(isConstant).forEach((c) => {
+        // Constants may be declared at document, workspace, model, or element level,
+        // and !include directives may appear top-level, inside model blocks, or nested
+        // in elements. Gather both in a single walk of the document subtree, then apply
+        // constants first (so they take precedence over included ones) and recurse into
+        // the includes — matching the original two-pass order.
+        const constantsFound: Constant[] = [];
+        const includesFound: Include[] = [];
+        for (const content of AstUtils.streamAllContents(root)) {
+            if (isConstant(content)) constantsFound.push(content);
+            else if (isInclude(content) && content.file) includesFound.push(content);
+        }
+        for (const c of constantsFound) {
             const name = (c.name ?? '').toString().replace(/['"]/g, '');
             const rawValue = (c.value ?? '').toString();
             const value = rawValue.trimStart().startsWith('"""')
                 ? C4Utils.textBlockValue(rawValue)
                 : (typeof rawValue === 'string' ? rawValue.replace(/^['"]|['"]$/g, '') : rawValue);
             if (name && !this.constants.has(name)) this.constants.set(name, value);
-        });
-
-        // Recurse into every !include directive anywhere in this document (top-level,
-        // inside model blocks, and nested inside element blocks like softwareSystem).
-        AstUtils.streamAllContents(root).filter(isInclude).forEach((inc) => {
-            if (inc.file) {
-                const includedRoot = this.resolveIncludedRoot(inc, inc.file);
-                if (includedRoot) this.collectConstants(includedRoot, visited);
-            }
-        });
+        }
+        for (const inc of includesFound) {
+            const includedRoot = this.resolveIncludedRoot(inc, inc.file);
+            if (includedRoot) this.collectConstants(includedRoot, visited);
+        }
 
         // Constants and variables are inherited from an extended workspace.
         const workspace = isWorkspace(root) ? root
@@ -810,9 +814,17 @@ class JsonGenerator {
         if (docUri && visited.has(docUri)) return;
         if (docUri) visited.add(docUri);
 
+        // Gather archetype blocks and !include directives in a single walk, then apply
+        // archetypes first (so they take precedence over included ones) and recurse into
+        // the includes — matching the original two-pass order.
+        const archetypeBlocks: ArchetypesBlock[] = [];
+        const includesFound: Include[] = [];
         for (const content of AstUtils.streamAllContents(node)) {
-            if (!isArchetypesBlock(content)) continue;
-            for (const definition of content.definitions ?? []) {
+            if (isArchetypesBlock(content)) archetypeBlocks.push(content);
+            else if (isInclude(content) && content.file) includesFound.push(content);
+        }
+        for (const block of archetypeBlocks) {
+            for (const definition of block.definitions ?? []) {
                 if (isArchetypeNamed(definition)) continue;
                 const key = this.archetypeTypeKey(definition);
                 if (key && !this.defaultArchetypes.has(key)) {
@@ -820,10 +832,8 @@ class JsonGenerator {
                 }
             }
         }
-
-        for (const content of AstUtils.streamAllContents(node)) {
-            if (!isInclude(content) || !content.file) continue;
-            const includedRoot = this.resolveIncludedRoot(node, content.file);
+        for (const inc of includesFound) {
+            const includedRoot = this.resolveIncludedRoot(node, inc.file);
             if (includedRoot) this.collectDefaultArchetypes(includedRoot, visited);
         }
 
@@ -834,7 +844,7 @@ class JsonGenerator {
     }
 
     /** Base type keyword ('softwaresystem', ...) or '->' an unnamed archetype applies to. */
-    private archetypeTypeKey(definition: any): string | undefined {
+    private archetypeTypeKey(definition: ArchetypeDefinition | undefined): string | undefined {
         if (typeof definition?.baseType === 'string' && definition.baseType) {
             return definition.baseType.toLowerCase();
         }
@@ -843,7 +853,7 @@ class JsonGenerator {
     }
 
     /** Effective type keyword of a node, used to look up its default archetype. */
-    private effectiveArchetypeType(node: any): string | undefined {
+    private effectiveArchetypeType(node: AstNode | undefined): string | undefined {
         if (isRelationship(node) || isImplicitRelationship(node)) return '->';
         if (isArchetypeInstance(node)) {
             const type = archetypeInstanceType(node);
@@ -865,7 +875,7 @@ class JsonGenerator {
      * definition outward, followed by the type's default archetype when that
      * default was declared before the chain's outermost definition.
      */
-    private archetypeChainFor(node: any): any[] {
+    private archetypeChainFor(node: AstNode | undefined): any[] {
         const chain = archetypeChain(node);
         const key = this.effectiveArchetypeType(node);
         const fallback = key ? this.defaultArchetypes.get(key) : undefined;
@@ -887,13 +897,13 @@ class JsonGenerator {
     }
 
     /** Perspectives contributed by the node's nearest archetype. */
-    private archetypePerspectives(node: any): any[] | undefined {
+    private archetypePerspectives(node: AstNode | undefined): any[] | undefined {
         const archetype = this.archetypeChainFor(node)[0];
         return archetype ? this.perspectivesToJson(archetype.perspectivesBlocks) : undefined;
     }
 
     /** Properties contributed by the node's nearest archetype. */
-    private archetypeProperties(node: any): Record<string, string> | undefined {
+    private archetypeProperties(node: AstNode | undefined): Record<string, string> | undefined {
         const archetype = this.archetypeChainFor(node)[0];
         if (!archetype) return undefined;
         const properties: Record<string, string> = {};
@@ -1347,7 +1357,7 @@ class JsonGenerator {
                             if (visitedDocs.has(docUri)) continue;
                             visitedDocs.add(docUri);
                             // Register the include context so parent resolution
-                            // (resolveConatinerParent / resolveComponentParent) can
+                            // (resolveContainerParent / resolveComponentParent) can
                             // climb from the Include directive to the logical parent.
                             const existing = this.includeContexts.get(docUri) || [];
                             existing.push(inc);
@@ -1742,7 +1752,7 @@ class JsonGenerator {
      *
      * Archetypes whose base is a relationship are not materialised.
      */
-    private materializeArchetypeInstance(inst: any): any | undefined {
+    private materializeArchetypeInstance(inst: NamedElement): any | undefined {
         const cached = this.materialized.get(inst);
         if (cached) return cached;
         const effective = archetypeInstanceType(inst);
@@ -1765,9 +1775,10 @@ class JsonGenerator {
      * SoftwareSystemInstance, depending on the referenced element type. The
      * reference is copied onto the field the concrete instance type expects.
      */
-    private materializeGenericInstance(inst: any): any | undefined {
+    private materializeGenericInstance(inst: NamedElement): any | undefined {
         const cached = this.materialized.get(inst);
         if (cached) return cached;
+        if (!isGenericInstance(inst)) return undefined;
         const ref = inst.element?.ref;
         const effective = isSoftwareSystem(ref) ? 'SoftwareSystemInstance'
             : isContainer(ref) ? 'ContainerInstance'
@@ -1836,7 +1847,7 @@ class JsonGenerator {
      * its archetype chain. The nearest definition wins per field; non-instance
      * nodes yield empty defaults.
      */
-    private archetypeDefaults(node: any): { description?: string; technology?: string; metadata?: string; tags: string[] } {
+    private archetypeDefaults(node: AstNode | undefined): { description?: string; technology?: string; metadata?: string; tags: string[] } {
         const chain = this.archetypeChainFor(node);
         if (chain.length === 0) {
             return { tags: [] };
@@ -1875,8 +1886,8 @@ class JsonGenerator {
     }
 
     /** Returns the metadata text for an element, inherited from its archetype. */
-    private metadata(node: any): string | undefined {
-        const value = node.metadata ?? this.archetypeDefaults(node).metadata;
+    private metadata(node: AstNode | undefined): string | undefined {
+        const value = (node as any).metadata ?? this.archetypeDefaults(node).metadata;
         return this.substitute(value);
     }
 
@@ -1900,9 +1911,9 @@ class JsonGenerator {
     }
 
     /** Returns the description text for a node, with constant substitution applied. */
-    private description(node: any) {
+    private description(node: AstNode | undefined) {
         const overlay = this.elementOverlays.get(this.getId(node))?.description;
-        const own = overlay ?? node?.description ?? node?.descriptionProps?.[0]?.value;
+        const own = overlay ?? (node as any)?.description ?? (node as any)?.descriptionProps?.[0]?.value;
         const value = own ?? this.archetypeDefaults(node).description;
         if (value === undefined || value === null || value === '') {
             return undefined;
@@ -1916,9 +1927,9 @@ class JsonGenerator {
      * view steps accept one; a group does not, as in the reference parser.
      * Overlay URLs (`!elements`, `!relationships`) are applied separately.
      */
-    private url(node: any): string | undefined {
+    private url(node: AstNode | undefined): string | undefined {
         // DynamicStep declares `urlProp`, every other rule declares `urlProps`.
-        const props = node?.urlProps ?? node?.urlProp;
+        const props = (node as any)?.urlProps ?? (node as any)?.urlProp;
         const value = Array.isArray(props) ? props[0]?.value : props?.value;
         const substituted = this.substitute(value);
         return substituted === '' ? undefined : substituted;
@@ -1943,7 +1954,7 @@ class JsonGenerator {
         }
         if (isComponentView(view)) {
             const container = this.el(view.container?.ref);
-            const system = container ? this.resolveConatinerParent(container as Container) : undefined;
+            const system = container ? this.resolveContainerParent(container as Container) : undefined;
             if (!container || !system) return undefined;
             return `Component View: ${this.substitute(system.name)} - ${this.substitute(container.name)}`;
         }
@@ -1959,7 +1970,7 @@ class JsonGenerator {
         if (isDynamicView(view)) {
             const scope = this.el(view.element?.ref);
             if (scope && isContainer(scope)) {
-                const system = this.resolveConatinerParent(scope as Container);
+                const system = this.resolveContainerParent(scope as Container);
                 if (system) return `Dynamic View: ${this.substitute(system.name)} - ${this.substitute(scope.name)}`;
             }
             if (scope) return `Dynamic View: ${this.substitute(this.displayName(scope))}`;
@@ -1976,18 +1987,18 @@ class JsonGenerator {
      * Comma-separated unquoted segments are stored as `technology` +
      * `technologyParts` and rejoined here with commas.
      */
-    private technology(node: any) {
+    private technology(node: AstNode | undefined) {
         const parts: string[] = [];
         const overlay = this.elementOverlays.get(this.getId(node))?.technology;
         // An in-block `technology "..."` overwrites the positional technology
         // (ContainerParser.parseTechnology calls setTechnology).
-        const declared = node?.techProps?.[0]?.value;
-        const base = overlay ?? declared ?? node?.technology ?? this.archetypeDefaults(node).technology;
+        const declared = (node as any)?.techProps?.[0]?.value;
+        const base = overlay ?? declared ?? (node as any)?.technology ?? this.archetypeDefaults(node).technology;
         if (base !== undefined && base !== null && base !== '') parts.push(base);
         // Positional comma-separated segments only apply when the block did not
         // declare a technology of its own.
-        if (declared === undefined && Array.isArray(node?.technologyParts)) {
-            for (const p of node.technologyParts) {
+        if (declared === undefined && Array.isArray((node as any)?.technologyParts)) {
+            for (const p of (node as any).technologyParts) {
                 const s = String(p ?? '').trim();
                 if (s) parts.push(s);
             }
@@ -2032,7 +2043,7 @@ class JsonGenerator {
     }
 
     /** Returns the group path for a given element/node, if it belongs to a group. */
-    private extractGroup(node: any) : string | undefined {
+    private extractGroup(node: AstNode | undefined) : string | undefined {
         return this.groupPathMap.get(this.getId(node));
     }
 
@@ -2045,7 +2056,7 @@ class JsonGenerator {
      * either absent or carries the literal text `this`. An unresolved named
      * reference keeps its `$refText` and is therefore NOT treated as `this`.
      */
-    private isThisReference(reference: any): boolean {
+    private isThisReference(reference: Reference<NamedElement> | undefined): boolean {
         return reference === undefined || reference?.$refText?.toLowerCase() === 'this';
     }
 
@@ -2078,14 +2089,140 @@ class JsonGenerator {
      * map lookup instead of a scan of every relationship per element.
      */
     private relationshipsBySourceImplied?: Map<string, ImpliedRelationship[]>;
+    /**
+     * Memoized per-element relationship extraction. Extraction is a pure function of
+     * the model, so each element is extracted once even though the instance projection,
+     * view resolution and JSON transform ask for the same element repeatedly.
+     */
+    private relationshipExtractionCache = new Map<NamedElement, ImpliedRelationship[]>();
+    /**
+     * Memoized parent-relationship sets for instance projection, keyed by the parent
+     * system/container. Without this every deployment instance rebuilds the same set by
+     * scanning the whole model.
+     */
+    private systemParentRelsCache = new Map<SoftwareSystem, Set<ImpliedRelationship>>();
+    private containerParentRelsCache = new Map<Container, Set<ImpliedRelationship>>();
+    /** Deployment instances (SoftwareSystemInstance/ContainerInstance) in element order. */
+    private deploymentInstancesCache?: NamedElement[];
+    /** Memoized instance deployment-group sets, keyed by node. */
+    private instanceGroupNamesCache = new Map<AstNode, Set<string>>();
+    /** Element indexes for instance projection, built once in element order. */
+    private containersBySystemCache = new Map<SoftwareSystem, Container[]>();
+    private componentsBySystemCache = new Map<SoftwareSystem, Component[]>();
+    private componentsByContainerCache = new Map<Container, Component[]>();
+    private relationshipIndexesReady = false;
+    /**
+     * View-scope relationship sets, memoized. View resolution only reads these sets, so
+     * one instance is shared across all views of the same kind instead of being rebuilt
+     * (by scanning every element) for each view.
+     */
+    private allRelationshipsSetCache?: Set<ImpliedRelationship>;
+    private staticRelationshipsSetCache?: Set<ImpliedRelationship>;
+    private customRelationshipsSetCache?: Set<ImpliedRelationship>;
 
     /**
-     * Drops both relationship caches. They are derived from the same relationship
-     * list and must always be invalidated together.
+     * Drops every cache derived from the relationship list, so none survives a mutation
+     * of `this.relationships`. Called after `!elements` appends synthetic relationships,
+     * because resolving the directive's expression builds the relationship graph first.
+     * Element-derived caches (hierarchy indexes, group leaves, deployment targets,
+     * canonical names) do not depend on the relationship list and are left untouched.
      */
     private invalidateAllRelationships(): void {
         this.allRelationshipsCache = undefined;
         this.relationshipsBySourceImplied = undefined;
+        this.relationshipExtractionCache.clear();
+        this.systemParentRelsCache.clear();
+        this.containerParentRelsCache.clear();
+        this.allRelationshipsSetCache = undefined;
+        this.staticRelationshipsSetCache = undefined;
+        this.customRelationshipsSetCache = undefined;
+    }
+
+    /**
+     * Builds, once, the element indexes the instance projection needs: containers and
+     * components grouped by their parent system, and components grouped by their parent
+     * container. These depend only on the element hierarchy, so they survive a
+     * relationship mutation. Without them, every deployment instance rescans the model.
+     */
+    private ensureRelationshipIndexes(): void {
+        if (this.relationshipIndexesReady) return;
+        for (const el of this.elements) {
+            if (isContainer(el)) {
+                const system = this.resolveContainerParent(el);
+                if (system) {
+                    const list = this.containersBySystemCache.get(system);
+                    if (list) list.push(el); else this.containersBySystemCache.set(system, [el]);
+                }
+            } else if (isComponent(el)) {
+                const container = this.resolveComponentParent(el);
+                if (container) {
+                    const list = this.componentsByContainerCache.get(container);
+                    if (list) list.push(el); else this.componentsByContainerCache.set(container, [el]);
+                    const system = this.resolveContainerParent(container);
+                    if (system) {
+                        const slist = this.componentsBySystemCache.get(system);
+                        if (slist) slist.push(el); else this.componentsBySystemCache.set(system, [el]);
+                    }
+                }
+            }
+        }
+        this.relationshipIndexesReady = true;
+    }
+
+    /**
+     * All relationships in the model (direct + implied) as a set, memoized. View
+     * resolution only reads it, so a single instance is shared across views instead of
+     * being rebuilt for every view.
+     */
+    private allRelationshipsSet(): Set<ImpliedRelationship> {
+        if (!this.allRelationshipsSetCache) {
+            this.allRelationshipsSetCache = new Set(this.collectAllRelationships());
+        }
+        return this.allRelationshipsSetCache;
+    }
+
+    /**
+     * Relationships of the static-structure elements (software systems, people,
+     * containers, components and custom elements — no deployment), memoized for
+     * component views, which exclude deployment relationships.
+     */
+    private staticRelationshipsSet(): Set<ImpliedRelationship> {
+        if (!this.staticRelationshipsSetCache) {
+            const rels = new Set<ImpliedRelationship>();
+            this.elements.forEach(el => {
+                if (isSoftwareSystem(el)) this.extractRelationshipsForSoftwareSystem(el).forEach(r => rels.add(r));
+                else if (isPerson(el)) this.extractRelationshipsForPerson(el).forEach(r => rels.add(r));
+                else if (isComponent(el)) this.extractRelationshipsForComponent(el).forEach(r => rels.add(r));
+                else if (isContainer(el)) this.extractRelationshipsForContainer(el).forEach(r => rels.add(r));
+                else if (isCustomElement(el)) this.extractRelationshipsForCustom(el).forEach(r => rels.add(r));
+            });
+            this.staticRelationshipsSetCache = rels;
+        }
+        return this.staticRelationshipsSetCache;
+    }
+
+    /** Relationships of custom elements, memoized for custom views. */
+    private customRelationshipsSet(): Set<ImpliedRelationship> {
+        if (!this.customRelationshipsSetCache) {
+            const rels = new Set<ImpliedRelationship>();
+            this.elements.forEach(el => {
+                if (isCustomElement(el)) this.extractRelationshipsForCustom(el).forEach(r => rels.add(r));
+            });
+            this.customRelationshipsSetCache = rels;
+        }
+        return this.customRelationshipsSetCache;
+    }
+
+    /** Containers directly under a software system, in element order (memoized index). */
+    private containersOfSystem(system: SoftwareSystem): Container[] {
+        this.ensureRelationshipIndexes();
+        return this.containersBySystemCache.get(system) ?? [];
+    }
+
+    /** Components directly under a container, in element order (memoized index). */
+    private componentsOfContainer(container: Container): Component[] {
+        this.ensureRelationshipIndexes();
+        return this.componentsByContainerCache.get(container) ?? [];
     }
 
     /**
@@ -2116,7 +2253,7 @@ class JsonGenerator {
      * instances and other elements stay themselves. When `restrictToInstances` is
      * set, non-instance elements resolve to nothing (used by `-/>`).
      */
-    private resolveDeploymentEndpoints(node: any, ref: any, isThis: boolean, env: string, restrictToInstances: boolean): any[] {
+    private resolveDeploymentEndpoints(node: AstNode, ref: NamedElement | undefined, isThis: boolean, env: string, restrictToInstances: boolean): any[] {
         if (isThis || !ref) {
             const context = this.resolveContextElement(node);
             return context ? [context] : [];
@@ -2137,7 +2274,7 @@ class JsonGenerator {
     }
 
     /** Static element behind a deployment endpoint: an instance unwraps to its software system/container. */
-    private resolveStaticElement(node: any, ref: any, isThis: boolean): any | undefined {
+    private resolveStaticElement(node: AstNode, ref: NamedElement | undefined, isThis: boolean): any | undefined {
         if (isThis || !ref) {
             return this.resolveContextElement(node);
         }
@@ -2323,7 +2460,7 @@ class JsonGenerator {
     /** Logical model parent of a static structure element. */
     private logicalParent(element: any): any {
         if (isComponent(element)) return this.resolveComponentParent(element);
-        if (isContainer(element)) return this.resolveConatinerParent(element);
+        if (isContainer(element)) return this.resolveContainerParent(element);
         return undefined;
     }
 
@@ -2397,6 +2534,96 @@ class JsonGenerator {
     }
 
     /** Extracts the relationships of an element, dispatching on its concrete type. */
+    /**
+     * Resolves the Container / Component / SoftwareSystem hierarchy of a relationship
+     * target for implied-relationship projection. A Component target yields itself, its
+     * parent Container and that Container's parent SoftwareSystem; a Container target
+     * yields itself and its parent SoftwareSystem; a SoftwareSystem target yields only
+     * itself. Other element kinds yield nothing.
+     */
+    private resolveTargetHierarchy(target: NamedElement): {
+        component?: Component;
+        container?: Container;
+        softwareSystem?: SoftwareSystem;
+    } {
+        if (isComponent(target)) {
+            const container = this.resolveComponentParent(target);
+            return {
+                component: target,
+                container,
+                softwareSystem: container ? this.resolveContainerParent(container) : undefined,
+            };
+        }
+        if (isContainer(target)) {
+            return { container: target, softwareSystem: this.resolveContainerParent(target) };
+        }
+        if (isSoftwareSystem(target)) {
+            return { softwareSystem: target };
+        }
+        return {};
+    }
+
+    /**
+     * Pushes an implied relationship from `source` to `impliedTarget` (built from `rel`)
+     * when the target is present and impliedRelationshipAllowed passes. When `skipSelf`
+     * is set, the push is suppressed if `impliedTarget` equals the relationship's own
+     * direct target — the explicit relationship already covers that edge.
+     */
+    private pushImplied(
+        rels: ImpliedRelationship[],
+        rel: Relationship,
+        source: RelationshipMember,
+        impliedTarget: RelationshipMember | undefined,
+        ownTarget?: NamedElement,
+        skipSelf = false
+    ): void {
+        if (!impliedTarget) return;
+        if (skipSelf && impliedTarget === ownTarget) return;
+        if (!this.impliedRelationshipAllowed(source, impliedTarget)) return;
+        rels.push(this.createRelationshipEx(source, impliedTarget, rel));
+    }
+
+    /**
+     * Memoizes per-element relationship extraction. Extraction is a pure function of the
+     * model, so the result is computed once and reused; the cache is dropped by
+     * invalidateAllRelationships() whenever the model changes.
+     */
+    private memoExtract(key: NamedElement, compute: () => ImpliedRelationship[]): ImpliedRelationship[] {
+        const cached = this.relationshipExtractionCache.get(key);
+        if (cached !== undefined) return cached;
+        const result = compute();
+        this.relationshipExtractionCache.set(key, result);
+        return result;
+    }
+
+    private extractRelationshipsForPerson(person: Person): ImpliedRelationship[] {
+        return this.memoExtract(person, () => this.computeRelationshipsForPerson(person));
+    }
+    private extractRelationshipsForSoftwareSystem(softwareSystem: SoftwareSystem): ImpliedRelationship[] {
+        return this.memoExtract(softwareSystem, () => this.computeRelationshipsForSoftwareSystem(softwareSystem));
+    }
+    private extractRelationshipsForContainer(container: Container): ImpliedRelationship[] {
+        return this.memoExtract(container, () => this.computeRelationshipsForContainer(container));
+    }
+    private extractRelationshipsForComponent(component: Component): ImpliedRelationship[] {
+        return this.memoExtract(component, () => this.computeRelationshipsForComponent(component));
+    }
+    private extractRelationshipsForCustom(custom: CustomElement): ImpliedRelationship[] {
+        return this.memoExtract(custom, () => this.computeRelationshipsForCustom(custom));
+    }
+    private extractRelationshipsForDeploymentNode(deploymentNode: DeploymentNode): ImpliedRelationship[] {
+        return this.memoExtract(deploymentNode, () => this.computeRelationshipsForDeploymentNode(deploymentNode));
+    }
+    private extractRelationshipsForInfrastructureNode(infrastructureNode: InfrastructureNode): ImpliedRelationship[] {
+        return this.memoExtract(infrastructureNode, () => this.computeRelationshipsForInfrastructureNode(infrastructureNode));
+    }
+    private extractRelationshipsForSoftwareSystemInstance(softwareSystemInstance: SoftwareSystemInstance): ImpliedRelationship[] {
+        return this.memoExtract(softwareSystemInstance, () => this.computeRelationshipsForSoftwareSystemInstance(softwareSystemInstance));
+    }
+    private extractRelationshipsForContainerInstance(containerInstance: ContainerInstance): ImpliedRelationship[] {
+        return this.memoExtract(containerInstance, () => this.computeRelationshipsForContainerInstance(containerInstance));
+    }
+
     private extractRelationshipsForElement(el: NamedElement): ImpliedRelationship[] {
         if (isPerson(el)) return this.extractRelationshipsForPerson(el);
         if (isSoftwareSystem(el)) return this.extractRelationshipsForSoftwareSystem(el);
@@ -2422,7 +2649,7 @@ class JsonGenerator {
      * 
      * Implied generation is controlled by !impliedRelationships flag.
      */
-    private extractRelationshipsForContainer(container: Container) {
+    private computeRelationshipsForContainer(container: Container) {
         const rels: ImpliedRelationship[] = [];
         for (const rel of this.relationshipsBySource.get(this.getId(container)) ?? []) {
             const sourceContainer = this.resolveSource(rel);
@@ -2439,53 +2666,26 @@ class JsonGenerator {
                     // only generate implied relationships if the !impliedRelationships flag allows it
                     if(this.shouldGenerateImplied(rel)) {
 
-                        let targetComponent : Component | undefined = undefined;
-                        let targetContainer : Container | undefined = undefined;
-                        let targetSoftwareSystem : SoftwareSystem | undefined = undefined;
-                        let sourceSoftwareSystem : SoftwareSystem | undefined = undefined; 
-
-                        sourceSoftwareSystem = this.resolveConatinerParent(sourceContainer);
-
-                        if(isComponent(target)) {
-                            targetComponent = target;
-                            targetContainer = this.resolveComponentParent(targetComponent);
-                            if(targetContainer) {
-                                targetSoftwareSystem = this.resolveConatinerParent(targetContainer);
-                            }
-                        } else if(isContainer(target)) {
-                            targetContainer = target;
-                            targetSoftwareSystem = this.resolveConatinerParent(targetContainer);
-                        } else if(isSoftwareSystem(target)) {
-                            targetSoftwareSystem = target;
-                        }
+                        const sourceSoftwareSystem = this.resolveContainerParent(sourceContainer);
+                        const { component: targetComponent, container: targetContainer, softwareSystem: targetSoftwareSystem } = this.resolveTargetHierarchy(target);
 
                         // implied: source Container → target Container (same-level sibling)
                         // skip self-reference and exact duplicate of the explicit relationship
-                        if(targetContainer && targetContainer !== target && this.impliedRelationshipAllowed(sourceContainer, targetContainer)) {
-                            rels.push(this.createRelationshipEx(sourceContainer, targetContainer, rel));
-                        }
+                        this.pushImplied(rels, rel, sourceContainer, targetContainer, target, true);
                         // implied: source Container → target SoftwareSystem (parent of target)
                         // skip relationship to own parent system and exact duplicate
-                        if(targetSoftwareSystem && targetSoftwareSystem !== target && this.impliedRelationshipAllowed(sourceContainer, targetSoftwareSystem)) { 
-                            rels.push(this.createRelationshipEx(sourceContainer, targetSoftwareSystem, rel));
-                        }
+                        this.pushImplied(rels, rel, sourceContainer, targetSoftwareSystem, target, true);
 
                         if(sourceSoftwareSystem) {
                             // implied: source SoftwareSystem → target Component (child of another container)
                             // skip relationship to own child component
-                            if(targetComponent && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetComponent)) {
-                                rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetComponent, rel));
-                            }
+                            this.pushImplied(rels, rel, sourceSoftwareSystem, targetComponent);
                             // implied: source SoftwareSystem → target Container (under a different system)
                             // skip relationship to own child container
-                            if(targetContainer && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetContainer)) {
-                                rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetContainer, rel));
-                            }
+                            this.pushImplied(rels, rel, sourceSoftwareSystem, targetContainer);
                             // implied: source SoftwareSystem → target SoftwareSystem (cross-system)
                             // skip self-reference
-                            if(targetSoftwareSystem && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetSoftwareSystem)) {
-                                rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetSoftwareSystem, rel));                            
-                            }
+                            this.pushImplied(rels, rel, sourceSoftwareSystem, targetSoftwareSystem);
                         }
                     }
                 }
@@ -2509,7 +2709,7 @@ class JsonGenerator {
      * 
      * Implied generation is controlled by !impliedRelationships flag.
      */
-    private extractRelationshipsForComponent(component: Component) {
+    private computeRelationshipsForComponent(component: Component) {
         const rels: ImpliedRelationship[] = [];
         for (const rel of this.relationshipsBySource.get(this.getId(component)) ?? []) {
             const sourceComponent = this.resolveSource(rel);
@@ -2525,74 +2725,38 @@ class JsonGenerator {
 
                     // only generate implied relationships if the !impliedRelationships flag allows it
                     if(this.shouldGenerateImplied(rel)) {
-                        let targetComponent : Component | undefined = undefined;
-                        let targetContainer : Container | undefined = undefined;
-                        let targetSoftwareSystem : SoftwareSystem | undefined = undefined;
-                        let sourceContainer : Container | undefined = undefined;
-                        let sourceSoftwareSystem : SoftwareSystem | undefined = undefined; 
-
-                        sourceContainer = this.resolveComponentParent(sourceComponent);
-                        if(sourceContainer) {
-                            sourceSoftwareSystem = this.resolveConatinerParent(sourceContainer);
-                        }
-
-                        if(isComponent(target)) {
-                            targetComponent = target;
-                            targetContainer = this.resolveComponentParent(targetComponent);
-                            if(targetContainer) {
-                                targetSoftwareSystem = this.resolveConatinerParent(targetContainer);
-                            }
-                        } else if(isContainer(target)) {
-                            targetContainer = target;
-                            targetSoftwareSystem = this.resolveConatinerParent(targetContainer);
-                        } else if(isSoftwareSystem(target)) {
-                            targetSoftwareSystem = target;
-                        }
+                        const sourceContainer = this.resolveComponentParent(sourceComponent);
+                        const sourceSoftwareSystem = sourceContainer ? this.resolveContainerParent(sourceContainer) : undefined;
+                        const { component: targetComponent, container: targetContainer, softwareSystem: targetSoftwareSystem } = this.resolveTargetHierarchy(target);
 
                         // implied: source Component → target Container (parent of target)
                         // skip self-referencing parent container and exact duplicate
-                        if(targetContainer && targetContainer !== target && this.impliedRelationshipAllowed(sourceComponent, targetContainer)) { 
-                            rels.push(this.createRelationshipEx(sourceComponent, targetContainer, rel));
-                        }
+                        this.pushImplied(rels, rel, sourceComponent, targetContainer, target, true);
                         // implied: source Component → target SoftwareSystem (grandparent of target)
                         // skip self-referencing parent system and exact duplicate
-                        if(targetSoftwareSystem && targetSoftwareSystem !== target && this.impliedRelationshipAllowed(sourceComponent, targetSoftwareSystem)) { 
-                            rels.push(this.createRelationshipEx(sourceComponent, targetSoftwareSystem, rel));
-                        }
+                        this.pushImplied(rels, rel, sourceComponent, targetSoftwareSystem, target, true);
 
                         if(sourceContainer) {
                             // implied: source Container → target Component (sibling component in another container)
                             // skip self-reference
-                            if(targetComponent && this.impliedRelationshipAllowed(sourceContainer, targetComponent)) {
-                                rels.push(this.createRelationshipEx(sourceContainer, targetComponent, rel));
-                            }
+                            this.pushImplied(rels, rel, sourceContainer, targetComponent);
                             // implied: source Container → target Container (sibling)
                             // skip self-reference
-                            if(targetContainer && this.impliedRelationshipAllowed(sourceContainer, targetContainer)) {
-                                rels.push(this.createRelationshipEx(sourceContainer, targetContainer, rel));
-                            }
+                            this.pushImplied(rels, rel, sourceContainer, targetContainer);
                             // implied: source Container → target SoftwareSystem (parent of target)
                             // skip relationship to own parent system                        
-                            if(targetSoftwareSystem && this.impliedRelationshipAllowed(sourceContainer, targetSoftwareSystem)) {
-                                rels.push(this.createRelationshipEx(sourceContainer, targetSoftwareSystem, rel));
-                            }
+                            this.pushImplied(rels, rel, sourceContainer, targetSoftwareSystem);
 
                             if(sourceSoftwareSystem) {
                                 // implied: source SoftwareSystem → target Component (grandparent → component)
                                 // skip relationship to own child component
-                                if(targetComponent && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetComponent)) {
-                                    rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetComponent, rel));
-                                }
+                                this.pushImplied(rels, rel, sourceSoftwareSystem, targetComponent);
                                 // implied: source SoftwareSystem → target Container (grandparent → sibling container)
                                 // skip relationship to own child container
-                                if(targetContainer && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetContainer)) {
-                                    rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetContainer, rel));
-                                }
+                                this.pushImplied(rels, rel, sourceSoftwareSystem, targetContainer);
                                 // implied: source SoftwareSystem → target SoftwareSystem (cross-system)
                                 // skip self-reference
-                                if(targetSoftwareSystem && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetSoftwareSystem)) {
-                                    rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetSoftwareSystem, rel));                            
-                                }
+                                this.pushImplied(rels, rel, sourceSoftwareSystem, targetSoftwareSystem);
                             }
                         }
                     }
@@ -2611,7 +2775,7 @@ class JsonGenerator {
      * 
      * Implied generation is controlled by !impliedRelationships flag.
      */
-    private extractRelationshipsForSoftwareSystem(softwareSystem: SoftwareSystem) {
+    private computeRelationshipsForSoftwareSystem(softwareSystem: SoftwareSystem) {
         const rels: ImpliedRelationship[] = [];
         for (const rel of this.relationshipsBySource.get(this.getId(softwareSystem)) ?? []) {
             const sourceSoftwareSystem = this.resolveSource(rel);
@@ -2626,28 +2790,12 @@ class JsonGenerator {
                     });
                     // only generate implied relationships if the !impliedRelationships flag allows it
                     if(this.shouldGenerateImplied(rel)) {
-                        let targetContainer : Container | undefined = undefined;
-                        let targetSoftwareSystem : SoftwareSystem | undefined = undefined;
-
-                        if(isComponent(target)) {
-                            targetContainer = this.resolveComponentParent(target);
-                            if(targetContainer) {
-                                targetSoftwareSystem = this.resolveConatinerParent(targetContainer);
-                            }
-                        } else if(isContainer(target)) {
-                            targetSoftwareSystem = this.resolveConatinerParent(target);
-                        }
+                        const { container: targetContainer, softwareSystem: targetSoftwareSystem } = this.resolveTargetHierarchy(target);
 
                         // implied: source SoftwareSystem → target Container (under a different system)
-                        // skip relationship to own child container
-                        if(targetContainer && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetContainer)) {
-                            rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetContainer, rel));
-                        }
+                        this.pushImplied(rels, rel, sourceSoftwareSystem, targetContainer);
                         // implied: source SoftwareSystem → target SoftwareSystem (cross-system)
-                        // skip self-reference
-                        if(targetSoftwareSystem && this.impliedRelationshipAllowed(sourceSoftwareSystem, targetSoftwareSystem)) {
-                            rels.push(this.createRelationshipEx(sourceSoftwareSystem, targetSoftwareSystem, rel));
-                        }
+                        this.pushImplied(rels, rel, sourceSoftwareSystem, targetSoftwareSystem);
                     }
                 }
             }
@@ -2664,7 +2812,7 @@ class JsonGenerator {
      * 
      * Implied generation is controlled by !impliedRelationships flag.
      */
-    private extractRelationshipsForPerson(person: Person) {
+    private computeRelationshipsForPerson(person: Person) {
         const rels: ImpliedRelationship[] = [];
         for (const rel of this.relationshipsBySource.get(this.getId(person)) ?? []) {
             const sourcePerson = this.resolveSource(rel);            
@@ -2679,17 +2827,7 @@ class JsonGenerator {
                     });
                     // only generate implied relationships if the !impliedRelationships flag allows it
                     if(this.shouldGenerateImplied(rel)) {
-                        let targetContainer : Container | undefined = undefined;
-                        let targetSoftwareSystem : SoftwareSystem | undefined = undefined;
-
-                        if(isComponent(target)) {
-                            targetContainer = this.resolveComponentParent(target);
-                            if(targetContainer) {
-                                targetSoftwareSystem = this.resolveConatinerParent(targetContainer);
-                            }
-                        } else if(isContainer(target)) {
-                            targetSoftwareSystem = this.resolveConatinerParent(target);
-                        }
+                        const { container: targetContainer, softwareSystem: targetSoftwareSystem } = this.resolveTargetHierarchy(target);
                         // implied: Person → Container (only generated when target is Component, i.e. the parent Container)
                         if(targetContainer) {
                             rels.push(this.createRelationshipEx(sourcePerson, targetContainer, rel));
@@ -2715,7 +2853,7 @@ class JsonGenerator {
      * 
      * Implied generation is controlled by !impliedRelationships flag.
      */
-    private extractRelationshipsForCustom(custom: CustomElement) {
+    private computeRelationshipsForCustom(custom: CustomElement) {
         const rels: ImpliedRelationship[] = [];
         for (const rel of this.relationshipsBySource.get(this.getId(custom)) ?? []) {
             const sourceCustom = this.resolveSource(rel);
@@ -2730,17 +2868,7 @@ class JsonGenerator {
                     });
                     // only generate implied relationships if the !impliedRelationships flag allows it
                     if(this.shouldGenerateImplied(rel)) {
-                        let targetContainer : Container | undefined = undefined;
-                        let targetSoftwareSystem : SoftwareSystem | undefined = undefined;
-
-                        if(isComponent(target)) {
-                            targetContainer = this.resolveComponentParent(target);
-                            if(targetContainer) {
-                                targetSoftwareSystem = this.resolveConatinerParent(targetContainer);
-                            }
-                        } else if(isContainer(target)) {
-                            targetSoftwareSystem = this.resolveConatinerParent(target);
-                        }
+                        const { container: targetContainer, softwareSystem: targetSoftwareSystem } = this.resolveTargetHierarchy(target);
                         // implied: Custom → Container (only generated when target is Component, i.e. the parent Container)
                         if(targetContainer) {
                             rels.push(this.createRelationshipEx(sourceCustom, targetContainer, rel));
@@ -2762,7 +2890,7 @@ class JsonGenerator {
      * Deployment nodes do not generate implied relationships —
      * only explicit relationships defined in the DSL are returned.
      */
-    private extractRelationshipsForDeploymentNode(deploymentNode: DeploymentNode) {
+    private computeRelationshipsForDeploymentNode(deploymentNode: DeploymentNode) {
         const rels: ImpliedRelationship[] = [];
         for (const rel of this.relationshipsBySource.get(this.getId(deploymentNode)) ?? []) {
             const sourceDeploymentNode = this.resolveSource(rel);
@@ -2788,7 +2916,7 @@ class JsonGenerator {
      * Infrastructure nodes do not generate implied relationships —
      * only explicit relationships defined in the DSL are returned.
      */
-    private extractRelationshipsForInfrastructureNode(infrastructureNode: InfrastructureNode) {
+    private computeRelationshipsForInfrastructureNode(infrastructureNode: InfrastructureNode) {
         const rels: ImpliedRelationship[] = [];
         for (const rel of this.relationshipsBySource.get(this.getId(infrastructureNode)) ?? []) {
             const sourceInfrastructureNode = this.resolveSource(rel);
@@ -2825,7 +2953,54 @@ class JsonGenerator {
      * 
      * Implied generation is controlled by !impliedRelationships flag (checked against the source relationship's offset).
      */
-    private extractRelationshipsForSoftwareSystemInstance(softwareSystemInstance: SoftwareSystemInstance) {
+    /** Deployment instances (SoftwareSystemInstance/ContainerInstance) in element order. */
+    private deploymentInstances(): NamedElement[] {
+        if (!this.deploymentInstancesCache) {
+            this.deploymentInstancesCache = this.elements.filter(
+                el => isSoftwareSystemInstance(el) || isContainerInstance(el));
+        }
+        return this.deploymentInstancesCache;
+    }
+
+    /**
+     * All relationships of a software system's hierarchy (the system, its containers and
+     * their components), used to project implied relationships onto deployment instances.
+     * Memoized per system: every instance of the same system would otherwise rebuild it.
+     */
+    private parentRelsForSystem(system: SoftwareSystem): Set<ImpliedRelationship> {
+        const cached = this.systemParentRelsCache.get(system);
+        if (cached !== undefined) return cached;
+        this.ensureRelationshipIndexes();
+        const rels = new Set<ImpliedRelationship>();
+        this.extractRelationshipsForSoftwareSystem(system).forEach(rel => rels.add(rel));
+        for (const c of this.containersBySystemCache.get(system) ?? []) {
+            this.extractRelationshipsForContainer(c).forEach(rel => rels.add(rel));
+        }
+        for (const comp of this.componentsBySystemCache.get(system) ?? []) {
+            this.extractRelationshipsForComponent(comp).forEach(rel => rels.add(rel));
+        }
+        this.systemParentRelsCache.set(system, rels);
+        return rels;
+    }
+
+    /**
+     * All relationships of a container and its components, used to project implied
+     * relationships onto deployment instances. Memoized per container.
+     */
+    private parentRelsForContainer(container: Container): Set<ImpliedRelationship> {
+        const cached = this.containerParentRelsCache.get(container);
+        if (cached !== undefined) return cached;
+        this.ensureRelationshipIndexes();
+        const rels = new Set<ImpliedRelationship>();
+        this.extractRelationshipsForContainer(container).forEach(rel => rels.add(rel));
+        for (const comp of this.componentsByContainerCache.get(container) ?? []) {
+            this.extractRelationshipsForComponent(comp).forEach(rel => rels.add(rel));
+        }
+        this.containerParentRelsCache.set(container, rels);
+        return rels;
+    }
+
+    private computeRelationshipsForSoftwareSystemInstance(softwareSystemInstance: SoftwareSystemInstance) {
         const softwareSystemInstanceRels: ImpliedRelationship[] = [];
 
         // collect direct explicit relationships where this instance is the source
@@ -2850,28 +3025,11 @@ class JsonGenerator {
         // a SoftwareSystem or Container is projected onto the corresponding instances.
         const parentSoftwareSystem = this.el(softwareSystemInstance.softwareSystem.ref);
         if (parentSoftwareSystem) {
-            const allParentRels = new Set<ImpliedRelationship>();
-            // collect relationships from the parent SoftwareSystem itself
-            this.extractRelationshipsForSoftwareSystem(parentSoftwareSystem).forEach(rel => allParentRels.add(rel));
-            this.elements.forEach(el => {
-                if(isContainer(el)) {
-                    if(this.resolveConatinerParent(el) == parentSoftwareSystem) {
-                        this.extractRelationshipsForContainer(el).forEach(rel => allParentRels.add(rel));
-                    }
-                } else if(isComponent(el)) {
-                    const container = this.resolveComponentParent(el);
-                    if(container) {
-                        this.extractRelationshipsForContainer(container).forEach(rel => allParentRels.add(rel));                        
-                        if(this.resolveConatinerParent(container) == parentSoftwareSystem) {
-                            this.extractRelationshipsForComponent(el).forEach(rel => allParentRels.add(rel));
-                        }
-                    }
-                }
-            });
+            const allParentRels = this.parentRelsForSystem(parentSoftwareSystem);
 
             if (allParentRels.size > 0) {
                 const softwareSystemInstanceEnv = this.getEnvironment(softwareSystemInstance);
-                this.elements.forEach(el => {
+                for (const el of this.deploymentInstances()) {
                     if (isSoftwareSystemInstance(el)) {
                         const elementEnv = this.getEnvironment(el);
                         for (const rel of allParentRels) {
@@ -2893,7 +3051,7 @@ class JsonGenerator {
                             }
                         }
                     }
-                });
+                }
             }
         }
 
@@ -2919,7 +3077,7 @@ class JsonGenerator {
      * 
      * Implied generation is controlled by !impliedRelationships flag (checked against the source relationship's offset).
      */
-    private extractRelationshipsForContainerInstance(containerInstance: ContainerInstance) {
+    private computeRelationshipsForContainerInstance(containerInstance: ContainerInstance) {
         const rels: ImpliedRelationship[] = [];
 
         // collect direct explicit relationships where this instance is the source
@@ -2944,16 +3102,8 @@ class JsonGenerator {
         const env = this.getEnvironment(containerInstance);
         const parentContainer = this.el(containerInstance.container.ref);
         if(parentContainer) {
-            const allParentRels = new Set<ImpliedRelationship>();
-            this.extractRelationshipsForContainer(parentContainer).forEach(rel => allParentRels.add(rel));
-            this.elements.forEach(el => {
-                if(isComponent(el)) {
-                    if(this.resolveComponentParent(el) === parentContainer) {
-                        this.extractRelationshipsForComponent(el).forEach(rel => allParentRels.add(rel));
-                    }
-                }
-            });
-            this.elements.forEach(el => {
+            const allParentRels = this.parentRelsForContainer(parentContainer);
+            for (const el of this.deploymentInstances()) {
                 if(isSoftwareSystemInstance(el)) {
                     for(const relContainer of allParentRels) {
                         if(this.shouldGenerateImplied(relContainer.relationship)) {
@@ -2968,7 +3118,7 @@ class JsonGenerator {
                         if(this.shouldGenerateImplied(relContainer.relationship)) {
                             if(env === this.getEnvironment(el)) {
                                 const shouldProject = (relContainer.target === this.el(el.container.ref)) ||
-                                    (el.container.ref && this.resolveConatinerParent(el.container.ref) === relContainer.target);
+                                    (el.container.ref && this.resolveContainerParent(el.container.ref) === relContainer.target);
                                 if (shouldProject && this.hasCommonDeploymentGroup(containerInstance, el)) {
                                     this.addProjectedRelationship(rels, containerInstance, el, relContainer.relationship);
                                 }
@@ -2976,7 +3126,7 @@ class JsonGenerator {
                         }
                     }
                 }
-            });
+            }
         }
 
         return this.dedupeRelationships(rels);
@@ -3124,6 +3274,31 @@ class JsonGenerator {
     }
 
     /**
+     * Workspace name for the JSON output. A body `name` line overrides the positional
+     * header; an explicitly empty value omits the field, while a workspace that
+     * declares neither falls back to the default name.
+     */
+    private workspaceName(workspace: Workspace): string | undefined {
+        return this.workspaceValue(workspace, ws => ws.nameProp.at(-1)?.value ?? ws.name, "Name");
+    }
+
+    /** Workspace description, resolved like {@link workspaceName}. */
+    private workspaceDescription(workspace: Workspace): string | undefined {
+        return this.workspaceValue(workspace, ws => ws.descriptionProp.at(-1)?.value ?? ws.description, "Description");
+    }
+
+    /**
+     * Resolves a workspace text field: an explicit value (even empty) wins, otherwise
+     * the value is inherited from the extended workspace, otherwise the default.
+     */
+    private workspaceValue(workspace: Workspace, pick: (ws: Workspace) => string | undefined, fallback: string): string | undefined {
+        const own = pick(workspace);
+        if (own !== undefined) return this.substitute(own) || undefined;
+        const inherited = this.inheritedWorkspaceValue(workspace, pick);
+        return inherited !== undefined ? (this.substitute(inherited) || undefined) : fallback;
+    }
+
+    /**
      * Value of a workspace field, falling back to the extended workspace when the
      * extending workspace does not define it.
      */
@@ -3149,9 +3324,9 @@ class JsonGenerator {
      * `!element "<canonical name>"` references. Dots and slashes are removed from
      * every name segment so the separator stays unambiguous.
      */
-    private canonicalName(node: any): string | undefined {
+    private canonicalName(node: AstNode | undefined): string | undefined {
         const clean = (name: string | undefined) => C4Utils.stripQuotes(name ?? '').replace(/[./]/g, '');
-        const deploymentNodePath = (deploymentNode: any): string => {
+        const deploymentNodePath = (deploymentNode: DeploymentNode): string => {
             const parents: string[] = [];
             let parent = this.resolveDeploymentNodeParent(deploymentNode);
             while (parent) {
@@ -3166,14 +3341,14 @@ class JsonGenerator {
         if (isPerson(node)) return `Person://${clean(node.name)}`;
         if (isSoftwareSystem(node)) return `SoftwareSystem://${clean(node.name)}`;
         if (isContainer(node)) {
-            // resolveConatinerParent follows `!element` targets and !include
+            // resolveContainerParent follows `!element` targets and !include
             // contexts, unlike a plain $container climb.
-            const softwareSystem = this.resolveConatinerParent(node as Container);
+            const softwareSystem = this.resolveContainerParent(node as Container);
             return `Container://${clean(softwareSystem?.name)}.${clean(node.name)}`;
         }
         if (isComponent(node)) {
             const container = this.resolveComponentParent(node as Component);
-            const softwareSystem = container ? this.resolveConatinerParent(container) : undefined;
+            const softwareSystem = container ? this.resolveContainerParent(container) : undefined;
             return `Component://${clean(softwareSystem?.name)}.${clean(container?.name)}.${clean(node.name)}`;
         }
         if (isDeploymentNode(node)) return `DeploymentNode://${deploymentNodePath(node)}`;
@@ -3189,7 +3364,7 @@ class JsonGenerator {
         if (isContainerInstance(node)) {
             const parent = this.resolveDeploymentNodeParent(node);
             const container = this.el(node.container?.ref);
-            const softwareSystem = container ? this.resolveConatinerParent(container as Container) : undefined;
+            const softwareSystem = container ? this.resolveContainerParent(container as Container) : undefined;
             return parent ? `ContainerInstance://${deploymentNodePath(parent)}/${clean(softwareSystem?.name)}.${clean(container?.name)}[${this.instanceId(node)}]` : undefined;
         }
         return undefined;
@@ -3231,7 +3406,9 @@ class JsonGenerator {
      * at least one group (or when neither has any). The JSON `deploymentGroups`
      * field carries only the instance's own groups.
      */
-    private getInstanceDeploymentGroupNames(node: any): Set<string> {
+    private getInstanceDeploymentGroupNames(node: AstNode): Set<string> {
+        const cached = this.instanceGroupNamesCache.get(node);
+        if (cached !== undefined) return cached;
         const groups = new Set<string>();
 
         // 1. Direct deployment groups declared on the instance
@@ -3261,11 +3438,12 @@ class JsonGenerator {
             current = current.$container;
         }
 
+        this.instanceGroupNamesCache.set(node, groups);
         return groups;
     }
 
     /** Deployment groups declared directly on a deployment node via `deploymentGroup <ref>`. */
-    private deploymentGroupNames(node: any): string[] | undefined {
+    private deploymentGroupNames(node: DeploymentNode): string[] | undefined {
         const names: string[] = [];
         for (const prop of node.deploymentGroupProps ?? []) {
             for (const ref of prop.deploymentGroups ?? []) {
@@ -3330,7 +3508,7 @@ class JsonGenerator {
      * Default tags assigned to an element by its type. These are used when
      * matching `element.tag==...` view expressions.
      */
-    private elementDefaultTags(element: any): [string, string?] {
+    private elementDefaultTags(element: AstNode | undefined): [string, string?] {
         if (isPerson(element)) return ['Element', 'Person'];
         if (isSoftwareSystem(element)) return ['Element', 'Software System'];
         if (isContainer(element)) return ['Element', 'Container'];
@@ -3344,6 +3522,7 @@ class JsonGenerator {
     }
 
     private extractTags(node: any, extraTag1?: string, extraTag2?: string): string | undefined {
+        const n = node as any;
         // Initialize set for collecting unique, cleaned tags
         const collectedTags = new Set<string>();
         // 1. Add first extra tag (if provided)
@@ -3361,8 +3540,8 @@ class JsonGenerator {
             collectedTags.add(inherited);
         }
         // 3. Process node.tags array
-        if (Array.isArray(node.tags)) {
-            for (const rawTag of node.tags) {
+        if (Array.isArray(n.tags)) {
+            for (const rawTag of n.tags) {
                 if (typeof rawTag !== 'string') continue;
                 for (const tag of this.parseDslTagValue(rawTag)) {
                     collectedTags.add(tag);
@@ -3371,14 +3550,14 @@ class JsonGenerator {
         }
         // 3.5. Fallback: handle DeploymentGroupOrTag.value if not yet resolved
         // (resolveAllInstanceValues() normally clears this, but this handles edge cases)
-        if (node.value) {
-            for (const tag of this.parseDslTagValue(String(node.value))) {
+        if (n.value) {
+            for (const tag of this.parseDslTagValue(String(n.value))) {
                 collectedTags.add(tag);
             }
         }
         // 4. Process node.tagsProps array
-        if (Array.isArray(node.tagsProps)) {
-            for (const tagOrValue of node.tagsProps) {
+        if (Array.isArray(n.tagsProps)) {
+            for (const tagOrValue of n.tagsProps) {
                 if (typeof tagOrValue === 'string') {
                     for (const tag of this.parseDslTagValue(tagOrValue)) {
                         collectedTags.add(tag);
@@ -3597,6 +3776,64 @@ class JsonGenerator {
             result.add(this.el(element));
         }
     }
+
+    /**
+     * Leaf elements of a group, memoized. The expansion is a pure function of the AST,
+     * so a group referenced by several view expressions is expanded once instead of
+     * re-walking its subtree (and its includes) for every reference.
+     */
+    private groupLeafElementsCache = new Map<Group, NamedElement[]>();
+    private leafElementsOfGroup(group: Group): NamedElement[] {
+        const cached = this.groupLeafElementsCache.get(group);
+        if (cached !== undefined) return cached;
+        const result = new Set<NamedElement>();
+        this.collectLeafElements(group, result);
+        const leaves = [...result];
+        this.groupLeafElementsCache.set(group, leaves);
+        return leaves;
+    }
+
+    /**
+     * Deployment targets (environments, nodes and groups) of a document, indexed by
+     * their declared id and, for environments/nodes, by canonical name. Built once per
+     * document so resolving `!element <id>` references does not re-scan the whole
+     * document for every extension.
+     */
+    private deploymentTargetsByDocCache = new Map<string, { byId: Map<string, AstNode>; byCanonical: Map<string, NamedElement> }>();
+    private deploymentTargetsForDoc(docUri: string, root: AstNode): { byId: Map<string, AstNode>; byCanonical: Map<string, NamedElement> } {
+        const cached = this.deploymentTargetsByDocCache.get(docUri);
+        if (cached !== undefined) return cached;
+        const byId = new Map<string, AstNode>();
+        const byCanonical = new Map<string, NamedElement>();
+        for (const content of AstUtils.streamAllContents(root)) {
+            const isTarget = isDeploymentEnvironment(content) || isDeploymentNode(content);
+            if (isTarget || isGroup(content)) {
+                const id = this.elementId(content);
+                if (id && !byId.has(id)) byId.set(id, content);
+            }
+            if (isTarget) {
+                const canonical = this.canonicalName(content);
+                if (canonical && !byCanonical.has(canonical)) byCanonical.set(canonical, content);
+            }
+        }
+        const entry = { byId, byCanonical };
+        this.deploymentTargetsByDocCache.set(docUri, entry);
+        return entry;
+    }
+
+    /** Collected elements indexed by canonical name, built once. */
+    private elementsByCanonicalNameCache?: Map<string, NamedElement>;
+    private elementsByCanonicalName(): Map<string, NamedElement> {
+        if (!this.elementsByCanonicalNameCache) {
+            const index = new Map<string, NamedElement>();
+            for (const el of this.elements) {
+                const canonical = this.canonicalName(el);
+                if (canonical && !index.has(canonical)) index.set(canonical, el);
+            }
+            this.elementsByCanonicalNameCache = index;
+        }
+        return this.elementsByCanonicalNameCache;
+    }
     
     /**
      * Transforms a DeploymentNode AST node into its JSON representation.
@@ -3641,7 +3878,7 @@ class JsonGenerator {
     }
 
     /** Transforms an InfrastructureNode AST node into its deployment JSON entry. */
-    private infrastructureNodeToJson(infra: any): any {
+    private infrastructureNodeToJson(infra: InfrastructureNode): any {
         const infraJson: any = {
             id: this.getId(infra),
             name: this.substitute(infra.name),
@@ -3659,7 +3896,7 @@ class JsonGenerator {
     }
 
     /** Transforms a SoftwareSystemInstance AST node into its deployment JSON entry. */
-    private softwareSystemInstanceToJson(ssi: any): any {
+    private softwareSystemInstanceToJson(ssi: SoftwareSystemInstance): any {
         const ssiJson: any = {
             id: this.getId(ssi),
             instanceId: this.instanceId(ssi),
@@ -3677,7 +3914,7 @@ class JsonGenerator {
     }
 
     /** Transforms a ContainerInstance AST node into its deployment JSON entry. */
-    private containerInstanceToJson(ci: any): any {
+    private containerInstanceToJson(ci: ContainerInstance): any {
         const ciJson: any = {
             id: this.getId(ci),
             containerId: this.getId(ci.container.ref),
@@ -4169,7 +4406,7 @@ class JsonGenerator {
         const ensureContainerCluster = (container: NamedElement): string => {
             const cid = 'cluster_scope_' + this.getId(container);
             if (owningCluster[cid] === undefined) {
-                const system = this.resolveConatinerParent(container as Container);
+                const system = this.resolveContainerParent(container as Container);
                 addChild(system ? ensureSystemCluster(system) : 'root', cid);
                 addElementTexts(cid, container);
             }
@@ -4193,7 +4430,7 @@ class JsonGenerator {
         let scopeSystemId: string | undefined;
         let scopeSystemClusterId: string | undefined;
         if (scopeClusterId && isContainer(scopeElement)) {
-            const scopeSystem = this.resolveConatinerParent(scopeElement);
+            const scopeSystem = this.resolveContainerParent(scopeElement);
             if (scopeSystem) {
                 scopeSystemId = this.getId(scopeSystem);
                 scopeSystemClusterId = ensureSystemCluster(scopeSystem);
@@ -4283,7 +4520,7 @@ class JsonGenerator {
             // written inside the enclosing system boundary (same-system
             // containers go into the system boundary cluster).
             if (baseCluster === undefined && scopeSystemClusterId !== undefined && isContainer(el)) {
-                const sys = this.resolveConatinerParent(el);
+                const sys = this.resolveContainerParent(el);
                 if (sys && this.getId(sys) === scopeSystemId) {
                     baseCluster = scopeSystemClusterId;
                 }
@@ -5365,54 +5602,27 @@ class JsonGenerator {
     }
 
     /**
-     * Depth of every document in the workspace `extends` chain reachable from the
-     * entry workspace: the entry document is 0, the workspace it extends is 1, and so on.
-     * `!include` files inherit the depth of the document that includes them, so
-     * instances contributed by them rank at that document's position.
+     * Computes, in one walk of the workspace `extends` chain, two things keyed
+     * differently: the depth of every reachable document (entry 0, the workspace it
+     * extends 1, ...; `!include` files inherit their includer's depth) and the source
+     * position of every collected element within its extends block (`!include` files are
+     * spliced at the include directive, so an included element's position is the include
+     * offset plus its offset within the included file). Deeper extends blocks sort before
+     * shallower ones via the extends depth.
      */
-    private computeExtendsDepths(entry: Workspace): Map<string, number> {
+    private computeExtendsInfo(entry: Workspace): { depths: Map<string, number>; positions: Map<AstNode, number> } {
         const depths = new Map<string, number>();
-        const visit = (root: AstNode, depth: number) => {
+        const positions = new Map<AstNode, number>();
+        const visit = (root: AstNode, depth: number, base: number) => {
             const doc = AstUtils.getDocument(root);
-            const uri = doc?.uri.toString();
-            if (!uri || depths.has(uri)) return;
-            depths.set(uri, depth);
+            const docUri = doc?.uri.toString();
+            if (!docUri || depths.has(docUri)) return;
+            depths.set(docUri, depth);
             const tree = doc?.parseResult.value ?? root;
             for (const content of AstUtils.streamAllContents(tree)) {
-                if (!isInclude(content) || !content.file) continue;
-                const includedRoot = this.resolveIncludedRoot(content, content.file);
-                if (includedRoot) visit(includedRoot, depth);
-            }
-        };
-        const walk = (ws: Workspace, depth: number) => {
-            visit(ws, depth);
-            if (ws.extendsUri) {
-                const parent = this.resolveParentWorkspace(ws, ws.extendsUri);
-                if (parent) walk(parent, depth + 1);
-            }
-        };
-        walk(entry, 0);
-        return depths;
-    }
-
-    /**
-     * Source position of every collected element within its extends block, in the
-     * order the reference parser reads it: `!include` files are spliced into the
-     * including document at the include directive, so an included element's position
-     * is the include offset plus its offset within the included file. Deeper extends
-     * blocks sort before shallower ones via the extends depth.
-     */
-    private computeElementSourcePositions(entry: Workspace): Map<AstNode, number> {
-        const positions = new Map<AstNode, number>();
-        const assign = (docRoot: AstNode, base: number) => {
-            const docUri = AstUtils.getDocument(docRoot)?.uri.toString();
-            if (!docUri) return;
-            for (const content of AstUtils.streamAllContents(docRoot)) {
                 if (isInclude(content) && content.file) {
                     const includedRoot = this.resolveIncludedRoot(content, content.file);
-                    if (includedRoot) {
-                        assign(includedRoot, base + (content.$cstNode?.offset ?? 0));
-                    }
+                    if (includedRoot) visit(includedRoot, depth, base + (content.$cstNode?.offset ?? 0));
                     continue;
                 }
                 if (!isNamedElement(content) || positions.has(content)) continue;
@@ -5420,28 +5630,21 @@ class JsonGenerator {
                 positions.set(content, base + (content.$cstNode?.offset ?? 0));
             }
         };
-        // Chain documents deepest first — the reference loader parses the base
-        // workspace before the extending one.
-        const chain: AstNode[] = [];
-        const seen = new Set<string>();
-        let current: Workspace | undefined = entry;
-        while (current) {
-            const doc = AstUtils.getDocument(current);
-            const uri = doc?.uri.toString();
-            if (!uri || seen.has(uri)) break;
-            seen.add(uri);
-            chain.push(doc?.parseResult.value ?? current);
-            current = current.extendsUri ? this.resolveParentWorkspace(current, current.extendsUri) : undefined;
-        }
-        chain.reverse();
-        for (const docRoot of chain) assign(docRoot, 0);
+        const walk = (ws: Workspace, depth: number) => {
+            visit(ws, depth, 0);
+            if (ws.extendsUri) {
+                const parent = this.resolveParentWorkspace(ws, ws.extendsUri);
+                if (parent) walk(parent, depth + 1);
+            }
+        };
+        walk(entry, 0);
         // Materialised instances (e.g. `instanceof`) live in this.elements as
         // copies, not the streamed AST node — give the copy its original's position.
         for (const [original, position] of positions) {
             const copy = this.materialized.get(original);
             if (copy && !positions.has(copy)) positions.set(copy, position);
         }
-        return positions;
+        return { depths, positions };
     }
 
     /**
@@ -5459,7 +5662,7 @@ class JsonGenerator {
      * @param container The Container whose parent SoftwareSystem to find
      * @returns The parent SoftwareSystem, or undefined if not found
      */
-    private resolveConatinerParent(container: Container): SoftwareSystem | undefined {
+    private resolveContainerParent(container: Container): SoftwareSystem | undefined {
         // first, try climbing the direct AST $container chain (works for inline containers)
         let current: AstNode | undefined = container;
         while (current) {
@@ -5668,7 +5871,7 @@ class JsonGenerator {
      * from `$refText` against the collected elements first; native expressions fall
      * back to the linked reference.
      */
-    private resolveExpressionReference(reference: any): any {
+    private resolveExpressionReference(reference: Reference<NamedElement> | undefined): any {
         if (!reference) return undefined;
         const text = reference.$refText;
         // Quoted-filter references are never linked: resolve from $refText only,
@@ -5684,7 +5887,7 @@ class JsonGenerator {
     }
 
     /** Resolves a reference text (identifier, name, or qualified path) to a collected element. */
-    private findElementByReferenceText(text: string): any {
+    private findElementByReferenceText(text: string): NamedElement | undefined {
         const name = C4Utils.stripQuotes(text);
         // The qualified path only identifies an element that declares its own id;
         // for id-less children it would degenerate to the parent's identifier and
@@ -5760,9 +5963,7 @@ class JsonGenerator {
                 }
             } else if (isGroup(ref)) {
                 // Groups expand to their leaf-level named elements
-                const leafElements = new Set<NamedElement>();
-                this.collectLeafElements(ref, leafElements);
-                leafElements.forEach(el => this.addLeafElementWithInstanceFallback(el, res, isAllowed));
+                this.leafElementsOfGroup(ref).forEach(el => this.addLeafElementWithInstanceFallback(el, res, isAllowed));
             } else if (ref) {
                 this.addLeafElementWithInstanceFallback(ref as NamedElement, res, isAllowed);
             } else {
@@ -5880,9 +6081,7 @@ class JsonGenerator {
             const matched = this.applyExpression(e.expr, elementsAtView, relationshipsAtScope, isAllowed);
             matched.forEach(el => {
                 if (isGroup(el)) {
-                    const groupElements = new Set<NamedElement>();
-                    this.collectLeafElements(el, groupElements);
-                    groupElements.forEach(ge => {
+                    this.leafElementsOfGroup(el).forEach(ge => {
                         this.addLeafElementWithInstanceFallback(ge, res, isAllowed);
                         relationshipsAtScope.forEach(r => {
                             if (r.target === ge && isAllowed(r.source)) res.add(r.source);
@@ -5901,9 +6100,7 @@ class JsonGenerator {
             const matched = this.applyExpression(e.expr, elementsAtView, relationshipsAtScope, isAllowed);
             matched.forEach(el => {
                 if (isGroup(el)) {
-                    const groupElements = new Set<NamedElement>();
-                    this.collectLeafElements(el, groupElements);
-                    groupElements.forEach(ge => {
+                    this.leafElementsOfGroup(el).forEach(ge => {
                         this.addLeafElementWithInstanceFallback(ge, res, isAllowed);
                         relationshipsAtScope.forEach(r => {
                             if(r.source === ge && isAllowed(r.target)) res.add(r.target);
@@ -5922,9 +6119,7 @@ class JsonGenerator {
             const matched = this.applyExpression(e.expr, elementsAtView, relationshipsAtScope, isAllowed);
             matched.forEach(el => {
                 if (isGroup(el)) {
-                    const groupElements = new Set<NamedElement>();
-                    this.collectLeafElements(el, groupElements);
-                    groupElements.forEach(ge => {
+                    this.leafElementsOfGroup(el).forEach(ge => {
                         this.addLeafElementWithInstanceFallback(ge, res, isAllowed);
                         relationshipsAtScope.forEach(r => {
                             if(r.source === ge && isAllowed(r.target)) res.add(r.target);
@@ -5959,7 +6154,7 @@ class JsonGenerator {
                 if (isComponent(el)) {
                     elParent = this.resolveComponentParent(el);
                 } else if (isContainer(el)) {
-                    elParent = this.resolveConatinerParent(el);
+                    elParent = this.resolveContainerParent(el);
                 } else if (isDeploymentNode(el) || isSoftwareSystemInstance(el) || isContainerInstance(el)) {
                     elParent = this.resolveDeploymentNodeParent(el);
                 }
@@ -6257,12 +6452,12 @@ class JsonGenerator {
     }
 
     /** True when an endpoint reference is the `this` keyword. */
-    private isThisEndpoint(reference: any): boolean {
+    private isThisEndpoint(reference: Reference<NamedElement> | undefined): boolean {
         return this.isThisReference(reference);
     }
 
     /** Resolves a relationship endpoint reference to a single element, if any. */
-    private resolveDeclaredMember(reference: any): NamedElement[] {
+    private resolveDeclaredMember(reference: Reference<NamedElement> | undefined): NamedElement[] {
         const ref = reference?.ref;
         return ref ? [this.el(ref)] : [];
     }
@@ -6554,10 +6749,8 @@ class JsonGenerator {
                     const raw = C4Utils.stripQuotes(String(ext.id));
                     const root = AstUtils.getDocument(ext)?.parseResult.value;
                     if (root) {
-                        const astTarget = AstUtils.streamAllContents(root).find((node) =>
-                            node !== ext
-                            && (isDeploymentEnvironment(node) || isDeploymentNode(node) || isGroup(node))
-                            && this.elementId(node) === raw);
+                        const docUri = AstUtils.getDocument(ext)?.uri.toString();
+                        const astTarget = docUri ? this.deploymentTargetsForDoc(docUri, root).byId.get(raw) : undefined;
                         if (astTarget) key = astTarget as NamedElement;
                     }
                 }
@@ -6566,13 +6759,9 @@ class JsonGenerator {
                     const raw = C4Utils.stripQuotes(String(ext.id));
                     if (raw.includes('://')) {
                         const root = AstUtils.getDocument(ext)?.parseResult.value;
-                        const candidates: any[] = [...this.elements];
-                        if (root) {
-                            for (const content of AstUtils.streamAllContents(root)) {
-                                if (isDeploymentEnvironment(content) || isDeploymentNode(content)) candidates.push(content);
-                            }
-                        }
-                        const canonical = candidates.find(candidate => this.canonicalName(candidate) === raw);
+                        const docUri = AstUtils.getDocument(ext)?.uri.toString();
+                        const canonical = this.elementsByCanonicalName().get(raw)
+                            ?? (root && docUri ? this.deploymentTargetsForDoc(docUri, root).byCanonical.get(raw) : undefined);
                         if (canonical) key = canonical as NamedElement;
                     }
                 }
@@ -6780,9 +6969,12 @@ class JsonGenerator {
                     .map((ssi: any) => this.softwareSystemInstanceToJson(ssi));
                 jsonElement.softwareSystemInstances = (jsonElement.softwareSystemInstances ?? []).concat(list);
             }
-            // Relationships added inside the extension body
-            if (Array.isArray(ext.relationships) && ext.relationships.length > 0) {
-                const rels = ext.relationships
+            // Relationships added inside the extension body. Only implicit ones belong
+            // to the extended element; an explicit relationship is already attached to
+            // its own source element by collectElementExtensions.
+            const bodyRelationships = (ext.relationships ?? []).filter((r: any) => isImplicitRelationship(r));
+            if (bodyRelationships.length > 0) {
+                const rels = bodyRelationships
                     .map((r: any) => {
                         const source = this.resolveSource(r);
                         const target = this.resolveTarget(r);
@@ -6959,14 +7151,7 @@ class JsonGenerator {
         relationshipsAtView: Set<Relationship>,
         scopeContainer: Container
     ) {
-        const relationshipsAllowed = new Set<ImpliedRelationship>();
-        this.elements.forEach(el => {
-            if(isSoftwareSystem(el)) this.extractRelationshipsForSoftwareSystem(el).forEach(rel => relationshipsAllowed.add(rel));
-            else if(isPerson(el)) this.extractRelationshipsForPerson(el).forEach(rel => relationshipsAllowed.add(rel));
-            else if(isComponent(el)) this.extractRelationshipsForComponent(el).forEach(rel => relationshipsAllowed.add(rel));
-            else if(isContainer(el)) this.extractRelationshipsForContainer(el).forEach(rel => relationshipsAllowed.add(rel));
-            else if(isCustomElement(el)) this.extractRelationshipsForCustom(el).forEach(rel => relationshipsAllowed.add(rel));            
-        });
+        const relationshipsAllowed = this.staticRelationshipsSet();
 
         // scope guard: only Components (belonging to scope), Containers (same system), SoftwareSystems, Persons, CustomElements
         const isAllowed = (element: NamedElement | undefined) : element is (SoftwareSystem | Person | Container | CustomElement) => {
@@ -6976,13 +7161,13 @@ class JsonGenerator {
             if(element === scopeContainer) return false;
             // Container must belong to the same parent system as the scope Container
             if(isContainer(element)) {
-                const scopeContainerParent = this.resolveConatinerParent(scopeContainer);
-                const containerParent = this.resolveConatinerParent(element);
+                const scopeContainerParent = this.resolveContainerParent(scopeContainer);
+                const containerParent = this.resolveContainerParent(element);
                 return (scopeContainerParent === containerParent);
             }
             // the parent SoftwareSystem of scope Container is not visible (rendered as a boundary)
             if(isSoftwareSystem(element)) {
-                const scopeContainerParent = this.resolveConatinerParent(scopeContainer);
+                const scopeContainerParent = this.resolveContainerParent(scopeContainer);
                 return (element !== scopeContainerParent);
             }
             // other top-level elements (Person, CustomElement) are allowed
@@ -6998,11 +7183,9 @@ class JsonGenerator {
             if (isInclude && prop.all === '*') {
 
                 // add all Components belonging to the scope Container
-                this.elements.forEach(el => {
-                    if(isComponent(el) && this.resolveComponentParent(el) === scopeContainer) {
-                        elementsAtView.add(el);
-                    }
-                });
+                for (const el of this.componentsOfContainer(scopeContainer)) {
+                    elementsAtView.add(el);
+                }
 
                 // add any external element that has a relationship with an already visible component
                 const include = new Set<RelationshipMember>();
@@ -7064,15 +7247,14 @@ class JsonGenerator {
         relationshipsAtView: Set<Relationship>,
         scopeSoftwareSystem: SoftwareSystem
     ) {
-        // collect all implied relationships for all elements in the model
-        const relationshipsAllowed = new Set<ImpliedRelationship>();
-        this.collectAllRelationships().forEach(rel => relationshipsAllowed.add(rel));
+        // collect all implied relationships for all elements in the model (shared, read-only)
+        const relationshipsAllowed = this.allRelationshipsSet();
 
         // scope guard: only Containers (belonging to scope), SoftwareSystems, Persons, and CustomElements
         // the scope SoftwareSystem itself is excluded (it's rendered as a boundary cluster instead)
         const isAllowed = (element: NamedElement | undefined) : element is (SoftwareSystem | Person | Container | CustomElement) => {
             // Container must belong to the scope SoftwareSystem
-            if(isContainer(element)) return this.resolveConatinerParent(element) === scopeSoftwareSystem;
+            if(isContainer(element)) return this.resolveContainerParent(element) === scopeSoftwareSystem;
             // the scope SoftwareSystem is not a visible element (rendered as a boundary)
             if(element === scopeSoftwareSystem) return false;
             // other top-level elements (SoftwareSystem, Person, CustomElement) are allowed
@@ -7087,11 +7269,9 @@ class JsonGenerator {
 
             if (isInclude && prop.all === '*') {
                 // add all Containers belonging to the scope SoftwareSystem
-                this.elements.forEach(el => {
-                    if(isContainer(el) && this.resolveConatinerParent(el) === scopeSoftwareSystem) {
-                        elementsAtView.add(el);
-                    }
-                });
+                for (const el of this.containersOfSystem(scopeSoftwareSystem)) {
+                    elementsAtView.add(el);
+                }
 
                 // add any external element that has a relationship with an already visible container
                 const include = new Set<RelationshipMember>();
@@ -7151,11 +7331,8 @@ class JsonGenerator {
         elementsAtView: Set<RelationshipMember>,
         relationshipsAtView: Set<Relationship>
     ) {
-        // collect all relationships for custom elements
-        const relationshipsAllowed = new Set<ImpliedRelationship>();
-        this.elements.forEach(el => {
-            if(isCustomElement(el)) this.extractRelationshipsForCustom(el).forEach(rel => relationshipsAllowed.add(rel));
-        });
+        // collect all relationships for custom elements (shared, read-only)
+        const relationshipsAllowed = this.customRelationshipsSet();
 
         // scope guard: only CustomElements are allowed on Custom diagrams
         const isInScope = (element: NamedElement | undefined) : element is CustomElement => isCustomElement(element);
@@ -7235,7 +7412,7 @@ class JsonGenerator {
         // collect include/exclude operations sorted by CST offset (declaration order)
         const orderedOps = this.getIncludeExclude(view);
 
-        const rels = new Set<ImpliedRelationship>(this.collectAllRelationships());
+        const rels = this.allRelationshipsSet();
 
         // scope guard: only top-level elements (SoftwareSystem, Person, CustomElement) are allowed on System Context
         const isInScope = (element: NamedElement | undefined) : element is (SoftwareSystem | Person | CustomElement) => {
@@ -7383,8 +7560,7 @@ class JsonGenerator {
         elementsAtView: Set<RelationshipMember>,
         relationshipsAtView: Set<Relationship>
     ) {
-        const relationshipsAllowed = new Set<ImpliedRelationship>();
-        this.collectAllRelationships().forEach(rel => relationshipsAllowed.add(rel));
+        const relationshipsAllowed = this.allRelationshipsSet();
 
         // scope guard: only top-level elements (SoftwareSystem, Person, CustomElement) are allowed on System Landscape
         const isAllowed = (element: NamedElement | undefined) : element is (SoftwareSystem | Person | CustomElement) => isSoftwareSystem(element) || isPerson(element) || isCustomElement(element);
@@ -7570,7 +7746,7 @@ class JsonGenerator {
                         if ((!environment || environment === this.getEnvironment(el)) && (!softwareSystem || softwareSystem === this.el(el.softwareSystem.ref))) elementsAtView.add(el);
                     }
                     if(isContainerInstance(el)) {
-                        if ((!environment || environment === this.getEnvironment(el)) && (!softwareSystem || (el.container.ref !== undefined && this.resolveConatinerParent(el.container.ref) === softwareSystem))) elementsAtView.add(el);
+                        if ((!environment || environment === this.getEnvironment(el)) && (!softwareSystem || (el.container.ref !== undefined && this.resolveContainerParent(el.container.ref) === softwareSystem))) elementsAtView.add(el);
                     }
                 });                
 
@@ -7625,7 +7801,7 @@ class JsonGenerator {
                 .map(ssi => this.el(ssi.softwareSystem.ref)));
         for (const el of Array.from(elementsAtView)) {
             if (isContainerInstance(el)) {
-                const system = el.container.ref ? this.resolveConatinerParent(el.container.ref) : undefined;
+                const system = el.container.ref ? this.resolveContainerParent(el.container.ref) : undefined;
                 if (system && visibleSystems.has(system)) {
                     elementsAtView.delete(el);
                 }

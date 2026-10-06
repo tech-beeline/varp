@@ -1219,7 +1219,7 @@ fragment ElementExtensionBody:
         | NL+ containers+=Container
         | NL+ components+=Component
         | NL+ groups+=Group
-        | NL+ relationships+=ImplicitRelationship
+        | NL+ relationships+=(Relationship | ImplicitRelationship)
         | NL+ docs+=DocsDirective
         | NL+ adrs+=AdrsDirective
         | NL+ EverywhereFeatures;
@@ -1414,10 +1414,6 @@ Group:
 // RELATIONSHIPS
 // ═════════════════════════════════════════════════════════════════════════════
 
-// Relationship arrow: -> or --<archetype>->
-RelationshipArrow:
-    (arrow=ARROW | ('--' archetype=[ArchetypeDefinition:Identifier] ARROW));
-
 // NoRelationship: -/> — explicitly marks no relationship between two elements
 // The body is mandatory, as in Structurizr, where the directive is only recognised
 // together with the context start token, and it may nest further -/> directives.
@@ -1437,7 +1433,9 @@ NoRelationship:
 Relationship:
     Id?
     (
-        (source=[RelationshipMember:QualifiedName] | sourceThis?=THIS_KW) RelationshipArrow (target=[RelationshipMember:QualifiedName] | targetThis?=THIS_KW)
+        (source=[RelationshipMember:QualifiedName] | sourceThis?=THIS_KW)
+        (arrow=ARROW | ('--' archetype=[ArchetypeDefinition:Identifier] ARROW))
+        (target=[RelationshipMember:QualifiedName] | targetThis?=THIS_KW)
     )
     Meta?
     (

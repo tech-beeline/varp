@@ -53,7 +53,6 @@ export const typeToToken: Record<string, string> = {
     'ContainerInstance': 'containerInstance',
     'GenericInstance': 'instanceof',
     'Relationship': '->',
-    'RelationshipArrow': '->',
     'ImplicitRelationship': '->',
     'NoRelationship': '-/>',
     'NameProperty': 'name',

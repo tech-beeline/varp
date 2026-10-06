@@ -52,7 +52,7 @@ describe('relationship archetypes', () => {
     it('keeps the archetype reference on the explicit relationship', async () => {
         const { workspace } = await build(dsl);
         const relationship: any = AstUtils.streamAllContents(workspace).filter(isRelationship).head()!;
-        expect(relationship.$type).toBe('RelationshipArrow');
+        expect(relationship.$type).toBe('Relationship');
         expect(relationship.archetype?.ref).toBeDefined();
     });
 

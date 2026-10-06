@@ -6302,7 +6302,7 @@ class JsonGenerator {
     private resolveElementsFromExpression(expression: ViewExpression): NamedElement[] {
         const result = new Set<NamedElement>();
         // Build a full relationship set for coupling resolution
-        const allRels = new Set<ImpliedRelationship>(this.collectAllRelationships());
+        const allRels = this.allRelationshipsSet();
 
         // Collect all elements as pass-through (no scope filtering)
         const allElements = new Set<RelationshipMember>();
@@ -6332,7 +6332,7 @@ class JsonGenerator {
      */
     private resolveRelationshipsFromExpression(expression: ViewExpression): Relationship[] {
         const result = new Set<Relationship>();
-        const allRels = new Set<ImpliedRelationship>(this.collectAllRelationships());
+        const allRels = this.allRelationshipsSet();
         const allElements = new Set<RelationshipMember>();
 
         // Build full relationship and element sets

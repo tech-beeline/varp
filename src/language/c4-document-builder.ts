@@ -224,7 +224,6 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
                 const childDoc = this.langiumDocumentFactory.fromString(content, targetUri);
                 this.langiumDocuments?.addDocument(childDoc);
                 this.loadedIncludes.add(loadedKey);
-                console.log(`[C4 Builder] Loaded include: ${filePath}`);
                 return targetUri;
             } catch (readError: any) {
                 // If it's a directory (EISDIR), load all .dsl files from it
@@ -244,7 +243,6 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
                         const childDoc = this.langiumDocumentFactory.fromString(content, withExt);
                         this.langiumDocuments?.addDocument(childDoc);
                         this.loadedIncludes.add(withExt.toString());
-                        console.log(`[C4 Builder] Loaded include (with .dsl): ${filePath}.dsl`);
                         return withExt;
                     } catch { /* not found - retry on the next cycle */ }
                 }
@@ -279,7 +277,6 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
                 } catch { /* skip unreadable files */ }
             }
             if (loadedCount > 0) {
-                console.log(`[C4 Builder] Loaded ${loadedCount} file(s) from directory: ${filePath}`);
                 return dirUri;
             }
         } catch { /* ignore directory read errors */ }
@@ -328,7 +325,6 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
                 // on the next build cycle.
                 this.loadedIncludes.add(visitedKey);
                 newUris.push(targetUri);
-                console.log(`[C4 Builder] Loaded extends: ${extendsUri}`);
                 return targetUri;
             }
         } catch (e) {

@@ -290,7 +290,7 @@ class JsonGenerator {
     private readonly propertiesViews: Record<string, string> = {};
     private readonly elements: NamedElement[] = [];
     private readonly relationships: Relationship[] = [];
-    /** Index of relationships by resolved source element id (built once per generate call). */
+    /** Index of relationships by resolved source element id (rebuilt after !elements synthetic pushes). */
     private readonly relationshipsBySource: Map<string, Relationship[]> = new Map();
     /** Explicit relationships indexed by their DSL identifier. */
     private readonly relationshipsByIdentifier: Map<string, Relationship> = new Map();
@@ -6418,12 +6418,13 @@ class JsonGenerator {
                         if (source === target) continue;
                         const synthetic = this.createElementDirectiveRelationship(declared, source, target);
                         this.relationships.push(synthetic);
-                        const key = this.getId(source);
-                        const list = this.relationshipsBySource.get(key);
-                        if (list) list.push(synthetic); else this.relationshipsBySource.set(key, [synthetic]);
                     }
                 }
             }
+            // Synthetic relationships are relationship-derived state like any other:
+            // rebuild the source index through the single standard path instead of
+            // patching it incrementally at the mutation site.
+            this.buildRelationshipsBySource();
             this.invalidateAllRelationships();
         }
     }

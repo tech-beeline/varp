@@ -416,7 +416,7 @@ export class C4GeneratorHandler {
 
         // Deep-clone the render JSON so the cached copy stays untouched and the
         // enricher can freely inject nested `documentation` into model elements.
-        const fullJson = JSON.parse(JSON.stringify(renderJson));
+        const fullJson = structuredClone(renderJson);
         await this.enricher.enrich(rootUri, fullJson);
         return fullJson;
     }

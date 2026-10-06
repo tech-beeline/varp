@@ -611,8 +611,9 @@ class JsonGenerator {
             visited.add(docUri);
         }
 
-        // Get or create the ranges array for this document
-        if (docUri && !this.impliedRangesByDoc.has(docUri)) {
+        // Get or create the ranges array for this document; the visited guard above
+        // guarantees the first visit per document, so no has() check is needed here
+        if (docUri) {
             this.impliedRangesByDoc.set(docUri, []);
         }
         const ranges = docUri ? this.impliedRangesByDoc.get(docUri)! : null;
@@ -2176,6 +2177,25 @@ class JsonGenerator {
         return this.allRelationshipsSetCache;
     }
 
+    /** Memoized allRelationshipMembers() set. `this.elements` is fixed after collection, so the set never needs invalidation. */
+    private allRelationshipMembersCache?: Set<RelationshipMember>;
+
+    /**
+     * All collected elements that are relationship members as a set, memoized. The
+     * element list is immutable after collection, so a single instance is shared between
+     * the element- and relationship-expression resolvers instead of being rebuilt per call.
+     */
+    private allRelationshipMembers(): Set<RelationshipMember> {
+        if (!this.allRelationshipMembersCache) {
+            const members = new Set<RelationshipMember>();
+            this.elements.forEach(el => {
+                if (isRelationshipMember(el)) members.add(el);
+            });
+            this.allRelationshipMembersCache = members;
+        }
+        return this.allRelationshipMembersCache;
+    }
+
     /**
      * Relationships of the static-structure elements (software systems, people,
      * containers, components and custom elements — no deployment), memoized for
@@ -2523,9 +2543,10 @@ class JsonGenerator {
 
     /** Direct and implied relationships whose source is the given element. */
     private relationshipsOwnedBy(element: NamedElement): ImpliedRelationship[] {
-        // Builds (and caches) the source index as a side effect.
+        // Builds (and caches) the source index as a side effect; after it returns the
+        // index is guaranteed to be set, only the per-element key may be missing.
         this.collectAllRelationships();
-        return this.relationshipsBySourceImplied?.get(this.getId(element)) ?? [];
+        return this.relationshipsBySourceImplied!.get(this.getId(element)) ?? [];
     }
 
     /** Extracts the relationships of an element, dispatching on its concrete type. */
@@ -6297,10 +6318,7 @@ class JsonGenerator {
         const allRels = this.allRelationshipsSet();
 
         // Collect all elements as pass-through (no scope filtering)
-        const allElements = new Set<RelationshipMember>();
-        this.elements.forEach(el => {
-            if (isRelationshipMember(el)) allElements.add(el);
-        });
+        const allElements = this.allRelationshipMembers();
 
         // isAllowed: all elements are allowed in global scope
         const isAllowed = (el: NamedElement | undefined): el is RelationshipMember =>
@@ -6325,12 +6343,7 @@ class JsonGenerator {
     private resolveRelationshipsFromExpression(expression: ViewExpression): Relationship[] {
         const result = new Set<Relationship>();
         const allRels = this.allRelationshipsSet();
-        const allElements = new Set<RelationshipMember>();
-
-        // Build full relationship and element sets
-        this.elements.forEach(el => {
-            if (isRelationshipMember(el)) allElements.add(el);
-        });
+        const allElements = this.allRelationshipMembers();
 
         const isAllowed = (el: NamedElement | undefined): el is RelationshipMember =>
             !!el && isRelationshipMember(el);

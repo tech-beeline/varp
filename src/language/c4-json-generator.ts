@@ -2108,7 +2108,6 @@ class JsonGenerator {
     private instanceGroupNamesCache = new Map<AstNode, Set<string>>();
     /** Element indexes for instance projection, built once in element order. */
     private containersBySystemCache = new Map<SoftwareSystem, Container[]>();
-    private componentsBySystemCache = new Map<SoftwareSystem, Component[]>();
     private componentsByContainerCache = new Map<Container, Component[]>();
     private relationshipIndexesReady = false;
     /**
@@ -2139,10 +2138,11 @@ class JsonGenerator {
     }
 
     /**
-     * Builds, once, the element indexes the instance projection needs: containers and
-     * components grouped by their parent system, and components grouped by their parent
-     * container. These depend only on the element hierarchy, so they survive a
-     * relationship mutation. Without them, every deployment instance rescans the model.
+     * Builds, once, the element indexes the instance projection needs: containers grouped
+     * by their parent system and components grouped by their parent container. Component
+     * relationships per system are derived via parentRelsForContainer, so no per-system
+     * component index is kept. These depend only on the element hierarchy, so they survive
+     * a relationship mutation. Without them, every deployment instance rescans the model.
      */
     private ensureRelationshipIndexes(): void {
         if (this.relationshipIndexesReady) return;
@@ -2158,11 +2158,6 @@ class JsonGenerator {
                 if (container) {
                     const list = this.componentsByContainerCache.get(container);
                     if (list) list.push(el); else this.componentsByContainerCache.set(container, [el]);
-                    const system = this.resolveContainerParent(container);
-                    if (system) {
-                        const slist = this.componentsBySystemCache.get(system);
-                        if (slist) slist.push(el); else this.componentsBySystemCache.set(system, [el]);
-                    }
                 }
             }
         }
@@ -2974,10 +2969,7 @@ class JsonGenerator {
         const rels = new Set<ImpliedRelationship>();
         this.extractRelationshipsForSoftwareSystem(system).forEach(rel => rels.add(rel));
         for (const c of this.containersBySystemCache.get(system) ?? []) {
-            this.extractRelationshipsForContainer(c).forEach(rel => rels.add(rel));
-        }
-        for (const comp of this.componentsBySystemCache.get(system) ?? []) {
-            this.extractRelationshipsForComponent(comp).forEach(rel => rels.add(rel));
+            this.parentRelsForContainer(c).forEach(rel => rels.add(rel));
         }
         this.systemParentRelsCache.set(system, rels);
         return rels;

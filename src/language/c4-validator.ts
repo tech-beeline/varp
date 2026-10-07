@@ -15,11 +15,12 @@
 */
 
 import { AstNode, AstUtils, isAstNode, type ValidationAcceptor, type ValidationChecks } from 'langium';
-import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, ModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty } from '../generated/ast';
+import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, ModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty, type StringLiteralExpression } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
 import * as includeResolver from './c4-include-resolver';
 import { C4Utils } from './c4-utils';
+import { parseQuotedFilterText } from './c4-quoted-filter';
 import { canonicalElementName, findDuplicateRelationships, type DeclaredRelationship } from './c4-implied-relationships';
 
 /** Normalizes lowercase shape names to Structurizr PascalCase format (Box, RoundedBox, Cylinder, etc.) */
@@ -212,6 +213,9 @@ export function registerValidationChecks(services: C4Services) {
         ImageView: [
             (node, accept) => validator.checkIncludeElements(node, accept, 'ImageView')
         ],
+        StringLiteralExpression: [
+            (node, accept) => validator.checkQuotedViewExpression(node, accept)
+        ],
         PropertiesBlock: [
             (node, accept) => validator.checkIncludeElements(node, accept, 'PropertiesBlock')
         ],
@@ -392,6 +396,19 @@ export class C4Validator {
         }
         const itemName = this.getElementName(item);
         return `'${item.$type}' ('${itemName}') is not allowed inside a ${blockType} block.`;
+    }
+
+    /**
+     * A quoted view filter is re-parsed as an expression. When the text does not
+     * parse as an expression it is treated as an element/relationship name, so it is
+     * reported the way the reference implementation does.
+     */
+    checkQuotedViewExpression(node: StringLiteralExpression, accept: ValidationAcceptor): void {
+        const text = C4Utils.stripQuotes(node.value);
+        if (!text) return;
+        if (parseQuotedFilterText(this.sharedServices, text).expressions.length === 0) {
+            accept('error', `The element/relationship "${text}" does not exist`, { node });
+        }
     }
 
     /**

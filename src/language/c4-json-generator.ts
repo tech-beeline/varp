@@ -17,6 +17,7 @@
 import { AstNode, AstUtils, Reference, isReference } from 'langium';
 import { URI } from 'vscode-uri';
 import { flatId, C4Utils, OVERLAY_PROPERTY_KEYS, archetypeChain, archetypeInstanceType, declaredIdentifier, type FlatIdResolvers } from './c4-utils';
+import { parseQuotedFilterText } from './c4-quoted-filter';
 import { encodePlantUml } from './plantuml-encoder';
 import { Graphviz } from '@hpcc-js/wasm-graphviz';
 
@@ -5795,7 +5796,8 @@ class JsonGenerator {
     /**
      * Re-parses the content of a quoted view filter through the grammar and returns
      * the resulting expressions. The filter text is parsed as a synthetic document
-     * that is never registered. Results are cached by filter text.
+     * that is never registered. Results are cached by filter text. An invalid filter
+     * yields no expressions; the validator reports it separately.
      */
     private parseQuotedFilter(value: string | undefined): ViewExpression[] {
         const text = C4Utils.stripQuotes(value);
@@ -5804,24 +5806,7 @@ class JsonGenerator {
         const cached = this.quotedFilterExpressions.get(text);
         if (cached) return cached;
 
-        // `custom` takes no scope reference, so the wrapper parses for any filter content.
-        const dsl = `views {\n    custom {\n        include ${this.requoteFilterValues(text)}\n    }\n}`;
-        const document = this.services.shared.workspace.LangiumDocumentFactory
-            .fromString(dsl, URI.parse('inmemory:/quoted-filter.dsl'));
-        // A bare `views { ... }` block is valid at the document root.
-        const root: any = document.parseResult.value;
-
-        const parsed: ViewExpression[] = [];
-        for (const include of root?.viewsBlocks?.at(0)?.views?.at(0)?.includeProps ?? []) {
-            for (const element of include.expressions ?? []) {
-                if (element.expression) parsed.push(element.expression);
-            }
-        }
-        if (parsed.length === 0) {
-            // Log the parser reason when the filter produced no expression.
-            const reason = document.parseResult.parserErrors.map(e => e.message).join('; ');
-            console.warn(`[C4 JSON] Cannot parse quoted view filter "${text}"${reason ? `: ${reason}` : ''}`);
-        }
+        const parsed = parseQuotedFilterText(this.services.shared, text).expressions;
         // The document is never linked, so register its references: they must be
         // resolved from $refText instead of triggering reference resolution.
         for (const expression of parsed) {
@@ -5840,43 +5825,6 @@ class JsonGenerator {
                 }
             }
         }
-    }
-
-    /**
-     * Quotes filter values that contain whitespace so the expression grammar can
-     * read them. Only values following `==` / `!=` are touched; already-quoted
-     * values are left alone.
-     */
-    private requoteFilterValues(text: string): string {
-        const stopsAt = /[,()[\]&|=!>}]/;
-        let result = '';
-        let index = 0;
-
-        while (index < text.length) {
-            const isOperator = text.startsWith('==', index) || text.startsWith('!=', index);
-            if (!isOperator) {
-                result += text[index++];
-                continue;
-            }
-
-            result += text.substring(index, index + 2);
-            index += 2;
-            // Whitespace between the operator and its value is preserved as-is.
-            while (index < text.length && /\s/.test(text[index])) {
-                result += text[index++];
-            }
-
-            let end = index;
-            while (end < text.length && !stopsAt.test(text[end])) end++;
-            const value = text.substring(index, end);
-            const trimmed = value.trimEnd();
-            const alreadyQuoted = /^(["']).*\1$/.test(trimmed);
-            const quoted = trimmed === '' || alreadyQuoted ? trimmed : `"${trimmed}"`;
-            result += quoted + value.substring(trimmed.length);
-            index = end;
-        }
-
-        return result;
     }
 
     /**

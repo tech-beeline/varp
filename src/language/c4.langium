@@ -1346,8 +1346,10 @@ ScriptDirective:
 // Script body content — captures all tokens as-is (preserved for script execution)
 IgnoredScriptBody returns string:
     (
-        '(' | ')' | '=' | '[' | ']' | ';' | '.' | ':' | '/' | '-' | ',' | '$' | ARROW | NO_ARROW | '>' | '*' | '@' | '!' | '+'
+        '(' | ')' | '=' | '[' | ']' | ';' | '.' | ':' | '/' | '-' | ',' | '$' | ARROW | NO_ARROW | '>' | '<' | '*' | '@' | '!' | '+' | '?' | '~' | '|' | '^'
+        | '==' | '!=' | '&&' | '||'
         | STRING
+        | TEXT_BLOCK
         | UNQUOTED_STRING
         | PATH_TOKEN
         | RELATIONSHIP_SOURCE

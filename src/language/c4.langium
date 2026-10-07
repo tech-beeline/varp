@@ -1251,8 +1251,10 @@ PropertiesBlock:
 PropertyItem:
     name=PropertyKey value=PropertyValue;
 
+// A dotted name whose first segment is a keyword (e.g. plantuml.url) lexes as the
+// keyword token followed by a DOT_SUFFIX, so trailing dot suffixes are part of the name.
 PropertyKey returns string:
-    UNQUOTED_STRING | ASSIGNMENT | DOT_SUFFIX | STRING | AnyKeyword;
+    (UNQUOTED_STRING | ASSIGNMENT | DOT_SUFFIX | STRING | AnyKeyword) DOT_SUFFIX*;
 
 // A property value runs to the end of the line and may contain any
 // non-whitespace character, so punctuation is listed as part of the value.

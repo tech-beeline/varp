@@ -2380,6 +2380,7 @@ class JsonGenerator {
             technology: rel.technology ?? inherited?.technology,
             technologyParts: rel.technologyParts,
             tags: rel.tags,
+            tagsProps: rel.tagsProps,
             url: rel.url,
             properties: rel.properties,
             perspectives: rel.perspectives
@@ -6226,7 +6227,7 @@ class JsonGenerator {
         else if (isRelationshipTagExpression(e)) {
             const searchTags = e.values.map(t => C4Utils.stripQuotes(t));
             relationshipsAtScope.forEach(r => {
-                const relTags = (this.extractTags(r, 'Relationship')?.split(',') || []).map(t => t.trim());
+                const relTags = (this.extractTags(r.relationship, 'Relationship')?.split(',') || []).map(t => t.trim());
                 const hasAllTags = searchTags.every(st => relTags.includes(st));
                 const matches = e.operator === '==' ? hasAllTags : !hasAllTags;
                 if (matches) {

@@ -35,16 +35,16 @@
       } ],
       "documentation" : { },
       "id" : "1",
-      "name" : "LCR",
+      "name" : "Core",
       "properties" : {
-        "structurizr.dsl.identifier" : "LCR"
+        "structurizr.dsl.identifier" : "Core"
       },
       "tags" : "Element,Software System"
     } ]
   },
   "properties" : {
     "structurizr.inspection.error" : "13",
-    "structurizr.dsl" : "d29ya3NwYWNlIHsNCiAgICBuYW1lICIiDQogICAgZGVzY3JpcHRpb24gIiINCg0KICAgIG1vZGVsIHsNCiAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICBzdHJ1Y3R1cml6ci5ncm91cFNlcGFyYXRvciAiLyINCiAgICAgICAgfQ0KDQogICAgICAgIExDUiA9IHNvZnR3YXJlU3lzdGVtIExDUg0KDQogICAgICAgICFlbGVtZW50IExDUiB7DQogICAgICAgICAgICBncm91cCBPcmNoZXN0cmF0aW9uIHsNCiAgICAgICAgICAgICAgICB0ZW1wb3JhbF9kYiA9IGNvbnRhaW5lciAidGVtcG9yYWxfZGIiDQogICAgICAgICAgICB9DQogICAgICAgICAgICBoYV9wcm94eSA9IGNvbnRhaW5lciAiaGFwcm94eSINCiAgICAgICAgICAgIGhhX3Byb3h5IC0+IHRlbXBvcmFsX2RiICLQn9GA0L7QutGB0LjRgNC+0LLQsNC90LjQtSDQt9Cw0L/RgNC+0YHQvtCyIiAiVExTOjU0MzIiDQogICAgICAgIH0NCiAgICB9DQp9",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCiAgICBuYW1lICIiDQogICAgZGVzY3JpcHRpb24gIiINCg0KICAgIG1vZGVsIHsNCiAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICBzdHJ1Y3R1cml6ci5ncm91cFNlcGFyYXRvciAiLyINCiAgICAgICAgfQ0KDQogICAgICAgIENvcmUgPSBzb2Z0d2FyZVN5c3RlbSBDb3JlDQoNCiAgICAgICAgIWVsZW1lbnQgQ29yZSB7DQogICAgICAgICAgICBncm91cCBPcmNoZXN0cmF0aW9uIHsNCiAgICAgICAgICAgICAgICB0ZW1wb3JhbF9kYiA9IGNvbnRhaW5lciAidGVtcG9yYWxfZGIiDQogICAgICAgICAgICB9DQogICAgICAgICAgICBoYV9wcm94eSA9IGNvbnRhaW5lciAiaGFwcm94eSINCiAgICAgICAgICAgIGhhX3Byb3h5IC0+IHRlbXBvcmFsX2RiICLQn9GA0L7QutGB0LjRgNC+0LLQsNC90LjQtSDQt9Cw0L/RgNC+0YHQvtCyIiAiVExTOjU0MzIiDQogICAgICAgIH0NCiAgICB9DQp9",
     "structurizr.inspection.info" : "0",
     "structurizr.inspection.ignore" : "0",
     "structurizr.inspection.warning" : "0"
@@ -74,7 +74,7 @@
       "externalSoftwareSystemBoundariesVisible" : false,
       "generatedKey" : true,
       "key" : "Container-001",
-      "name" : "Container View: LCR",
+      "name" : "Container View: Core",
       "order" : 3,
       "relationships" : [ {
         "id" : "4"
@@ -90,7 +90,7 @@
       "enterpriseBoundaryVisible" : true,
       "generatedKey" : true,
       "key" : "SystemContext-001",
-      "name" : "System Context View: LCR",
+      "name" : "System Context View: Core",
       "order" : 2,
       "softwareSystemId" : "1"
     } ],

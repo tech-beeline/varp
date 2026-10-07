@@ -7,9 +7,9 @@ workspace {
             structurizr.groupSeparator "/"
         }
 
-        LCR = softwareSystem LCR
+        Core = softwareSystem Core
 
-        !element LCR {
+        !element Core {
             group Orchestration {
                 temporal_db = container "temporal_db"
             }

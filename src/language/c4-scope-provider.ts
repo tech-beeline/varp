@@ -252,6 +252,17 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     ): AstNodeDescription[] {
         const descriptions: AstNodeDescription[] = [];
 
+        // An `!element` directive is not a model element: it is only a namespace
+        // proxy for the element it extends. Registering the directive's own id or
+        // name would shadow that element, so `dynamic LCR` would resolve to
+        // `!element LCR` and emit a dangling `elementextension_*` id. The
+        // directive contributes no description of its own; its children are still
+        // registered with the extension id as an FQN prefix (see
+        // hasElementExtensionAncestor and calculateHierarchicalParts).
+        if (isElementExtension(element)) {
+            return descriptions;
+        }
+
         const elementRecord = element as any;
         let elementId = elementRecord.id;
         if (!elementId && isArchetypeDefinition(element)) {

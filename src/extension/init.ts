@@ -234,13 +234,13 @@ async function refreshDiagram(uri: string, json: any, generation?: number, textM
     // on the preview (included in every postMessage), so re-rendering the same
     // diagram must not block on re-fetching theme files.
     await preview.deliver(json, viewKey, uri, generation, textMeasurements, getThemesForPreview);
-    if (firstDelivery) {
-        try {
-            await openJsonDebugTab(json);
-        } catch (err) {
-            console.warn('[C4 Preview] failed to open the JSON debug tab:', err);
-        }
-    }
+    // if (firstDelivery) {
+    //     try {
+    //         await openJsonDebugTab(json);
+    //     } catch (err) {
+    //         console.warn('[C4 Preview] failed to open the JSON debug tab:', err);
+    //     }
+    // }
 }
 
 
@@ -394,7 +394,7 @@ export function init(context: ExtensionContext): void {
                     await preview.deliver(payload, viewKey, docUri, generation, textMeasurements, getThemesForPreview);
 
                     // Open a side-panel with the raw JSON for debugging
-                    await openJsonDebugTab(payload);
+                    // await openJsonDebugTab(payload);
                 } catch (err) {
                     console.error(`[C4 Preview] webview update FAILED for view ${viewKey}:`, err);
                 }

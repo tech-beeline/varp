@@ -65,6 +65,7 @@ const COMMON_IGNORED_KEYS = new Set([
     ...ID_KEYS,
     'lastModifiedDate', 'lastModifiedAgent',
     'dimensions', 'paperSize', 'automaticLayout',
+    'graphviz',
     'key',
 ]);
 

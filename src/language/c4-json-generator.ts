@@ -6220,8 +6220,8 @@ class JsonGenerator {
         // relationship==*-><identifier>: all relationships with the specified destination element
         // relationship==<identifier>-><identifier>: all relationships between the two specified elements
         else if (isRelationshipEqExpression(e)) {
-            // relationship==*: all relationships
-            if (e.all === '*') {
+            // relationship==* and relationship==*->*: all relationships
+            if (e.all === '*' || (e.starSource === '*' && e.starTarget === '*')) {
                 relationshipsAtScope.forEach(r => {
                     if(elementsAtView.has(r.source) && elementsAtView.has(r.target)) res.add(r.relationship);
                 });

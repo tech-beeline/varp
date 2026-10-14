@@ -124,9 +124,9 @@
       },
       {
         "command": "varp.get-pattern-dsl",
-        "title": "Get pattern C4 DSL",
-        "shortTitle": "Get pattern C4 DSL",
-        "icon": "$(add)"
+        "title": "Copy pattern C4 DSL",
+        "shortTitle": "Copy pattern C4 DSL",
+        "icon": "$(copy)"
       },
       {
         "command": "varp.refresh-patterns",
@@ -236,6 +236,7 @@
     "@xmldom/xmldom": "^0.9.12",
     "fflate": "^0.8.3",
     "langium": "~4.4.0",
+    "marked": "~18.1.1",
     "vscode-languageclient": "~10.1.0",
     "vscode-languageserver": "~10.1.0"
   },

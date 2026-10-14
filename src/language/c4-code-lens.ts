@@ -18,7 +18,7 @@ import { type  LangiumDocument, type  MaybePromise  } from 'langium';
 import { AstUtils , CstUtils } from 'langium';
 import { type CodeLensProvider } from 'langium/lsp';
 import { CodeLens, Command, type CodeLensParams, Range as LspRange } from 'vscode-languageserver';
-import { isRenderedView, isWorkspace } from '../generated/ast';
+import { isFilteredView, isRenderedView, isWorkspace } from '../generated/ast';
 import { C4Services } from './c4-module';
 import { DIAGRAM_PREVIEW, EXPORT_JSON } from '../shared/commands';
 
@@ -98,9 +98,11 @@ export class C4CodeLensProvider implements CodeLensProvider {
 
                     // Skip the lens when the generated diagram is known to have no elements.
                     // The generator omits the `elements` key entirely for a view with no
-                    // content, so a missing array means the same as an empty one.
+                    // content, so a missing array means the same as an empty one. Filtered
+                    // views never carry elements (they filter the base view by tags), so
+                    // they are exempt from this check.
                     const generatedView = findViewByKey(cachedJson, viewKey);
-                    if (generatedView && (generatedView.elements ?? []).length === 0) {
+                    if (generatedView && !isFilteredView(node) && (generatedView.elements ?? []).length === 0) {
                         continue;
                     }
 

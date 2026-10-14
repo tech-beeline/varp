@@ -5368,11 +5368,17 @@ class JsonGenerator {
                 c !== undefined && Math.abs(pt.x - c.x) <= c.w / 2 + 22 && Math.abs(pt.y - c.y) <= c.h / 2 + 22;
 
             // Drop the source connection point (JointJS computes the connection to
-            // the source box itself). The last point is either the target box
-            // boundary or the cluster border for cross-cluster edges - keep it in
-            // the latter case so the route terminates at the cluster border.
-            const startIdx = onBox(route[0], srcCenter) ? 1 : 0;
-            const endExcl = onBox(route[route.length - 1], tgtCenter) ? route.length - 1 : route.length;
+            // the source box itself). A deployment-node endpoint is clipped by
+            // graphviz to its cluster border, but the webview connects the
+            // relationship to the deployment-node frame cell itself, so that clipped
+            // point is dropped too - otherwise it sits inside the webview frame (its
+            // bottom footer is larger than the cluster margin) and the line appears
+            // to start inside the node.
+            const modelRel = relationshipById[ge.id];
+            const tailIsFrame = modelRel !== undefined && isDeploymentNode(this.resolveSource(modelRel));
+            const headIsFrame = modelRel !== undefined && isDeploymentNode(this.resolveTarget(modelRel));
+            const startIdx = (onBox(route[0], srcCenter) || tailIsFrame) ? 1 : 0;
+            const endExcl = (onBox(route[route.length - 1], tgtCenter) || headIsFrame) ? route.length - 1 : route.length;
             const interior = route.slice(startIdx, endExcl);
 
             // Mirrors SVGReader's `if (d.length == 3)`: only edges routed with a real

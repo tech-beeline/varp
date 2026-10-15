@@ -16,13 +16,23 @@ export const MCP_SERVER_NAME = 'c4-varp';
 export const MCP_DEFAULT_PORT = 47474;
 
 /**
+ * Upper bound on concurrent MCP sessions. Each session owns a full McpServer, so
+ * without a cap repeated `initialize` POSTs (which need no session header) could
+ * grow memory unboundedly. When a new session would exceed the cap, the oldest
+ * one is evicted.
+ */
+export const MCP_MAX_SESSIONS = 32;
+
+/**
  * Instructions advertised to MCP clients describing how to use the C4 tools.
  */
 const MCP_INSTRUCTIONS = `c4-varp MCP - read-only navigation of Structurizr C4 models.
 
 Conventions:
 - All tools are read-only and idempotent.
-- "uri" (the project) is optional and defaults to the first available project.
+- "uri" (the project) is optional and defaults to the project with the most views.
+  It accepts a full workspace URI, a file name (e.g. "workspace.dsl"), or the
+  workspace name or description (e.g. "FilteredDemo").
 - Use "list-projects" to discover projects, then "read-project-summary" for an
   overview (element counts by type, total relationships, views), then
   "search-element" / "read-element" to inspect specific elements and their
@@ -41,18 +51,8 @@ export interface C4McpServerHandle {
     close(): Promise<void>;
 }
 
-/**
- * Starts a streamable-HTTP MCP server bound to 127.0.0.1 only.
- *
- * Endpoints:
- *   GET  /health -> { status: 'ok' }
- *   ALL  /mcp    -> MCP JSON-RPC (streamable HTTP transport)
- */
-export async function startC4McpServer(
-    source: C4ModelSource,
-    version: string,
-    port: number = MCP_DEFAULT_PORT,
-): Promise<C4McpServerHandle> {
+/** Builds a fully registered MCP server. One instance is created per HTTP session. */
+function createMcpServer(source: C4ModelSource, version: string): McpServer {
     const server = new McpServer(
         { name: MCP_SERVER_NAME, version },
         {
@@ -69,55 +69,116 @@ export async function startC4McpServer(
     registerBatchTools(server, source);
     registerResources(server, source);
     registerPrompts(server, source);
+    return server;
+}
 
-    const transports = new Map<string, StreamableHTTPServerTransport>();
+function writeJson(res: ServerResponse, status: number, body: unknown): void {
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(body));
+}
+
+/**
+ * Starts a streamable-HTTP MCP server bound to 127.0.0.1 only.
+ *
+ * Endpoints:
+ *   GET  /health -> { status: 'ok' }
+ *   ALL  /mcp    -> MCP JSON-RPC (streamable HTTP transport)
+ *
+ * The MCP SDK's server (a Protocol) can be connected to exactly one transport, so a
+ * fresh McpServer is created per session/transport. A request carrying an
+ * `mcp-session-id` reuses that session; a POST without one starts a new session, and
+ * any other request without a session is rejected with 400.
+ */
+export async function startC4McpServer(
+    source: C4ModelSource,
+    version: string,
+    port: number = MCP_DEFAULT_PORT,
+): Promise<C4McpServerHandle> {
+    const sessions = new Map<string, { transport: StreamableHTTPServerTransport; server: McpServer }>();
     let httpServer: Server;
 
     httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
         try {
             const url = new URL(req.url ?? '/', 'http://127.0.0.1');
             if (url.pathname === '/health') {
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ status: 'ok' }));
+                writeJson(res, 200, { status: 'ok' });
                 return;
             }
             if (url.pathname !== '/mcp') {
-                res.writeHead(404, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Not found' }));
+                writeJson(res, 404, { error: 'Not found' });
                 return;
             }
 
             const sessionId = typeof req.headers['mcp-session-id'] === 'string'
                 ? req.headers['mcp-session-id']
                 : undefined;
-            let transport = sessionId ? transports.get(sessionId) : undefined;
 
-            if (!transport) {
+            if (sessionId !== undefined) {
+                const session = sessions.get(sessionId);
+                if (session) {
+                    await session.transport.handleRequest(req, res);
+                    return;
+                }
                 if (req.method === 'DELETE') {
                     res.writeHead(404);
                     res.end();
                     return;
                 }
-                transport = new StreamableHTTPServerTransport({
-                    sessionIdGenerator: () => randomUUID(),
+                writeJson(res, 404, {
+                    jsonrpc: '2.0',
+                    error: { code: -32001, message: 'Session not found' },
+                    id: null,
                 });
-                transport.onclose = () => {
-                    if (transport?.sessionId) {
-                        transports.delete(transport.sessionId);
+                return;
+            }
+
+            // No session: only a POST can start a new one (the transport validates that
+            // it is an initialize request and rejects anything else with 400).
+            if (req.method !== 'POST') {
+                writeJson(res, 400, {
+                    jsonrpc: '2.0',
+                    error: { code: -32000, message: 'Bad Request: Mcp-Session-Id header is required' },
+                    id: null,
+                });
+                return;
+            }
+
+            // Keep the session map bounded: evict the oldest session when a new one
+            // would exceed the cap (a Map iterates in insertion order, so the first
+            // entry is the least recently created).
+            if (sessions.size >= MCP_MAX_SESSIONS) {
+                const oldest = sessions.entries().next().value;
+                if (oldest) {
+                    const [oldestId, session] = oldest;
+                    sessions.delete(oldestId);
+                    try {
+                        await session.transport.close();
+                        await session.server.close();
+                    } catch {
+                        // ignore eviction close errors
                     }
-                };
-                await server.connect(transport);
-                if (transport.sessionId) {
-                    transports.set(transport.sessionId, transport);
                 }
             }
 
+            const server = createMcpServer(source, version);
+            const transport = new StreamableHTTPServerTransport({
+                sessionIdGenerator: () => randomUUID(),
+                onsessioninitialized: (sid) => {
+                    sessions.set(sid, { transport, server });
+                },
+            });
+            transport.onclose = () => {
+                if (transport.sessionId) {
+                    sessions.delete(transport.sessionId);
+                }
+                void server.close();
+            };
+            await server.connect(transport);
             await transport.handleRequest(req, res);
         } catch (err) {
             console.error('[C4 MCP] request error:', err);
             if (!res.headersSent) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Internal server error' }));
+                writeJson(res, 500, { error: 'Internal server error' });
             } else {
                 res.end();
             }
@@ -138,14 +199,15 @@ export async function startC4McpServer(
         port: actualPort,
         url: `http://127.0.0.1:${actualPort}/mcp`,
         close: async () => {
-            for (const t of transports.values()) {
+            for (const { transport, server } of sessions.values()) {
                 try {
-                    await t.close();
+                    await transport.close();
+                    await server.close();
                 } catch {
-                    // ignore per-transport close errors
+                    // ignore per-session close errors
                 }
             }
-            transports.clear();
+            sessions.clear();
             await new Promise<void>((resolve) => httpServer.close(() => resolve()));
         },
     };

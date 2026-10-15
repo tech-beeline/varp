@@ -107,10 +107,11 @@ C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json, generation) => {
 // ─── Custom LSP Request Handler ────────────────────────────────────────────
 // Register the same custom request as the Node.js version so the extension
 // can retrieve cached JSON for diagram preview refresh on file save.
-connection.onRequest('c4/getContentForUri', (params: { uri: string }) => {
+connection.onRequest('c4/getContentForUri', async (params: { uri: string }) => {
     // Returns { json, generation } so the client can tell "same cached build,
     // just changeView" from a fresh/different build (which needs a full rebuild).
-    const content = C4.generation.C4GeneratorHandler.getContentForUri(params.uri);
+    // A missing entry is regenerated on demand, matching the Node.js server.
+    const content = await C4.generation.C4GeneratorHandler.ensureContentForUri(params.uri);
     return content ? { json: content.json, generation: content.generation } : null;
 });
 

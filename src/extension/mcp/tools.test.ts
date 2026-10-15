@@ -8,6 +8,7 @@ import {
     parseToolResult,
     readElementHandler,
     readProjectSummaryHandler,
+    resolveProject,
     searchElementHandler,
 } from './tools';
 
@@ -45,6 +46,41 @@ describe('MCP tools (from simple-workspace DSL fixture)', () => {
         const expectedRelationships = model.elements.reduce((n, e) => n + e.relationships.length, 0);
         expect(result.relationshipCount).toBe(expectedRelationships);
         expect(result.viewCount).toBe(model.views.length);
+    });
+
+    it('resolves a project passed as a bare file name', async () => {
+        const result = parseToolResult(await readProjectSummaryHandler(source, { uri: 'main.dsl' }));
+        expect(result.project.uri).toBe(PROJECT_URI);
+        expect(result.elementCount).toBe(4);
+    });
+
+    it('resolves a project by workspace name or description', async () => {
+        const byName = parseToolResult(await readProjectSummaryHandler(source, { uri: 'Name' }));
+        expect(byName.project.uri).toBe(PROJECT_URI);
+        const byDescription = parseToolResult(await readProjectSummaryHandler(source, { uri: 'Description' }));
+        expect(byDescription.project.uri).toBe(PROJECT_URI);
+    });
+
+    it('defaults to the project with the most views, not the first one', async () => {
+        const empty = 'file:///empty.dsl';
+        const rich = 'file:///rich.dsl';
+        const multiSource: C4ModelSource = {
+            listProjects: async () => [empty, rich],
+            getContent: async (uri: string) => (uri === rich
+                ? { name: 'Rich', views: { systemContextViews: [{}], containerViews: [{}, {}] } }
+                : { name: 'Empty', views: {} }),
+        };
+        expect(await resolveProject(multiSource)).toBe(rich);
+    });
+
+    it('keeps list order when no project declares views', async () => {
+        const first = 'file:///a.dsl';
+        const second = 'file:///b.dsl';
+        const multiSource: C4ModelSource = {
+            listProjects: async () => [first, second],
+            getContent: async () => ({ views: {} }),
+        };
+        expect(await resolveProject(multiSource)).toBe(first);
     });
 
     it('search-element finds by name and by tag', async () => {

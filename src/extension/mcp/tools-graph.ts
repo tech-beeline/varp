@@ -58,6 +58,7 @@ export async function queryGraphHandler(
         id: string;
         uri?: string;
         mode?: 'ancestors' | 'descendants' | 'siblings' | 'children' | 'parent' | 'incomers' | 'outgoers' | 'all';
+        maxNodes?: number;
     },
     logger?: McpLogger,
 ): Promise<CallToolResult> {
@@ -75,6 +76,16 @@ export async function queryGraphHandler(
 
     const mode = args.mode ?? 'all';
     const pick = (m: string) => mode === 'all' || mode === m;
+    // `mode=all` on a large element (e.g. a landscape software system with
+    // thousands of descendants) would otherwise return the whole subgraph, so
+    // each collection is capped. Only the returned page is materialised (the map
+    // runs after the slice), while the full size is reported when truncated.
+    const cap = Math.max(1, Math.min(args.maxNodes ?? 200, 2000));
+    const totals: Record<string, number> = {};
+    const limited = <T, R>(key: string, items: T[], map: (item: T) => R): R[] => {
+        totals[key] = items.length;
+        return (items.length > cap ? items.slice(0, cap) : items).map(map);
+    };
     const result: Record<string, unknown> = {
         project: projectUri,
         id: args.id,
@@ -86,16 +97,21 @@ export async function queryGraphHandler(
         const p = parentOf(index, args.id);
         result.parent = p ? summary(p) : null;
     }
-    if (pick('children')) result.children = childrenOf(index, args.id).map(summary);
-    if (pick('siblings')) result.siblings = siblingsOf(index, args.id).map(summary);
-    if (pick('ancestors')) result.ancestors = ancestorsOf(index, args.id).map(summary);
-    if (pick('descendants')) result.descendants = descendantsOf(index, args.id).map(summary);
-    if (pick('incomers')) result.incomers = directIncomers(index, args.id).map(({ element, relationship }) => ({
+    if (pick('children')) result.children = limited('children', childrenOf(index, args.id), summary);
+    if (pick('siblings')) result.siblings = limited('siblings', siblingsOf(index, args.id), summary);
+    if (pick('ancestors')) result.ancestors = limited('ancestors', ancestorsOf(index, args.id), summary);
+    if (pick('descendants')) result.descendants = limited('descendants', descendantsOf(index, args.id), summary);
+    if (pick('incomers')) result.incomers = limited('incomers', directIncomers(index, args.id), ({ element, relationship }) => ({
         element: summary(element), relationship: relWithNames(index, relationship),
     }));
-    if (pick('outgoers')) result.outgoers = directOutgoers(index, args.id).map(({ element, relationship }) => ({
+    if (pick('outgoers')) result.outgoers = limited('outgoers', directOutgoers(index, args.id), ({ element, relationship }) => ({
         element: summary(element), relationship: relWithNames(index, relationship),
     }));
+
+    if (Object.values(totals).some(n => n > cap)) {
+        result.truncated = true;
+        result.counts = totals;
+    }
 
     logger?.('info', { tool: 'query-graph', event: 'complete', id: args.id, mode });
     return text(result);
@@ -361,15 +377,16 @@ export function registerGraphTools(server: McpServer, source: C4ModelSource): vo
         'query-graph',
         {
             title: 'Query C4 element graph',
-            description: 'Neighbourhood of an element: ancestors, descendants, siblings, children, parent and/or direct incoming/outgoing relationships.',
+            description: 'Neighbourhood of an element: ancestors, descendants, siblings, children, parent and/or direct incoming/outgoing relationships. Large collections are capped (see maxNodes) and report their full size via truncated/counts.',
             inputSchema: z.object({
                 id: z.string().describe('Element id (Structurizr id).'),
                 mode: z.enum(['ancestors', 'descendants', 'siblings', 'children', 'parent', 'incomers', 'outgoers', 'all'])
                     .optional().describe('Which parts of the neighbourhood to return. Defaults to all.'),
+                maxNodes: z.number().int().min(1).max(2000).optional().describe('Maximum entries returned per collection. Defaults to 200.'),
                 uri: uriArgSchema(),
             }),
         },
-        async (args: { id: string; uri?: string; mode?: 'ancestors' | 'descendants' | 'siblings' | 'children' | 'parent' | 'incomers' | 'outgoers' | 'all' }) =>
+        async (args: { id: string; uri?: string; mode?: 'ancestors' | 'descendants' | 'siblings' | 'children' | 'parent' | 'incomers' | 'outgoers' | 'all'; maxNodes?: number }) =>
             queryGraphHandler(source, args, logger),
     );
 

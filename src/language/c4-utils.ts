@@ -29,14 +29,6 @@ import {
     isSoftwareSystemInstance,
 } from '../generated/ast';
 
-/**
- * A symbol key the generator sets on an emitted element to mark which property
- * keys came from a `!elements` overlay. The enricher reads it while merging the
- * element's own properties and then removes it. Symbol keys are ignored by
- * JSON.stringify and by structured clone, so they never reach consumers.
- */
-export const OVERLAY_PROPERTY_KEYS = Symbol('overlayPropertyKeys');
-
 export class C4Utils {
 
     /**
@@ -154,7 +146,12 @@ export function flatId(element: any, rootDocUri: string, resolvers?: FlatIdResol
             if (doc && doc.uri) {
                 const docUri = doc.uri.toString();
                 if (docUri !== rootDocUri) {
-                    docPart = docUri.split('/').pop() + '|';
+                    // Use the FULL document URI, not just the basename: included files
+                    // frequently share a name (e.g. one landscape.dsl per catalog
+                    // folder) and the same header, so their first element sits at the
+                    // same CST offset. A basename does not identify such a document,
+                    // so two distinct elements would hash to the same id.
+                    docPart = docUri + '|';
                 }
             }
         } catch {

@@ -62,6 +62,18 @@ export class C4GeneratorHandler {
      */
     private cachedUris: Set<string> = new Set();
     /**
+     * Roots already reported as "declares no workspace, cannot be generated".
+     * Keeps the diagnostic to one line per broken episode instead of repeating it
+     * on every build cycle while the file stays broken.
+     */
+    private ungeneratableRoots: Set<string> = new Set();
+    /**
+     * Every URI that was successfully generated at least once. Unlike cachedUris
+     * this is never cleared, so a project that stops being generatable is reported
+     * instead of only leaving the project list.
+     */
+    private everGenerated: Set<string> = new Set();
+    /**
      * Set when a workspace update invalidated jsonCache. The next
      * updateMemoryCache() then rebuilds cachedUris from scratch and regenerates
      * every still-live root, so editing one project does not silently drop the
@@ -118,21 +130,6 @@ export class C4GeneratorHandler {
     }
 
     /**
-     * Returns the workspace AST node of a document (bare root or wrapped inside a
-     * C4Document), or undefined when the document has no workspace.
-     */
-    private workspaceNodeOf(doc: LangiumDocument): any | undefined {
-        const root = doc.parseResult.value;
-        if (isWorkspace(root)) {
-            return root;
-        }
-        if (isC4Document(root) && root.workspaces?.length === 1) {
-            return root.workspaces.at(0);
-        }
-        return undefined;
-    }
-
-    /**
      * Called after each build cycle. Collects the UNIQUE root workspace documents
      * reachable from the validated `documents` and generates/caches JSON for each
      * root exactly once.
@@ -152,14 +149,14 @@ export class C4GeneratorHandler {
     private updateMemoryCache(documents: LangiumDocument[]) {
         const roots = new Map<string, any>();
         for (const doc of documents) {
-            const direct = this.workspaceNodeOf(doc);
+            const direct = this.getWorkspaceNode(doc);
             if (direct) {
                 roots.set(doc.uri.toString(), direct);
             } else {
                 // Fragment (include/extends target, or a bare C4Document): resolve
                 // the owning root workspace and mark it for (re)generation.
                 const rootDoc = this.findRootWorkspace(doc.uri.toString());
-                const rootNode = rootDoc ? this.workspaceNodeOf(rootDoc) : undefined;
+                const rootNode = rootDoc ? this.getWorkspaceNode(rootDoc) : undefined;
                 if (rootDoc && rootNode) {
                     roots.set(rootDoc.uri.toString(), rootNode);
                 }
@@ -176,9 +173,18 @@ export class C4GeneratorHandler {
             // a project whose JSON failed to build.
             this.pendingReset = false;
             for (const doc of this.services.shared.workspace.LangiumDocuments.all.toArray()) {
-                const workspaceNode = this.workspaceNodeOf(doc);
-                if (!workspaceNode) continue;
+                const workspaceNode = this.getWorkspaceNode(doc);
                 const uri = doc.uri.toString();
+                if (!workspaceNode) {
+                    // A loaded document that declares no workspace cannot be
+                    // generated: its AST is not a parsed workspace (syntax error, an
+                    // empty/unreadable file, or several workspace blocks). Reported
+                    // once per broken episode, so the reason a project is not served
+                    // is visible at build time.
+                    this.reportUngeneratableRoot(doc);
+                    continue;
+                }
+                this.clearUngeneratableRoot(uri);
                 if (!roots.has(uri)) {
                     roots.set(uri, workspaceNode);
                 }
@@ -188,6 +194,33 @@ export class C4GeneratorHandler {
         for (const [uri, workspaceNode] of roots) {
             this.generateAndCache(uri, workspaceNode);
         }
+    }
+
+    /**
+     * Logs once, per URI, that a loaded root document cannot be generated because
+     * its AST declares no workspace. Parse errors are included in the message.
+     */
+    private reportUngeneratableRoot(doc: LangiumDocument): void {
+        const uri = doc.uri.toString();
+        if (this.ungeneratableRoots.has(uri)) {
+            return;
+        }
+        // Only projects that were generated before are reported: a fragment or a
+        // never-working file would otherwise log on every build cycle.
+        if (!this.everGenerated.has(uri)) {
+            return;
+        }
+        this.ungeneratableRoots.add(uri);
+        const parserErrors = doc.parseResult.parserErrors ?? [];
+        const detail = parserErrors.length > 0
+            ? parserErrors.slice(0, 3).map(e => e.message.replace(/\s+/g, ' ')).join(' | ')
+            : 'no workspace block found in the document';
+        console.warn(`[C4 Build] Root ${uri} declares no workspace and cannot be generated: ${detail}`);
+    }
+
+    /** Forgets a previously reported ungeneratable root once it parses again. */
+    private clearUngeneratableRoot(uri: string): void {
+        this.ungeneratableRoots.delete(uri);
     }
 
     /**
@@ -246,6 +279,7 @@ export class C4GeneratorHandler {
             const generation = jsonGeneration;
             this.jsonCache.set(uri, { json, generation });
             this.cachedUris.add(uri);
+            this.everGenerated.add(uri);
             // Notify the client only after the JSON was generated successfully.
             this.onJsonGenerated?.(uri, json, generation);
         } catch (err) {
@@ -269,9 +303,15 @@ export class C4GeneratorHandler {
 
         // Walk the !include / extendsUri ancestor chain via the shared resolver.
         const chain = includeResolver.getAncestorChain(this.services.shared, currentUri);
-        if (chain.length === 0) return self;
+        if (chain.length === 0) {
+            // A loaded document with no workspace node and no owning workspace is
+            // not a root: reads must not resolve to a document that has no
+            // workspace to generate (see reportUngeneratableRoot).
+            return undefined;
+        }
         const rootUri = chain[chain.length - 1];
-        return this.services.shared.workspace.LangiumDocuments.getDocument(URI.parse(rootUri)) ?? self;
+        const root = this.services.shared.workspace.LangiumDocuments.getDocument(URI.parse(rootUri));
+        return root && this.getWorkspaceNode(root) ? root : undefined;
     }
 
     /**
@@ -298,6 +338,23 @@ export class C4GeneratorHandler {
         // tools use as the default project) is stable across build cycles and does
         // not depend on document insertion order.
         return Array.from(this.cachedUris).sort();
+    }
+
+    /**
+     * Root workspace documents that can be served: every loaded document declaring
+     * a workspace (whether or not its JSON is cached right now) plus the URIs with
+     * generated JSON. Project discovery is kept independent of the cache, which any
+     * document update wipes, so a project stays discoverable while its JSON is
+     * regenerated on the next read or build.
+     */
+    public getProjectUris(): string[] {
+        const uris = new Set<string>(this.cachedUris);
+        for (const doc of this.services.shared.workspace.LangiumDocuments.all.toArray()) {
+            if (this.getWorkspaceNode(doc)) {
+                uris.add(doc.uri.toString());
+            }
+        }
+        return Array.from(uris).sort();
     }
 
     /**
@@ -328,6 +385,36 @@ export class C4GeneratorHandler {
         }
 
         return entry;
+    }
+
+    /**
+     * Same as {@link getContentForUri}, but regenerates the JSON when the cache has
+     * no entry for the requested root. A root can be missing from the cache while
+     * its document is loaded and valid: every document update wipes the whole cache
+     * (Langium WorkspaceCache) and the entry is restored by the build phase that
+     * follows. Regenerating here keeps reads working when that build did not run to
+     * completion. Returning null means the URI does not resolve to a generatable
+     * workspace (no workspace block, syntax error, or an unknown document).
+     */
+    public async ensureContentForUri(uri: string): Promise<GeneratedJson | null> {
+        const rootDoc = this.findRootWorkspace(uri);
+        const workspaceNode = rootDoc ? this.getWorkspaceNode(rootDoc) : undefined;
+        if (!rootDoc || !workspaceNode) {
+            return null;
+        }
+        const rootUri = rootDoc.uri.toString();
+        const cached = this.jsonCache.get(rootUri);
+        if (cached) {
+            return cached;
+        }
+        // Coalesced with any in-flight generation for the same root.
+        await this.generateAndCache(rootUri, workspaceNode);
+        const generated = this.jsonCache.get(rootUri);
+        if (!generated) {
+            console.warn(`[C4 Build] Could not generate content for root: ${rootUri}`);
+            return null;
+        }
+        return generated;
     }
 
     /**
@@ -409,14 +496,16 @@ export class C4GeneratorHandler {
      * JSON is cached yet.
      */
     public async getFullContentForUri(uri: string): Promise<any> {
+        // ensureContentForUri regenerates on demand, so the full/export JSON heals
+        // the same way the render JSON does when the cache was invalidated without
+        // a successful build.
+        const entry = await this.ensureContentForUri(uri);
+        if (!entry) return undefined;
         const rootUri = this.getRootUri(uri);
-        const entry = this.jsonCache.get(rootUri);
-        const renderJson = entry ? entry.json : undefined;
-        if (!renderJson) return undefined;
 
         // Deep-clone the render JSON so the cached copy stays untouched and the
         // enricher can freely inject nested `documentation` into model elements.
-        const fullJson = structuredClone(renderJson);
+        const fullJson = structuredClone(entry.json);
         await this.enricher.enrich(rootUri, fullJson);
         return fullJson;
     }

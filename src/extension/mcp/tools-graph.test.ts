@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { C4ModelSource } from './model';
 import { parseToolResult } from './tools';
+import { loadWorkspaceJson } from './test-fixtures';
 import {
     findRelationshipPathsHandler, findRelationshipsHandler, queryByMetadataHandler,
     queryByTagPatternHandler, queryByTagsHandler, queryGraphHandler,
@@ -72,6 +73,69 @@ describe('query-graph', () => {
     });
 });
 
+describe('query-graph hierarchy across model and deployment trees', () => {
+    const deploymentJson = {
+        name: 'Deploy',
+        model: {
+            people: [{ id: 'p1', name: 'User', tags: 'Element,Person' }],
+            softwareSystems: [{ id: 's1', name: 'System A', tags: 'Element,Software System' }],
+            deploymentNodes: [
+                {
+                    id: 'd1', name: 'Prod',
+                    children: [{ id: 'd2', name: 'Web Node' }],
+                    containerInstances: [{ id: 'i1', name: 'web@Prod' }],
+                },
+            ],
+        },
+        views: {},
+    };
+    const deploySource = mockSource(deploymentJson as any);
+
+    it('gives a root deployment node no parent instead of an unrelated root element', async () => {
+        const result = parseToolResult(await queryGraphHandler(deploySource, { id: 'd1', mode: 'parent' }));
+        expect(result.parent).toBeNull();
+    });
+
+    it('gives a root software system no parent', async () => {
+        const result = parseToolResult(await queryGraphHandler(deploySource, { id: 's1', mode: 'parent' }));
+        expect(result.parent).toBeNull();
+    });
+
+    it('resolves parents within the deployment tree', async () => {
+        const nested = parseToolResult(await queryGraphHandler(deploySource, { id: 'd2', mode: 'parent' }));
+        expect(nested.parent).toMatchObject({ id: 'd1', name: 'Prod' });
+        const instance = parseToolResult(await queryGraphHandler(deploySource, { id: 'i1', mode: 'parent' }));
+        expect(instance.parent).toMatchObject({ id: 'd1', name: 'Prod' });
+    });
+});
+
+describe('query-graph caps large collections', () => {
+    const manyJson = {
+        name: 'Many',
+        model: {
+            softwareSystems: [{
+                id: 's1', name: 'Big',
+                containers: Array.from({ length: 5 }, (_, i) => ({ id: `c${i}`, name: `C${i}` })),
+            }],
+        },
+        views: {},
+    };
+    const manySource = mockSource(manyJson as any);
+
+    it('caps each collection at maxNodes and reports the full size', async () => {
+        const result = parseToolResult(await queryGraphHandler(manySource, { id: 's1', mode: 'children', maxNodes: 2 }));
+        expect(result.children).toHaveLength(2);
+        expect(result.truncated).toBe(true);
+        expect(result.counts.children).toBe(5);
+    });
+
+    it('does not mark truncated when the collection fits', async () => {
+        const result = parseToolResult(await queryGraphHandler(manySource, { id: 's1', mode: 'children', maxNodes: 10 }));
+        expect(result.children).toHaveLength(5);
+        expect(result.truncated).toBeUndefined();
+    });
+});
+
 describe('query-incomers-graph / query-outgoers-graph', () => {
     it('traverses outgoing edges with names', async () => {
         const result = parseToolResult(await queryOutgoersGraphHandler(source, { id: 's1' }));
@@ -138,7 +202,6 @@ describe('query-by-metadata', () => {
         const result = parseToolResult(await queryByMetadataHandler(source, { key: 'owner' }));
         expect(result.results.map((e: any) => e.id).sort()).toEqual(['c2', 's1']);
     });
-
     it('matches by key+value with the equals operator', async () => {
         const result = parseToolResult(await queryByMetadataHandler(source, { key: 'language', value: 'Go' }));
         expect(result.results.map((e: any) => e.id)).toEqual(['c2']);
@@ -170,5 +233,16 @@ describe('query-by-tag-pattern', () => {
 
         const suffix = parseToolResult(await queryByTagPatternHandler(source, { pattern: 'end', match: 'suffix' }));
         expect(suffix.results.map((e: any) => e.id).sort()).toEqual(['s1', 's2']);
+    });
+});
+
+describe('query-by-metadata on generated properties (element-own-properties fixture)', () => {
+    it('finds elements by a property key declared directly in the DSL', async () => {
+        const json = await loadWorkspaceJson('element-own-properties');
+        const generatedSource = mockSource(json);
+        const byKey = parseToolResult(await queryByMetadataHandler(generatedSource, { key: 'HostName' }));
+        expect(byKey.results.map((e: any) => e.name).sort()).toEqual(['Prod', 'System']);
+        const byValue = parseToolResult(await queryByMetadataHandler(generatedSource, { key: 'HostName', value: 'host-a' }));
+        expect(byValue.results.map((e: any) => e.name)).toEqual(['System']);
     });
 });

@@ -99,10 +99,13 @@ C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json, generation) => {
 // Register a custom LSP request that the extension calls when it needs
 // the latest generated JSON (e.g., on file save, for diagram preview refresh).
 // Returns the cached JSON content for rendering.
-connection.onRequest('c4/getContentForUri', (params: { uri: string }) => {
+connection.onRequest('c4/getContentForUri', async (params: { uri: string }) => {
     // Returns { json, generation } so the client can tell "same cached build,
     // just changeView" from a fresh/different build (which needs a full rebuild).
-    const content = C4.generation.C4GeneratorHandler.getContentForUri(params.uri);
+    // A missing entry is regenerated on demand: the cache is wiped by any document
+    // update and restored by the build phase, so a read that lands outside that
+    // window is still served.
+    const content = await C4.generation.C4GeneratorHandler.ensureContentForUri(params.uri);
     return content
         ? { json: content.json, generation: content.generation, textMeasurements: C4.generation.C4GeneratorHandler.getTextMeasurements(params.uri) }
         : null;
@@ -156,10 +159,12 @@ connection.onRequest('c4/getThemes', async (params: { themes: string[] }) => {
     return { themes };
 });
 
-// Enumerate root workspace documents that currently have generated JSON.
-// Used by MCP tools (e.g., list-projects) to discover available projects.
+// Enumerate root workspace documents that can be served. Used by MCP tools
+// (e.g., list-projects) to discover available projects. Includes roots whose JSON
+// is not cached yet: reads regenerate on demand, so discovery stays stable across
+// cache invalidation instead of dropping every project until the next build.
 connection.onRequest('c4/listProjects', () => {
-    const projects = C4.generation.C4GeneratorHandler.getCachedUris();
+    const projects = C4.generation.C4GeneratorHandler.getProjectUris();
     return { projects };
 });
 

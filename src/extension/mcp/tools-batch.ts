@@ -1,8 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import type { C4ModelSource } from './model';
+import type { C4ModelSource, McpElement } from './model';
 import { elementDetail, flattenModel } from './model';
+import { buildModelIndex, childrenOf } from './model-index';
 import type { McpLogger } from './tools';
 import { resolveProject, text, uriArgSchema } from './tools';
 
@@ -207,8 +208,12 @@ export async function subgraphSummaryHandler(
 
     const nodes: SummaryNode[] = [];
     const byType: Record<string, number> = {};
+    // Containment comes from the same parentId-based index the graph tools use, so
+    // both report the same children (name paths can collide between the model and
+    // deployment trees).
+    const index = buildModelIndex(model);
 
-    const collect = (el: McpElementPath, depth: number): void => {
+    const collect = (el: McpElement, depth: number): void => {
         nodes.push({
             id: el.id,
             name: el.name,
@@ -225,17 +230,12 @@ export async function subgraphSummaryHandler(
         if (depth >= maxDepth) {
             return;
         }
-        const children = model.elements.filter(
-            e => e.path.length === el.path.length + 1 && pathPrefix(el.path, e.path),
-        );
-        for (const child of children) {
+        for (const child of childrenOf(index, el.id)) {
             collect(child, depth + 1);
         }
     };
 
-    for (const child of model.elements.filter(
-        e => e.path.length === root.path.length + 1 && pathPrefix(root.path, e.path),
-    )) {
+    for (const child of childrenOf(index, root.id)) {
         collect(child, 1);
     }
 
@@ -251,10 +251,6 @@ export async function subgraphSummaryHandler(
     });
 }
 
-function pathPrefix(path: string[], candidate: string[]): boolean {
-    return path.every((part, i) => part === candidate[i]);
-}
-
 function pickKey(props: Record<string, string>, keys: Set<string>): Record<string, string> {
     const out: Record<string, string> = {};
     for (const key of keys) {
@@ -263,17 +259,6 @@ function pickKey(props: Record<string, string>, keys: Set<string>): Record<strin
         }
     }
     return out;
-}
-
-interface McpElementPath {
-    id: string;
-    name: string;
-    type: string;
-    tags: string[];
-    relationships: unknown[];
-    incomingRelationships: unknown[];
-    properties?: Record<string, string>;
-    path: string[];
 }
 
 /** Registers the batch/compare tools (Phase 2d) on the MCP server. */

@@ -16,7 +16,7 @@
 
 import { AstNode, AstUtils, Reference, isReference } from 'langium';
 import { URI } from 'vscode-uri';
-import { flatId, C4Utils, OVERLAY_PROPERTY_KEYS, archetypeChain, archetypeInstanceType, declaredIdentifier, type FlatIdResolvers } from './c4-utils';
+import { flatId, C4Utils, archetypeChain, archetypeInstanceType, declaredIdentifier, type FlatIdResolvers } from './c4-utils';
 import { parseQuotedFilterText } from './c4-quoted-filter';
 import { encodePlantUml } from './plantuml-encoder';
 import { Graphviz } from '@hpcc-js/wasm-graphviz';
@@ -1509,13 +1509,21 @@ class JsonGenerator {
         if (archetypeProperties) {
             result.properties = archetypeProperties;
         }
+        // The relationship's own `properties { }` block overrides inherited
+        // archetype properties; a `!relationships`/`!relationship` overlay (below)
+        // overrides both. Relationships are not elements, so this cannot live in
+        // applyElementOverlay.
+        const ownProperties = this.propertiesToRecord((relationship.relationship as any)?.properties);
+        if (ownProperties) {
+            result.properties = { ...(result.properties ?? {}), ...ownProperties };
+        }
         // Apply overlay URL
         if (overlay?.url) {
             result.url = overlay.url;
         }
         // Apply overlay properties
         if (overlay?.properties && Object.keys(overlay.properties).length > 0) {
-            result.properties = { ...overlay.properties };
+            result.properties = { ...(result.properties ?? {}), ...overlay.properties };
         }
         // Apply overlay perspectives
         if (overlay?.perspectives) {
@@ -1817,6 +1825,14 @@ class JsonGenerator {
         if (archetypeProperties) {
             result.properties = { ...archetypeProperties, ...(result.properties ?? {}) };
         }
+        // The element's own `properties { }` block overrides inherited archetype
+        // properties; a `!elements` overlay (below) overrides both. Emitting it here
+        // keeps the render JSON complete, so consumers that never run the enricher
+        // (e.g. the MCP tools) still see the declared properties.
+        const ownProperties = this.propertiesToRecord(node?.properties);
+        if (ownProperties) {
+            result.properties = { ...(result.properties ?? {}), ...ownProperties };
+        }
 
         const nodeId = this.getId(node);
         const overlay = this.elementOverlays.get(nodeId);
@@ -1826,10 +1842,9 @@ class JsonGenerator {
             result.url = overlay.url;
         }
         if (overlay.properties && Object.keys(overlay.properties).length > 0) {
-            // Overlay properties override the values set so far (archetype
+            // Overlay properties override the values set so far (archetype and own
             // properties); keys the overlay does not touch are kept.
             result.properties = { ...(result.properties ?? {}), ...overlay.properties };
-            result[OVERLAY_PROPERTY_KEYS] = new Set(Object.keys(overlay.properties));
         }
         if (overlay.perspectives) {
             result.perspectives = overlay.perspectives;

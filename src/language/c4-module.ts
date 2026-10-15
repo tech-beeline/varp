@@ -123,5 +123,11 @@ export function createC4Services(context: DefaultSharedModuleContext): {
     );
     shared.ServiceRegistry.register(C4);
     registerValidationChecks(C4);
+    // JSON generation is triggered by the Validated build phase, and
+    // WorkspaceManager.initializeWorkspace runs the initial build with empty
+    // options, which skips that phase. Request validation for the initial build as
+    // well, so every loaded workspace is generated on startup instead of waiting
+    // for a document to be opened or changed.
+    shared.workspace.WorkspaceManager.initialBuildOptions = { validation: { categories: ['built-in', 'fast'] } };
     return { shared, C4 };
 }

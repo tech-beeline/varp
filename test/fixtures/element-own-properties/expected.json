@@ -1,0 +1,138 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "deploymentNodes" : [ {
+      "containerInstances" : [ {
+        "containerId" : "3",
+        "environment" : "Live",
+        "id" : "5",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "7ae0635e-003f-474e-bf68-a2238315658b"
+        },
+        "tags" : "Container Instance"
+      } ],
+      "environment" : "Live",
+      "id" : "4",
+      "instances" : "1",
+      "name" : "Prod",
+      "properties" : {
+        "structurizr.dsl.identifier" : "e824fd29-fdad-4f1b-8818-07ded5d70e9d",
+        "HostName" : "host-b"
+      },
+      "tags" : "Element,Deployment Node"
+    } ],
+    "people" : [ {
+      "id" : "1",
+      "name" : "User",
+      "properties" : {
+        "structurizr.dsl.identifier" : "user"
+      },
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "3",
+        "name" : "Web Application",
+        "properties" : {
+          "structurizr.dsl.identifier" : "webApplication",
+          "language" : "TypeScript"
+        },
+        "tags" : "Element,Container"
+      } ],
+      "documentation" : { },
+      "id" : "2",
+      "name" : "System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "system",
+        "owner" : "Team A",
+        "HostName" : "host-a"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "19",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCiAgICBtb2RlbCB7DQogICAgICAgIHVzZXIgPSBwZXJzb24gIlVzZXIiDQoNCiAgICAgICAgc3lzdGVtID0gc29mdHdhcmVTeXN0ZW0gIlN5c3RlbSIgew0KICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgIkhvc3ROYW1lIiAiaG9zdC1hIg0KICAgICAgICAgICAgICAgICJvd25lciIgIlRlYW0gQSINCiAgICAgICAgICAgIH0NCiAgICAgICAgICAgIHdlYkFwcGxpY2F0aW9uID0gY29udGFpbmVyICJXZWIgQXBwbGljYXRpb24iIHsNCiAgICAgICAgICAgICAgICBwcm9wZXJ0aWVzIHsNCiAgICAgICAgICAgICAgICAgICAgImxhbmd1YWdlIiAiVHlwZVNjcmlwdCINCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICBsaXZlID0gZGVwbG95bWVudEVudmlyb25tZW50ICJMaXZlIiB7DQogICAgICAgICAgICBkZXBsb3ltZW50Tm9kZSAiUHJvZCIgew0KICAgICAgICAgICAgICAgIHByb3BlcnRpZXMgew0KICAgICAgICAgICAgICAgICAgICAiSG9zdE5hbWUiICJob3N0LWIiDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgICAgIGNvbnRhaW5lckluc3RhbmNlIHdlYkFwcGxpY2F0aW9uDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQp9",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "TopBottom",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Container-001",
+      "name" : "Container View: System",
+      "order" : 3,
+      "softwareSystemId" : "2"
+    } ],
+    "deploymentViews" : [ {
+      "elements" : [ {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "Live",
+      "generatedKey" : true,
+      "key" : "Deployment-001",
+      "name" : "Deployment View: System - Live",
+      "order" : 4,
+      "softwareSystemId" : "2"
+    } ],
+    "systemContextViews" : [ {
+      "elements" : [ {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemContext-001",
+      "name" : "System Context View: System",
+      "order" : 2,
+      "softwareSystemId" : "2"
+    } ],
+    "systemLandscapeViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-001",
+      "name" : "System Landscape View",
+      "order" : 1
+    } ]
+  }
+}

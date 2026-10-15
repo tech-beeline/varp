@@ -20,13 +20,62 @@ export function parseToolResult(result: CallToolResult): any {
     return null;
 }
 
-/** Resolves the target project URI, defaulting to the first available project. */
+/** Number of views a workspace JSON declares, across every view type. */
+function countViews(json: any): number {
+    const views = json?.views;
+    if (!views || typeof views !== 'object') {
+        return 0;
+    }
+    return Object.values(views).reduce<number>(
+        (sum, value) => sum + (Array.isArray(value) ? value.length : 0), 0);
+}
+
+/**
+ * Picks the default project when the caller omits one: the workspace with the
+ * most views. List order alone is unreliable because it can start with an
+ * auxiliary workspace (e.g. a test file that declares no views), so projects are
+ * ranked by view count and ties keep the earliest project in list order.
+ */
+async function pickDefaultProject(source: C4ModelSource, projects: string[]): Promise<string> {
+    let best = projects[0] ?? '';
+    let bestCount = -1;
+    for (const project of projects) {
+        const count = countViews(await source.getContent(project));
+        if (count > bestCount) {
+            bestCount = count;
+            best = project;
+        }
+    }
+    return best;
+}
+
+/** Resolves the target project URI, defaulting to the project with the most views. */
 export async function resolveProject(source: C4ModelSource, uri?: string): Promise<string> {
-    if (uri) {
+    const projects = await source.listProjects();
+    if (!uri) {
+        return pickDefaultProject(source, projects);
+    }
+    if (projects.includes(uri)) {
         return uri;
     }
-    const projects = await source.listProjects();
-    return projects[0] ?? '';
+    // A caller may pass a bare file name or a fragment path instead of the exact
+    // project URI; resolve it to the project whose URI ends with it.
+    const suffixMatches = projects.filter(p => p.endsWith('/' + uri) || p.endsWith('\\' + uri));
+    if (suffixMatches.length > 0) {
+        return suffixMatches[0];
+    }
+    // Otherwise match the workspace name or description, which live inside the
+    // generated JSON rather than in the URI.
+    const needle = uri.trim().toLowerCase();
+    for (const project of projects) {
+        const json = await source.getContent(project);
+        const name = typeof json?.name === 'string' ? json.name.trim().toLowerCase() : '';
+        const description = typeof json?.description === 'string' ? json.description.trim().toLowerCase() : '';
+        if (needle.length > 0 && (name === needle || description === needle)) {
+            return project;
+        }
+    }
+    return uri;
 }
 
 /**
@@ -39,7 +88,10 @@ export async function resolveProject(source: C4ModelSource, uri?: string): Promi
  * `explore-element`) and the `c4://project/{uri}` resource template instead.
  */
 export function uriArgSchema() {
-    return z.string().optional().describe('Project (root workspace) URI. Defaults to the first available project.');
+    return z.string().optional().describe(
+        'Project to query. Accepts a full workspace URI, a file name (e.g. "workspace.dsl"), '
+        + 'or the workspace name or description (e.g. "FilteredDemo"). Defaults to the project with the most views.',
+    );
 }
 
 export async function listProjectsHandler(source: C4ModelSource, logger?: McpLogger): Promise<CallToolResult> {

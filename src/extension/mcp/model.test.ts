@@ -52,4 +52,28 @@ describe('flattenModel (from simple-workspace DSL fixture)', () => {
         const db = model.elements.find(e => e.name === 'Database')!;
         expect(containerView!.elementIds).toEqual(expect.arrayContaining([webApp.id, db.id]));
     });
+
+    it('resolves view relationship endpoints from model relationships by id', () => {
+        const model = flattenModel(PROJECT_URI, workspaceJson);
+        const withRelationships = model.views.filter(v => v.relationships.length > 0);
+        expect(withRelationships.length).toBeGreaterThan(0);
+        for (const view of withRelationships) {
+            for (const rel of view.relationships) {
+                expect(rel.sourceId).not.toBe('');
+                expect(rel.destinationId).not.toBe('');
+            }
+        }
+    });
+});
+
+describe('flattenModel deployment instances', () => {
+    it('names a ContainerInstance after the container it instantiates', async () => {
+        const json = await loadWorkspaceJson('element-own-properties');
+        const model = flattenModel(PROJECT_URI, json);
+        const node = model.elements.find(e => e.name === 'Prod' && e.type === 'DeploymentNode')!;
+        const instance = model.elements.find(e => e.type === 'ContainerInstance')!;
+        expect(instance.name).toBe('Web Application');
+        expect(instance.path).toEqual(['Prod', 'Web Application']);
+        expect(instance.parentId).toBe(node.id);
+    });
 });

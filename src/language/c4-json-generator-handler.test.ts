@@ -14,7 +14,7 @@
 	limitations under the License.
 */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { EmptyFileSystem } from 'langium';
 import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
@@ -338,6 +338,88 @@ describe('fitViewToContent', () => {
         expect(view.elements[1]).toMatchObject({ id: 'a', x: 400, y: 400 });
         expect(view.relationships[0].vertices).toEqual([{ x: 600, y: 600 }]);
         expect(view.dimensions).toEqual({ width: 1250, height: 1100 });
+    });
+});
+
+describe('on-demand recovery', () => {
+    it('regenerates when the cache was invalidated without a successful build', async () => {
+        const services = newServices();
+        const handler: any = services.generation.C4GeneratorHandler;
+        const uri = 'file:///ensure-content.dsl';
+        const built = await buildAndGenerate(services, uri, workspaceDsl('E'));
+
+        // Every document update wipes the whole JSON cache, and the entry is
+        // restored by the build phase. Simulate an update whose build did not reach
+        // that phase (cancelled/failed): the read must still be served.
+        handler.jsonCache.clear();
+        handler.cachedUris.clear();
+        expect(handler.getContentForUri(uri)).toBeNull();
+
+        const healed = await handler.ensureContentForUri(uri);
+
+        expect(healed).not.toBeNull();
+        expect(healed.json.model.softwareSystems[0].name).toBe('E');
+        expect(healed.generation).toBeGreaterThan(built.generation);
+        expect(handler.getContentForUri(uri)).toBe(healed);
+    });
+
+    it('does not treat a document without a workspace as a root', async () => {
+        const services = newServices();
+        const handler = services.generation.C4GeneratorHandler;
+        const uri = 'file:///fragment-only.dsl';
+        const doc = services.shared.workspace.LangiumDocumentFactory.fromString('a = softwareSystem "A"', URI.parse(uri));
+        services.shared.workspace.LangiumDocuments.addDocument(doc);
+        await services.shared.workspace.DocumentBuilder.build([doc], { validation: true });
+
+        // A document without a workspace is not a root: it must not be advertised
+        // as a project that cannot be served.
+        expect(handler.getRootUri(uri)).toBe(uri);
+        expect(await handler.ensureContentForUri(uri)).toBeNull();
+    });
+
+    it('lists a project whose JSON is not cached yet, so discovery survives invalidation', async () => {
+        const services = newServices();
+        const handler: any = services.generation.C4GeneratorHandler;
+        const uri = 'file:///listed-project.dsl';
+        await buildAndGenerate(services, uri, workspaceDsl('L'));
+
+        handler.jsonCache.clear();
+        handler.cachedUris.clear();
+
+        expect(handler.getCachedUris()).toEqual([]);
+        expect(handler.getProjectUris()).toContain(uri);
+    });
+});
+
+describe('ungeneratable root diagnostic', () => {
+    it('reports a previously generated root that stops declaring a workspace', async () => {
+        const services = newServices();
+        const handler: any = services.generation.C4GeneratorHandler;
+        const uri = 'file:///regressed-root.dsl';
+        await buildAndGenerate(services, uri, workspaceDsl('G'));
+
+        // The file stops producing a workspace (syntax error swallowing the block,
+        // unreadable/empty file, several workspace blocks).
+        const doc = services.shared.workspace.LangiumDocuments.getDocument(URI.parse(uri))!;
+        (doc as any).parseResult.value = { $type: 'C4Document', workspaces: [] };
+
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        try {
+            const reported = () => warn.mock.calls
+                .map(call => String(call[0]))
+                .filter(message => message.includes('declares no workspace'));
+
+            handler.pendingReset = true;
+            handler.updateMemoryCache([doc]);
+            expect(reported()).toHaveLength(1);
+
+            // One line per broken episode, not on every build cycle.
+            handler.pendingReset = true;
+            handler.updateMemoryCache([doc]);
+            expect(reported()).toHaveLength(1);
+        } finally {
+            warn.mockRestore();
+        }
     });
 });
 

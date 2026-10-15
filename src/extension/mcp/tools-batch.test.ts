@@ -206,3 +206,27 @@ describe('subgraph-summary', () => {
         expect(result.error).toContain(PROJECT_URI);
     });
 });
+
+describe('subgraph-summary containment', () => {
+    it('does not treat a same-named element of another tree as a child', async () => {
+        const json = {
+            name: 'Collide',
+            model: {
+                softwareSystems: [{
+                    id: 's1', name: 'Prod', tags: 'Element,Software System',
+                    containers: [{ id: 'c1', name: 'Web', tags: 'Element,Container' }],
+                }],
+                deploymentNodes: [
+                    { id: 'd1', name: 'Prod', children: [{ id: 'd2', name: 'Web Node' }] },
+                ],
+            },
+            views: {},
+        };
+        const collideSource = mockSource(json as any);
+
+        const result = parseToolResult(await subgraphSummaryHandler(collideSource, { elementId: 'd1', maxDepth: 2 }));
+        // The container of software system "Prod" shares the name path with the
+        // deployment node "Prod" but is not contained by it.
+        expect(result.nodes.map((n: any) => n.id)).toEqual(['d2']);
+    });
+});

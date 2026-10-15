@@ -24,7 +24,7 @@
 import { AstUtils, LangiumSharedCoreServices, type AstNode, type FileSystemNode } from 'langium';
 import { base64EncodeBytes } from './c4-base64';
 import { Utils, URI } from 'vscode-uri';
-import { flatId, declaredIdentifier, contextElement, OVERLAY_PROPERTY_KEYS } from './c4-utils';
+import { flatId, declaredIdentifier, contextElement } from './c4-utils';
 import { base64EncodeUtf8, isDslPortable, isDslSourceRetained, retainedDslText } from './c4-dsl-source';
 import {
     AdrsDirective,
@@ -364,7 +364,6 @@ export class C4JsonEnricher {
         return (
             this.astIdentifier(node) !== undefined ||
             (Array.isArray(node?.urlProps) && node.urlProps.length > 0) ||
-            (Array.isArray(node?.properties) && node.properties.length > 0) ||
             (Array.isArray(node?.perspectivesBlocks) && node.perspectivesBlocks.length > 0) ||
             (node?.techProps && Array.isArray(node.techProps) && node.techProps.length > 0) ||
             (Array.isArray(node?.healthChecks) && node.healthChecks.length > 0)
@@ -375,28 +374,6 @@ export class C4JsonEnricher {
         if (target.url === undefined) {
             const url = this.firstPropValue(node.urlProps);
             if (url !== undefined) target.url = url;
-        }
-        // Merge the element's own properties with the values the generator set.
-        // The reference parser applies archetype properties at element creation,
-        // the element's own properties afterwards, and a `!elements` overlay last,
-        // so on a key collision the overlay wins, then the element's own value,
-        // then the archetype's.
-        const ownProps = this.collectProperties(node.properties);
-        const overlayKeys = target[OVERLAY_PROPERTY_KEYS];
-        delete target[OVERLAY_PROPERTY_KEYS];
-        if (ownProps) {
-            const current: Record<string, string> = target.properties ?? {};
-            const merged: Record<string, string> = {};
-            for (const [k, v] of Object.entries(current)) {
-                if (!(overlayKeys instanceof Set) || !overlayKeys.has(k)) merged[k] = v;
-            }
-            for (const [k, v] of Object.entries(ownProps)) merged[k] = v;
-            if (overlayKeys instanceof Set) {
-                for (const k of overlayKeys) {
-                    if (k in current) merged[k] = current[k];
-                }
-            }
-            target.properties = merged;
         }
         // Merge the element's own perspectives with the generator's (overlay), keeping
         // the parse order (own first) and the first value seen for a duplicated name.
@@ -440,19 +417,6 @@ export class C4JsonEnricher {
         if (!first) return undefined;
         const value = first.value;
         return typeof value === 'string' ? value.replace(/^["']|["']$/g, '') : undefined;
-    }
-
-    /** Reads the first PropertiesBlock items into a flat record. */
-    private collectProperties(blocks: any[] | undefined): Record<string, string> | undefined {
-        const items = blocks?.at(0)?.items;
-        if (!Array.isArray(items) || items.length === 0) return undefined;
-        const props: Record<string, string> = {};
-        for (const item of items) {
-            const name = typeof item?.name === 'string' ? item.name.replace(/^["']|["']$/g, '') : undefined;
-            const value = typeof item?.value === 'string' ? item.value.replace(/^["']|["']$/g, '') : undefined;
-            if (name && value) props[name] = value;
-        }
-        return Object.keys(props).length > 0 ? props : undefined;
     }
 
     /**

@@ -20,7 +20,10 @@ function textMessage(role: 'user' | 'assistant', text: string): PromptMessage {
  */
 function promptUriSchema(source: C4ModelSource) {
     return completable(
-        z.string().default('').describe('Project (root workspace) URI. Defaults to the first available project.'),
+        z.string().default('').describe(
+            'Project to query: a workspace URI, a file name, or the workspace name or description. '
+            + 'Defaults to the project with the most views.',
+        ),
         async (value = '') => (await source.listProjects()).filter((p) => p.startsWith(value)),
     );
 }

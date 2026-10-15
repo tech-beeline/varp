@@ -3,7 +3,7 @@
  *
  * Works over the resolved Structurizr JSON produced by the language server
  * (C4GeneratorHandler) and fetched through the custom LSP requests:
- *   - c4/listProjects   -> root workspace document URIs with cached JSON
+ *   - c4/listProjects   -> root workspace document URIs that can be served
  *   - c4/getContentForUri -> the Structurizr JSON for a given URI
  */
 
@@ -24,6 +24,13 @@ export interface McpElement {
     tags: string[];
     /** Hierarchical path, e.g. ['Software System', 'Container']. */
     path: string[];
+    /**
+     * Id of the containing element, when there is one. Taken from the tree while
+     * flattening instead of being inferred from `path`: the name-based paths of the
+     * model tree and the deployment tree can coincide (both have a one-segment
+     * root), so a path lookup can return an element of the other tree.
+     */
+    parentId?: string;
     properties?: Record<string, string>;
     /** Outgoing relationships (this element as the source). */
     relationships: McpRelationship[];
@@ -99,7 +106,7 @@ export function flattenModel(uri: string, json: any): FlattenedModel {
     const views: McpView[] = [];
     const model = json?.model ?? {};
 
-    const addElement = (el: any, type: string, path: string[]): void => {
+    const addElement = (el: any, type: string, path: string[], parentId?: string): void => {
         elements.push({
             id: String(el?.id ?? ''),
             name: el?.name ?? '',
@@ -108,6 +115,7 @@ export function flattenModel(uri: string, json: any): FlattenedModel {
             technology: el?.technology,
             tags: splitTags(el?.tags),
             path,
+            parentId,
             properties: el?.properties,
             relationships: (el?.relationships ?? []).map((r: any) => ({
                 id: r?.id,
@@ -122,26 +130,47 @@ export function flattenModel(uri: string, json: any): FlattenedModel {
 
     (model.people ?? []).forEach((p: any) => addElement(p, 'Person', []));
 
+    // Deployment instances carry no `name` of their own (neither here nor in the
+    // reference JSON): they instantiate a container or software system, so their
+    // label is resolved from the referenced element.
+    const containerNames = new Map<string, string>();
+    const systemNames = new Map<string, string>();
+    const instanceName = (inst: any, names: Map<string, string>, refKey: string): string => {
+        if (typeof inst?.name === 'string' && inst.name.length > 0) {
+            return inst.name;
+        }
+        return names.get(String(inst?.[refKey] ?? '')) ?? '';
+    };
+
     (model.softwareSystems ?? []).forEach((s: any) => {
+        const systemId = String(s?.id ?? '');
+        systemNames.set(systemId, s?.name ?? '');
         addElement(s, 'SoftwareSystem', [s?.name ?? '']);
         (s.containers ?? []).forEach((c: any) => {
-            addElement(c, 'Container', [s?.name ?? '', c?.name ?? '']);
+            const containerId = String(c?.id ?? '');
+            containerNames.set(containerId, c?.name ?? '');
+            addElement(c, 'Container', [s?.name ?? '', c?.name ?? ''], systemId);
             (c.components ?? []).forEach((co: any) =>
-                addElement(co, 'Component', [s?.name ?? '', c?.name ?? '', co?.name ?? '']));
+                addElement(co, 'Component', [s?.name ?? '', c?.name ?? '', co?.name ?? ''], containerId));
         });
     });
 
-    const walkDeployment = (nodes: any[], path: string[]): void => {
+    const walkDeployment = (nodes: any[], path: string[], parentId?: string): void => {
         (nodes ?? []).forEach((n: any) => {
             const nodePath = [...path, n?.name ?? ''];
-            addElement(n, 'DeploymentNode', nodePath);
-            walkDeployment(n?.children ?? [], nodePath);
+            const nodeId = String(n?.id ?? '');
+            addElement(n, 'DeploymentNode', nodePath, parentId);
+            walkDeployment(n?.children ?? [], nodePath, nodeId);
             (n?.infrastructureNodes ?? []).forEach((inf: any) =>
-                addElement(inf, 'InfrastructureNode', [...nodePath, inf?.name ?? '']));
-            (n?.softwareSystemInstances ?? []).forEach((inst: any) =>
-                addElement(inst, 'SoftwareSystemInstance', [...nodePath, inst?.name ?? '']));
-            (n?.containerInstances ?? []).forEach((inst: any) =>
-                addElement(inst, 'ContainerInstance', [...nodePath, inst?.name ?? '']));
+                addElement(inf, 'InfrastructureNode', [...nodePath, inf?.name ?? ''], nodeId));
+            (n?.softwareSystemInstances ?? []).forEach((inst: any) => {
+                const name = instanceName(inst, systemNames, 'softwareSystemId');
+                addElement({ ...inst, name }, 'SoftwareSystemInstance', [...nodePath, name], nodeId);
+            });
+            (n?.containerInstances ?? []).forEach((inst: any) => {
+                const name = instanceName(inst, containerNames, 'containerId');
+                addElement({ ...inst, name }, 'ContainerInstance', [...nodePath, name], nodeId);
+            });
         });
     };
     walkDeployment(model.deploymentNodes ?? [], []);
@@ -156,6 +185,18 @@ export function flattenModel(uri: string, json: any): FlattenedModel {
         }
     }
 
+    // Index model relationships by id. View relationships only carry the
+    // relationship id (plus layout), so their endpoints are resolved here from
+    // the model relationship with the same id.
+    const relationshipsById = new Map<string, McpRelationship>();
+    for (const e of elements) {
+        for (const r of e.relationships) {
+            if (r.id && !relationshipsById.has(r.id)) {
+                relationshipsById.set(r.id, r);
+            }
+        }
+    }
+
     const collectViews = (arr: any[], type: string): void => {
         (arr ?? []).forEach((v: any) => {
             views.push({
@@ -164,13 +205,16 @@ export function flattenModel(uri: string, json: any): FlattenedModel {
                 title: v?.title,
                 description: v?.description,
                 elementIds: (v?.elements ?? []).map((e: any) => String(e?.id ?? '')),
-                relationships: (v?.relationships ?? []).map((r: any) => ({
-                    id: r?.id,
-                    sourceId: String(r?.sourceId ?? ''),
-                    destinationId: String(r?.destinationId ?? ''),
-                    description: r?.description,
-                    order: r?.order,
-                })),
+                relationships: (v?.relationships ?? []).map((r: any) => {
+                    const modelRel = r?.id ? relationshipsById.get(String(r.id)) : undefined;
+                    return {
+                        id: r?.id,
+                        sourceId: String(r?.sourceId ?? modelRel?.sourceId ?? ''),
+                        destinationId: String(r?.destinationId ?? modelRel?.destinationId ?? ''),
+                        description: r?.description ?? modelRel?.description,
+                        order: r?.order,
+                    };
+                }),
             });
         });
     };

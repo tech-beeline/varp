@@ -15,9 +15,12 @@
 */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 import { AstUtils, EmptyFileSystem, type LangiumDocument } from 'langium';
 import { URI, Utils } from 'vscode-uri';
 import { createC4Services } from './c4-module';
+import { C4JsonGenerator } from './c4-json-generator';
 import { isRelationship } from '../generated/ast';
 
 const PROJECT = URI.parse('file:///identifiers-regions/');
@@ -285,5 +288,49 @@ describe('!identifiers regions in extended workspaces', () => {
         expect(resolveEndpoint(child, 'psys.pcomp')?.$type).toBe('Container');
         expect(resolveEndpoint(child, 'pinner')?.$type).toBe('Container');
         expect(resolveEndpoint(child, 'pflat')?.$type).toBe('SoftwareSystem');
+    });
+});
+
+describe('hierarchical names across an include chain', () => {
+    /** Loads the test/fixtures/complex-include fixture files as a virtual project. */
+    function complexIncludeProject(): Record<string, string> {
+        const dir = resolvePath(__dirname, '../../test/fixtures/complex-include');
+        const files: Record<string, string> = {};
+        for (const name of ['input.dsl', '1.dsl', '2.dsl', '3.dsl']) {
+            files[name] = readFileSync(resolvePath(dir, name), 'utf-8');
+        }
+        return files;
+    }
+
+    it('resolves an element included inside !element by its including path', async () => {
+        const docs = await buildProject(complexIncludeProject());
+        const main = docs.get('input.dsl')!;
+
+        expect(main.parseResult.parserErrors).toHaveLength(0);
+        expect(resolveEndpoint(main, 's.c')?.$type).toBe('Container');
+        expect(resolveEndpoint(main, 's.c1')?.$type).toBe('Container');
+    });
+
+    it('emits the relationship between the containers included inside !element', async () => {
+        const services = createC4Services({ connection: undefined as any, ...EmptyFileSystem }).C4;
+        const files = complexIncludeProject();
+        const docs: LangiumDocument[] = [];
+        for (const [name, content] of Object.entries(files)) {
+            const doc = services.shared.workspace.LangiumDocumentFactory.fromString(content, Utils.resolvePath(PROJECT, name));
+            services.shared.workspace.LangiumDocuments.addDocument(doc);
+            docs.push(doc);
+        }
+        await services.shared.workspace.DocumentBuilder.build(docs);
+        const main = docs[0];
+
+        const json = await new C4JsonGenerator(services).generate((main.parseResult.value as any).workspaces[0], main.uri.toString());
+        const containers = json.model.softwareSystems[0].containers;
+        const namesById = new Map(containers.map((container: any) => [container.id, container.name]));
+        const relationships = containers.flatMap((container: any) => container.relationships ?? []);
+
+        expect(containers.map((container: any) => container.name)).toEqual(['c', 'c1']);
+        expect(relationships).toHaveLength(1);
+        expect(namesById.get(relationships[0].sourceId)).toBe('c');
+        expect(namesById.get(relationships[0].destinationId)).toBe('c1');
     });
 });

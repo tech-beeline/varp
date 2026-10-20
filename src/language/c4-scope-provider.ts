@@ -183,6 +183,10 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     // directive. Built once per ancestor document and reused by inheritedIncludeStyle
     // for every fragment.
     private readonly includeTargetOffsetCache: WorkspaceCache<string, Map<string, number>>;
+    // Per-ancestor-document index: included-target URI -> !include directive node.
+    // Built once per ancestor document and reused when climbing the include chain to
+    // build hierarchical names.
+    private readonly includeSiteCache: WorkspaceCache<string, Map<string, Include>>;
     // Cache for the local element package (FQN/name descriptions + suffix aliases) per
     // root node, built once per root per build (see buildLocalScopePackage) and reused
     // by getScope().
@@ -197,6 +201,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
         this.extendedElementsCache = new WorkspaceCache<string, AstNodeDescription[]>(services.shared);
         this.fragmentStyleCache = new WorkspaceCache<string, boolean | undefined>(services.shared);
         this.includeTargetOffsetCache = new WorkspaceCache<string, Map<string, number>>(services.shared);
+        this.includeSiteCache = new WorkspaceCache<string, Map<string, Include>>(services.shared);
         this.localScopeCache = new WorkspaceCache<string, LocalScopePackage>(services.shared);
     }
 
@@ -234,14 +239,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
      * resolves as `ENSEMBLE.ENS`), so they must be exposed with that FQN prefix.
      */
     private hasElementExtensionAncestor(node: AstNode | undefined): boolean {
-        let current = node;
-        while (current) {
-            if (isElementExtension(current)) {
-                return true;
-            }
-            current = current.$container;
-        }
-        return false;
+        return !!node && this.hierarchicalAncestors(node).some(isElementExtension);
     }
 
     private exportElementDescriptions(
@@ -338,16 +336,11 @@ export class C4ScopeProvider extends DefaultScopeProvider {
      * as they are visual only and don't affect hierarchical identifiers.
      */
     private calculateHierarchicalParts(node: AstNode, nodeId: string): string[] {
-        const parts: string[] = [nodeId];
-        let current = node.$container;
-        while (current) {
-            const currentRecord = current as any;
-            const parentId = currentRecord.id || currentRecord.name;
-            if (parentId && isNamedElement(current) && !isGroup(current)) {
-                parts.unshift(parentId);
-            }
-            current = current.$container;
-        }
+        const parts = this.hierarchicalAncestors(node).map(current => {
+            const record = current as any;
+            return record.id || record.name;
+        });
+        parts.push(nodeId);
         return parts;
     }
 
@@ -356,17 +349,78 @@ export class C4ScopeProvider extends DefaultScopeProvider {
      * Each ancestor is a NamedElement with id or name. Groups are skipped.
      */
     private collectHierarchicalAncestors(node: AstNode): AstNode[] {
+        return this.hierarchicalAncestors(node).reverse();
+    }
+
+    /**
+     * Ancestor elements of `node` used for hierarchical naming, ordered outermost
+     * first. Only NamedElements with an id or name participate; Groups are skipped as
+     * they are visual only.
+     *
+     * The climb follows the lexical `$container` chain and, when that chain reaches
+     * the end of a document, continues from the `!include` directive that pulls the
+     * document in. A fragment is spliced into the including file, so an element
+     * contributed by `!include` is namespaced by the including context: a container
+     * included inside `!element s` is named `s.<id>` rather than `<id>`. Each jump is
+     * guarded by the visited documents so cyclic include chains terminate.
+     */
+    private hierarchicalAncestors(node: AstNode): AstNode[] {
         const ancestors: AstNode[] = [];
-        let current = node.$container;
-        while (current) {
-            const currentRecord = current as any;
-            const parentId = currentRecord.id || currentRecord.name;
-            if (parentId && isNamedElement(current) && !isGroup(current)) {
-                ancestors.push(current);
+        const visitedUris = new Set<string>();
+        let segmentRoot: AstNode | undefined = node;
+
+        while (segmentRoot) {
+            let current: AstNode | undefined = segmentRoot.$container;
+            let outermost: AstNode = segmentRoot;
+            while (current) {
+                const record = current as any;
+                if ((record.id || record.name) && isNamedElement(current) && !isGroup(current)) {
+                    ancestors.push(current);
+                }
+                outermost = current;
+                current = current.$container;
             }
-            current = current.$container;
+
+            const docUri = AstUtils.getDocument(outermost)?.uri.toString();
+            if (!docUri || visitedUris.has(docUri)) {
+                break;
+            }
+            visitedUris.add(docUri);
+            segmentRoot = this.findIncludeSite(docUri);
         }
-        return ancestors;
+
+        return ancestors.reverse();
+    }
+
+    /**
+     * Returns the `!include` directive that pulls the given document into another
+     * loaded document, or undefined when it is not included. Walks the loaded ancestor
+     * chain, so a nested include resolves to the directive of its nearest includer.
+     */
+    private findIncludeSite(fragmentUri: string): Include | undefined {
+        const chain = includeResolver.getAncestorChain(this.services.shared, fragmentUri);
+        for (const ancUri of chain) {
+            const ancDoc = this.services.shared.workspace.LangiumDocuments.getDocument(URI.parse(ancUri));
+            const ancRoot = ancDoc?.parseResult.value;
+            if (!ancRoot) continue;
+
+            const sites = this.includeSiteCache.get(ancUri, () => {
+                const map = new Map<string, Include>();
+                for (const inc of AstUtils.streamAllContents(ancRoot).filter(isInclude).toArray()) {
+                    const targetUri = this.resolvePathToUri(inc.file, inc);
+                    if (targetUri && !map.has(targetUri.toString())) {
+                        map.set(targetUri.toString(), inc);
+                    }
+                }
+                return map;
+            });
+
+            const include = sites.get(fragmentUri);
+            if (include) {
+                return include;
+            }
+        }
+        return undefined;
     }
 
     /**

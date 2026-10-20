@@ -1349,61 +1349,55 @@ class JsonGenerator {
         // visited by collectElementsRelationships, so included elements must be
         // collected here — otherwise they are missing from the emitted model while
         // references (e.g. deployment instances, container views) still point to ids.
-        if (Array.isArray(node.includes)) {
-            for (const inc of node.includes) {
-                if (inc.file) {
-                    const root = this.resolveIncludedRoot(node, inc.file);
-                    if (root) {
-                        const docUri = AstUtils.getDocument(root)?.uri.toString();
-                        if (docUri) {
-                            if (visitedDocs.has(docUri)) continue;
-                            visitedDocs.add(docUri);
-                            // Register the include context so parent resolution
-                            // (resolveContainerParent / resolveComponentParent) can
-                            // climb from the Include directive to the logical parent.
-                            const existing = this.includeContexts.get(docUri) || [];
-                            existing.push(inc);
-                            this.includeContexts.set(docUri, existing);
-                        }
-                        this.collectLocal(root, groupStack, visitedDocs);
-                    }
-                }
+        const followInclude = (owner: any, inc: any): void => {
+            if (!inc.file) return;
+            const root = this.resolveIncludedRoot(owner, inc.file);
+            if (!root) return;
+            const docUri = AstUtils.getDocument(root)?.uri.toString();
+            if (docUri) {
+                if (visitedDocs.has(docUri)) return;
+                visitedDocs.add(docUri);
+                // Register the include context so parent resolution
+                // (resolveContainerParent / resolveComponentParent) can
+                // climb from the Include directive to the logical parent.
+                const existing = this.includeContexts.get(docUri) || [];
+                existing.push(inc);
+                this.includeContexts.set(docUri, existing);
             }
-        }
-        // Universal collection handler: processes groups, relationships, and named elements
-        const processItems = (items: any[]) => {
-            for (const item of items) {
-                if (isGroup(item)) {
-                    // Groups add another recursion level with an extended group stack
-                    this.collectLocal(item, [...groupStack, this.substitute(item.name) || ""], visitedDocs);
+            this.collectLocal(root, groupStack, visitedDocs);
+        };
+        // Universal collection handler: processes a group, a relationship or a named element
+        const processItem = (item: any): void => {
+            if (isGroup(item)) {
+                // Groups add another recursion level with an extended group stack
+                this.collectLocal(item, [...groupStack, this.substitute(item.name) || ""], visitedDocs);
+            }
+            else if (isRelationship(item)) {
+                this.addRelationship(item);
+            }
+            else if (isImplicitRelationship(item)) {
+                this.relationships.push(this.createSyntheticRelationship(item));
+            }
+            else if (isNamedElement(item)) {
+                // An ArchetypeInstance is materialised as an element of its
+                // archetype's base type; relationship-typed archetypes
+                // (`a --https-> b`) stay as instances.
+                const element = this.materializeArchetypeInstance(item)
+                    ?? this.materializeGenericInstance(item)
+                    ?? item;
+                // A `group` archetype instance behaves like a Group: it is not an
+                // element itself, it just contributes a group level for its children.
+                if (isGroup(element)) {
+                    this.collectLocal(element, [...groupStack, this.substitute(element.name) || ""], visitedDocs);
+                    return;
                 }
-                else if (isRelationship(item)) {
-                    this.addRelationship(item);
+                // Store group path in the map instead of mutating AST
+                if (groupStack.length > 0) {
+                    this.groupPathMap.set(this.getId(element), groupStack.join(this.groupSeparator));
                 }
-                else if (isImplicitRelationship(item)) {
-                    this.relationships.push(this.createSyntheticRelationship(item));
-                }
-                else if (isNamedElement(item)) {
-                    // An ArchetypeInstance is materialised as an element of its
-                    // archetype's base type; relationship-typed archetypes
-                    // (`a --https-> b`) stay as instances.
-                    const element = this.materializeArchetypeInstance(item)
-                        ?? this.materializeGenericInstance(item)
-                        ?? item;
-                    // A `group` archetype instance behaves like a Group: it is not an
-                    // element itself, it just contributes a group level for its children.
-                    if (isGroup(element)) {
-                        this.collectLocal(element, [...groupStack, this.substitute(element.name) || ""], visitedDocs);
-                        continue;
-                    }
-                    // Store group path in the map instead of mutating AST
-                    if (groupStack.length > 0) {
-                        this.groupPathMap.set(this.getId(element), groupStack.join(this.groupSeparator));
-                    }
-                    this.elements.push(element);
-                    // Recurse into element children (SoftwareSystem → Containers, etc.) with empty group stack
-                    this.collectLocal(element, [], visitedDocs);
-                }
+                this.elements.push(element);
+                // Recurse into element children (SoftwareSystem → Containers, etc.) with empty group stack
+                this.collectLocal(element, [], visitedDocs);
             }
         };
         // Deployment groups are declared by the environment, not as elements, so they
@@ -1418,22 +1412,44 @@ class JsonGenerator {
                 }
             }
         }
-        // Process all possible element collections on the current node
-        if (node.nodes) processItems(node.nodes);
-        if (node.groups) processItems(node.groups);
-        if (node.children) processItems(node.children);
-        if (node.infrastructureNodes) processItems(node.infrastructureNodes);
-        if (node.softwareSystemInstances) processItems(node.softwareSystemInstances);
-        if (node.containerInstances) processItems(node.containerInstances);
-        if (node.genericInstances) processItems(node.genericInstances);
-        if (node.elements) processItems(node.elements);
-        // ArchetypeInstance keeps its containers/components in dedicated collections
-        // instead of `elements`.
-        if (node.containers) processItems(node.containers);
-        if (node.components) processItems(node.components);
-        // Archetype instances nested in an element body live in their own collection.
-        if (node.archetypeInstances) processItems(node.archetypeInstances);
-        if (node.relationships) processItems(node.relationships);
+        // Includes and items are processed in source order: an `!include` contributes
+        // its elements and relationships at the position of the directive, which is the
+        // order the reference library parses the workspace in.
+        const offsetOf = (entry: any): number => entry?.$cstNode?.offset ?? Number.MAX_SAFE_INTEGER;
+        const processEntries = (entries: any[], owner: any): void => {
+            entries.sort((a, b) => offsetOf(a) - offsetOf(b));
+            for (const entry of entries) {
+                if (isInclude(entry)) followInclude(owner, entry);
+                else if (isElementExtension(entry)) processElementExtension(entry);
+                else processItem(entry);
+            }
+        };
+        // Process !element (ElementExtension) contributions. Their children
+        // (containers/components/nodes/...) are REAL model elements that must be
+        // collected so relationships targeting them (e.g. Parent.Child -> Sibling)
+        // resolve and appear in the generated JSON. The ElementExtension itself is
+        // a directive, not an element - only its child collections are processed.
+        const processElementExtension = (ext: any): void => {
+            const extEntries: any[] = Array.isArray(ext.includes) ? [...ext.includes] : [];
+            for (const collection of [
+                ext.containers, ext.components, ext.nodes, ext.infrastructureNodes,
+                ext.softwareSystemInstances, ext.containerInstances, ext.genericInstances,
+                ext.groups, ext.relationships
+            ]) {
+                if (Array.isArray(collection)) extEntries.push(...collection);
+            }
+            processEntries(extEntries, ext);
+        };
+        const entries: any[] = Array.isArray(node.includes) ? [...node.includes] : [];
+        for (const collection of [
+            node.nodes, node.groups, node.children, node.infrastructureNodes,
+            node.softwareSystemInstances, node.containerInstances, node.genericInstances,
+            node.elements, node.containers, node.components, node.archetypeInstances,
+            node.relationships, node.elementExtensions
+        ]) {
+            if (Array.isArray(collection)) entries.push(...collection);
+        }
+        processEntries(entries, node);
         // `-/>` directives suppress projected instance relationships between the
         // resolved instances; the body relationships are collected separately.
         if (Array.isArray(node.noRelationships)) {
@@ -1451,25 +1467,6 @@ class JsonGenerator {
                 }
             };
             collectNoRelationships(node.noRelationships);
-        }
-        // Process !element (ElementExtension) contributions. Their children
-        // (containers/components/nodes/...) are REAL model elements that must be
-        // collected so relationships targeting them (e.g. Parent.Child -> Sibling)
-        // resolve and appear in the generated JSON. The ElementExtension itself is
-        // a directive, not an element - only its child collections are processed.
-        if (Array.isArray(node.elementExtensions)) {
-            for (const ext of node.elementExtensions) {
-                processItems(ext.containers ?? []);
-                processItems(ext.components ?? []);
-                processItems(ext.nodes ?? []);
-                processItems(ext.infrastructureNodes ?? []);
-                processItems(ext.softwareSystemInstances ?? []);
-                processItems(ext.containerInstances ?? []);
-                processItems(ext.genericInstances ?? []);
-                processItems(ext.groups ?? []);
-                // Relationships declared inside the extension body are also real.
-                processItems(ext.relationships ?? []);
-            }
         }
     }
 
@@ -3276,6 +3273,37 @@ class JsonGenerator {
         }
         for (const block of workspace.viewsBlocks ?? []) {
             views.push(...(block.views ?? []));
+            // !include inside the views block contributes the views of the fragment.
+            views.push(...this.includedViews(block, visited));
+        }
+        return views;
+    }
+
+    /**
+     * Views contributed by `!include` directives in a views block. A fragment is
+     * parsed as its own root document, so its views arrive either as a nested
+     * `views { }` block or as bare view declarations (a fragment is spliced into
+     * the including file, which sits inside the views block).
+     */
+    private includedViews(node: AstNode, visited: Set<string>): any[] {
+        const views: any[] = [];
+        for (const includeDirective of (node as any).includes ?? []) {
+            if (!includeDirective.file) continue;
+            const includedRoot = this.resolveIncludedRoot(node, includeDirective.file);
+            if (!includedRoot) continue;
+            const docUri = AstUtils.getDocument(includedRoot)?.uri.toString();
+            if (docUri) {
+                if (visited.has(docUri)) continue;
+                visited.add(docUri);
+            }
+            // A fragment root (C4Document): bare view declarations and/or a
+            // nested views block.
+            const fragment = includedRoot as any;
+            for (const block of fragment.viewsBlocks ?? []) {
+                views.push(...(block.views ?? []));
+                views.push(...this.includedViews(block, visited));
+            }
+            views.push(...(fragment.views ?? []));
         }
         return views;
     }
@@ -3639,6 +3667,7 @@ class JsonGenerator {
             ...(node.components || []),
             ...(node.groups || []),
             ...(node.children || []),
+            ...(node.nodes || []),
             ...(node.infrastructureNodes || []),
             ...(node.softwareSystemInstances || []),
             ...(node.containerInstances || []),
@@ -6810,8 +6839,9 @@ class JsonGenerator {
 
     /**
      * Child elements declared in an ElementExtension body, including the children
-     * of groups declared inside the body (recursively). Groups themselves are not
-     * model elements in the JSON - only their children carry the group path.
+     * of groups declared inside the body (recursively) and the elements contributed
+     * by `!include` directives in the body. Groups themselves are not model elements
+     * in the JSON - only their children carry the group path.
      */
     private extensionChildren(ext: ElementExtension): {
         containers: Container[]; components: Component[]; nodes: DeploymentNode[];
@@ -6829,28 +6859,74 @@ class JsonGenerator {
             infrastructureNodes: [], containerInstances: [],
             softwareSystemInstances: [], genericInstances: []
         };
+        const visitedDocs = new Set<string>();
+
+        const push = (item: any): void => {
+            if (isContainer(item)) out.containers.push(item);
+            else if (isComponent(item)) out.components.push(item);
+            else if (isDeploymentNode(item)) out.nodes.push(item);
+            else if (isInfrastructureNode(item)) out.infrastructureNodes.push(item);
+            else if (isContainerInstance(item)) out.containerInstances.push(item);
+            else if (isSoftwareSystemInstance(item)) out.softwareSystemInstances.push(item);
+            else if (isGenericInstance(item)) out.genericInstances.push(item);
+            else if (isGroup(item)) collect(item);
+        };
+
         // An ElementExtension and a Group expose their children through different
         // fields, so read the per-type arrays through a structural shape.
-        const collect = (scope: ElementExtension | Group) => {
-            const host = scope as any;
-            out.containers.push(...(host.containers ?? []));
-            out.components.push(...(host.components ?? []));
-            out.nodes.push(...(host.nodes ?? []));
-            out.infrastructureNodes.push(...(host.infrastructureNodes ?? []));
-            out.containerInstances.push(...(host.containerInstances ?? []));
-            out.softwareSystemInstances.push(...(host.softwareSystemInstances ?? []));
-            out.genericInstances.push(...(host.genericInstances ?? []));
+        const collectArrays = (host: any): void => {
+            (host.containers ?? []).forEach(push);
+            (host.components ?? []).forEach(push);
+            (host.nodes ?? []).forEach(push);
+            (host.infrastructureNodes ?? []).forEach(push);
+            (host.containerInstances ?? []).forEach(push);
+            (host.softwareSystemInstances ?? []).forEach(push);
+            (host.genericInstances ?? []).forEach(push);
             // Groups carry their children in the mixed `elements` collection.
-            for (const item of host.elements ?? []) {
-                if (isContainer(item)) out.containers.push(item);
-                else if (isComponent(item)) out.components.push(item);
-                else if (isDeploymentNode(item)) out.nodes.push(item);
-                else if (isInfrastructureNode(item)) out.infrastructureNodes.push(item);
-                else if (isContainerInstance(item)) out.containerInstances.push(item);
-                else if (isSoftwareSystemInstance(item)) out.softwareSystemInstances.push(item);
-                else if (isGenericInstance(item)) out.genericInstances.push(item);
-                else if (isGroup(item)) collect(item);
+            (host.elements ?? []).forEach(push);
+        };
+
+        // A fragment is spliced into the including file, so an `!include` in an
+        // `!element` body contributes its elements to the extended element.
+        const collectIncludes = (host: any): void => {
+            for (const inc of host.includes ?? []) {
+                if (!inc.file) continue;
+                const root = this.resolveIncludedRoot(inc, inc.file);
+                if (!root) continue;
+                const docUri = AstUtils.getDocument(root)?.uri.toString();
+                if (docUri) {
+                    if (visitedDocs.has(docUri)) continue;
+                    visitedDocs.add(docUri);
+                }
+                collectIncluded(root);
             }
+        };
+
+        const collectIncluded = (node: any): void => {
+            if (isC4Document(node)) {
+                if (node.workspaces?.at(0)) {
+                    collectIncluded(node.workspaces.at(0));
+                    return;
+                }
+                if (node.modelBlocks?.at(0)) {
+                    collectIncluded(node.modelBlocks.at(0));
+                    return;
+                }
+            }
+            if (isWorkspace(node)) {
+                if (node.modelBlocks?.at(0)) {
+                    collectIncluded(node.modelBlocks.at(0));
+                }
+                return;
+            }
+            collectArrays(node);
+            collectIncludes(node);
+        };
+
+        const collect = (scope: ElementExtension | Group): void => {
+            const host = scope as any;
+            collectArrays(host);
+            collectIncludes(host);
             for (const group of host.groups ?? []) collect(group);
         };
         collect(ext);

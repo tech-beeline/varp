@@ -250,6 +250,7 @@ fragment EntryFragment:
         | identifiers+=IdentifiersProperty
         | impliedRelationships+=ImpliedRelationshipsProperty
         | viewsBlocks+=ViewsBlock
+        | views+=View
         | elements+=(Person | SoftwareSystem | DeploymentEnvironment | CustomElement | Container | Component | ArchetypeInstance)
         | relationships+=Relationship
         | configurationBlocks+=ConfigurationBlock
@@ -277,6 +278,10 @@ fragment EntryFragment:
         | groups+=Group
         | archetypes+=ArchetypesBlock
         | nodes+=DeploymentNode
+        | infrastructureNodes+=InfrastructureNode
+        | containerInstances+=ContainerInstance
+        | softwareSystemInstances+=SoftwareSystemInstance
+        | genericInstances+=GenericInstance
         | urlProps+=UrlProperty
         | includeProps+=IncludeProperty
         | excludeProps+=ExcludeProperty
@@ -381,6 +386,8 @@ ViewsBlock:
             | NL+ stylesProps+=StylesBlock
             | NL+ terminology+=TerminologyBlock
             | NL+ constants+=Constant
+            | NL+ scripts+=ScriptDirective
+            | NL+ plugins+=PluginDirective
         )*
     NL+ '}';
 

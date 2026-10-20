@@ -2224,17 +2224,21 @@ class JsonGenerator {
      * Relationships of the static-structure elements (software systems, people,
      * containers, components and custom elements — no deployment), memoized for
      * component views, which exclude deployment relationships.
+     *
+     * Taken from the deduplicated list the model emits, so a view references only
+     * relationships the model keeps: the model keeps one relationship per
+     * source/destination/description triple, as the reference library does in
+     * Model.addRelationship.
      */
     private staticRelationshipsSet(): Set<ImpliedRelationship> {
         if (!this.staticRelationshipsSetCache) {
             const rels = new Set<ImpliedRelationship>();
-            this.elements.forEach(el => {
-                if (isSoftwareSystem(el)) this.extractRelationshipsForSoftwareSystem(el).forEach(r => rels.add(r));
-                else if (isPerson(el)) this.extractRelationshipsForPerson(el).forEach(r => rels.add(r));
-                else if (isComponent(el)) this.extractRelationshipsForComponent(el).forEach(r => rels.add(r));
-                else if (isContainer(el)) this.extractRelationshipsForContainer(el).forEach(r => rels.add(r));
-                else if (isCustomElement(el)) this.extractRelationshipsForCustom(el).forEach(r => rels.add(r));
-            });
+            for (const rel of this.collectAllRelationships()) {
+                if (isSoftwareSystem(rel.source) || isPerson(rel.source) || isComponent(rel.source)
+                    || isContainer(rel.source) || isCustomElement(rel.source)) {
+                    rels.add(rel);
+                }
+            }
             this.staticRelationshipsSetCache = rels;
         }
         return this.staticRelationshipsSetCache;
@@ -2244,9 +2248,11 @@ class JsonGenerator {
     private customRelationshipsSet(): Set<ImpliedRelationship> {
         if (!this.customRelationshipsSetCache) {
             const rels = new Set<ImpliedRelationship>();
-            this.elements.forEach(el => {
-                if (isCustomElement(el)) this.extractRelationshipsForCustom(el).forEach(r => rels.add(r));
-            });
+            for (const rel of this.collectAllRelationships()) {
+                if (isCustomElement(rel.source)) {
+                    rels.add(rel);
+                }
+            }
             this.customRelationshipsSetCache = rels;
         }
         return this.customRelationshipsSetCache;

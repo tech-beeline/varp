@@ -5850,43 +5850,7 @@ class JsonGenerator {
      * @returns The parent SoftwareSystem, or undefined if not found
      */
     private resolveContainerParent(container: Container): SoftwareSystem | undefined {
-        // first, try climbing the direct AST $container chain (works for inline containers)
-        let current: AstNode | undefined = container;
-        while (current) {
-            const el = this.el(current);
-            if (isSoftwareSystem(el)) {
-                return el;
-            }
-            if (isElementExtension(el)) {
-                // A container declared by `!element` logically belongs to the
-                // extended element, not to the ElementExtension directive.
-                const target = this.resolveElementExtensionTarget(el);
-                if (target && isSoftwareSystem(target)) {
-                    return target;
-                }
-            }
-            current = current.$container;
-        }
-        // fallback for !include files: the container's $container points to the
-        // root of the included document.  Look up the Include directive that
-        // references this file and climb from there.
-        const docUri = AstUtils.getDocument(container)?.uri.toString();
-        if (docUri) {
-            const includes = this.includeContexts.get(docUri);
-            if (includes && includes.length > 0) {
-                for (const includeDirective of includes) {
-                    current = includeDirective.$container;
-                    while (current) {
-                        const el = this.el(current);
-                        if (isSoftwareSystem(el)) {
-                            return el;
-                        }
-                        current = current.$container;
-                    }
-                }
-            }
-        }
-        return undefined;
+        return this.ancestorOfKind(container, isSoftwareSystem);
     }
 
     /**
@@ -5905,41 +5869,43 @@ class JsonGenerator {
      * @returns The parent Container, or undefined if not found
      */
     private resolveComponentParent(component: Component): Container | undefined {
-        // first, try climbing the direct AST $container chain (works for inline components)
-        let current: AstNode | undefined = component;
+        return this.ancestorOfKind(component, isContainer);
+    }
+
+    /**
+     * Finds the closest ancestor of the requested kind for an element, climbing the AST
+     * `$container` chain. Inline nesting is found there directly. An element declared in
+     * an `!include` file has the root of the included document as `$container` instead of
+     * its logical parent, so once the climb reaches a document root it continues from the
+     * `!include` directives referencing that document, and repeats: chains of several
+     * includes resolve exactly like inline nesting.
+     *
+     * An element declared by `!element` logically belongs to the extended element, not to
+     * the ElementExtension directive, so the extension target is checked as well.
+     */
+    private ancestorOfKind<T>(node: AstNode, isKind: (el: any) => el is T, visitedDocs = new Set<AstNode>()): T | undefined {
+        let current: AstNode | undefined = node;
         while (current) {
             const el = this.el(current);
-            if (isContainer(el)) {
-                return el;
-            }
+            if (isKind(el)) return el;
             if (isElementExtension(el)) {
-                // A component declared by `!element` logically belongs to the
-                // extended element, not to the ElementExtension directive.
                 const target = this.resolveElementExtensionTarget(el);
-                if (target && isContainer(target)) {
-                    return target;
-                }
+                if (target && isKind(target)) return target;
             }
-            current = current.$container;
-        }
-        // fallback for !include files: the component's $container points to the
-        // root of the included document.  Look up the Include directive that
-        // references this file and climb from there.
-        const docUri = AstUtils.getDocument(component)?.uri.toString();
-        if (docUri) {
-            const includes = this.includeContexts.get(docUri);
-            if (includes && includes.length > 0) {
-                for (const includeDirective of includes) {
-                    current = includeDirective.$container;
-                    while (current) {
-                        const el = this.el(current);
-                        if (isContainer(el)) {
-                            return el;
-                        }
-                        current = current.$container;
-                    }
-                }
+            if (current.$container) {
+                current = current.$container;
+                continue;
             }
+            const docUri = AstUtils.getDocument(current)?.uri.toString();
+            if (!docUri || visitedDocs.has(current)) return undefined;
+            visitedDocs.add(current);
+            for (const includeDirective of this.includeContexts.get(docUri) ?? []) {
+                const owner = includeDirective.$container;
+                if (!owner) continue;
+                const found = this.ancestorOfKind(owner, isKind, visitedDocs);
+                if (found) return found;
+            }
+            return undefined;
         }
         return undefined;
     }

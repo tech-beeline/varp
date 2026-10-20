@@ -237,7 +237,7 @@ views {
 });
 
 describe('nested groups', () => {
-    it('requires a group separator for nested groups', async () => {
+    it('warns about a missing group separator for nested groups', async () => {
         const doc = await build(`
 workspace {
     model {
@@ -251,7 +251,8 @@ workspace {
 `);
 
         expect(doc.parseResult.parserErrors).toHaveLength(0);
-        expect(messages(doc, ERROR_SEVERITY)).toContain(
+        expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
+        expect(messages(doc, WARNING_SEVERITY)).toContain(
             "To use nested groups, please define a model property named 'structurizr.groupSeparator'."
         );
     });

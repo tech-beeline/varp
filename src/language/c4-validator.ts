@@ -891,7 +891,7 @@ export class C4Validator {
         // groups inside it are independent of the group the element itself belongs to.
         if (!isGroup(node.$container)) return;
         if (this.hasGroupSeparator(node)) return;
-        accept('error', "To use nested groups, please define a model property named 'structurizr.groupSeparator'.", { node, property: 'name' });
+        accept('warning', "To use nested groups, please define a model property named 'structurizr.groupSeparator'.", { node, property: 'name' });
     }
 
     /** Returns true when a model block of the document declares a 'structurizr.groupSeparator' property. */

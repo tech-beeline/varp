@@ -907,7 +907,7 @@ DynamicStep:
 // System Context view — shows a specific software system with its environment
 SystemContextView:
     SYSTEM_CONTEXT_KW
-    softwareSystem=[SoftwareSystem:Identifier] (Key (description=STRING)?)? '{'
+    softwareSystem=[SoftwareSystem:UnquotedIdentifier] (Key (description=STRING)?)? '{'
         (
             NL+ includeProps+=IncludeProperty
             | NL+ excludeProps+=ExcludeProperty
@@ -924,7 +924,7 @@ SystemContextView:
 
 // Container view — shows containers within a software system
 ContainerView:
-    CONTAINER_KW softwareSystem=[SoftwareSystem:Identifier] (Key (description=STRING)?)? '{'
+    CONTAINER_KW softwareSystem=[SoftwareSystem:UnquotedIdentifier] (Key (description=STRING)?)? '{'
         (
             NL+ includeProps+=IncludeProperty
             | NL+ excludeProps+=ExcludeProperty
@@ -941,7 +941,7 @@ ContainerView:
 
 // Component view — shows components within a container
 ComponentView:
-    COMPONENT_KW container=[Container:Identifier] (Key (description=STRING)?)? '{'
+    COMPONENT_KW container=[Container:UnquotedIdentifier] (Key (description=STRING)?)? '{'
         (
             NL+ includeProps+=IncludeProperty
             | NL+ excludeProps+=ExcludeProperty

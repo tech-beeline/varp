@@ -203,6 +203,14 @@ interface ImpliedRelationship {
     linked: Relationship | undefined;
     source: RelationshipMember;
     target: RelationshipMember;
+    /**
+     * Marks a relationship replicated onto a deployment instance. Unlike implied
+     * relationships of the static structure, these are not subject to the
+     * one-relationship-per-pair rule: the reference library copies the parent
+     * element's relationship set onto every instance and deduplicates by
+     * source/destination/description only.
+     */
+    projected?: boolean;
 }
 
 /**
@@ -2098,6 +2106,8 @@ class JsonGenerator {
 
     /** Cached result of collectAllRelationships(). */
     private allRelationshipsCache?: ImpliedRelationship[];
+    /** Cached declaration order of this.relationships. */
+    private declaredRelationshipOrderCache?: Map<Relationship, number>;
     /**
      * The same result indexed by source element id, so relationshipsOwnedBy() is a
      * map lookup instead of a scan of every relationship per element.
@@ -2142,6 +2152,7 @@ class JsonGenerator {
      */
     private invalidateAllRelationships(): void {
         this.allRelationshipsCache = undefined;
+        this.declaredRelationshipOrderCache = undefined;
         this.relationshipsBySourceImplied = undefined;
         this.relationshipExtractionCache.clear();
         this.systemParentRelsCache.clear();
@@ -2423,7 +2434,9 @@ class JsonGenerator {
         if (this.instanceProjectionIsTooLate(source, linked)) {
             return;
         }
-        list.push(this.createRelationshipEx(source, target, linked));
+        const entry = this.createRelationshipEx(source, target, linked);
+        entry.projected = true;
+        list.push(entry);
     }
 
     /**
@@ -2494,40 +2507,46 @@ class JsonGenerator {
     }
 
     /**
-     * Returns every direct and implied relationship of the model, deduplicated by
-     * source/destination pair. Direct relationships are collected first, so an
-     * implied relationship is only kept when no relationship already exists
-     * between the same two elements.
+     * Collects every relationship the model emits, in the order the reference library
+     * creates them: the declared relationships are processed in declaration order, and
+     * each one contributes the implied relationships derived from it (up the source and
+     * destination hierarchies) as long as the source/destination pair does not carry a
+     * relationship yet. A declared relationship that duplicates an earlier one is
+     * dropped and contributes no implied relationships, as Model.addRelationship does.
+     *
+     * Relationships replicated onto deployment instances follow the parent element's
+     * emitted set, so a relationship the model dropped never reaches an instance.
      */
     private collectAllRelationships(): ImpliedRelationship[] {
         if (this.allRelationshipsCache) return this.allRelationshipsCache;
 
         const lists = this.elements.map(el => this.extractRelationshipsForElement(el));
-        const ordered: ImpliedRelationship[] = [];
-        const pairs = new Set<string>();
-        const directKeys = new Set<string>();
 
+        const declared: ImpliedRelationship[] = [];
+        const projections: ImpliedRelationship[] = [];
         for (const list of lists) {
-            for (const rel of list) {
-                if (rel.linked !== undefined) continue;
-                const pair = this.relationshipPairKey(rel);
-                // At most one relationship per source/target pair and description
-                // (a second identical one is a parse error).
-                const key = `${pair}|${this.description(rel.relationship)}`;
-                if (directKeys.has(key)) continue;
-                directKeys.add(key);
-                pairs.add(pair);
-                ordered.push(rel);
+            for (const entry of list) {
+                if (entry.projected) projections.push(entry);
+                else declared.push(entry);
             }
         }
-        for (const list of lists) {
-            for (const rel of list) {
-                if (rel.linked === undefined) continue;
-                const pair = this.relationshipPairKey(rel);
-                if (pairs.has(pair)) continue;
-                pairs.add(pair);
-                ordered.push(rel);
-            }
+
+        const ordered = this.reduceRelationships(this.groupByBase(declared));
+
+        // Instance projections are replicas of the parent element's emitted relationships.
+        const emittedBases = new Set<Relationship>();
+        const keys = new Set<string>();
+        for (const entry of ordered) {
+            emittedBases.add(entry.relationship);
+            if (entry.linked) emittedBases.add(entry.linked);
+            keys.add(`${this.relationshipPairKey(entry)}|${this.description(entry.relationship)}`);
+        }
+        for (const entry of projections) {
+            if (!entry.linked || !emittedBases.has(entry.linked)) continue;
+            const key = `${this.relationshipPairKey(entry)}|${this.description(entry.relationship)}`;
+            if (keys.has(key)) continue;
+            keys.add(key);
+            ordered.push(entry);
         }
 
         this.allRelationshipsCache = ordered;
@@ -2548,6 +2567,98 @@ class JsonGenerator {
         this.relationshipsBySourceImplied = bySource;
 
         return ordered;
+    }
+
+    /**
+     * Groups relationship entries by the declared relationship they come from, in
+     * declaration order. A declared relationship and the implied relationships derived
+     * from it form one group; an implied relationship whose base is declared elsewhere
+     * forms a group of its own.
+     */
+    private groupByBase(entries: ImpliedRelationship[]): Array<{
+        base: Relationship;
+        direct?: ImpliedRelationship;
+        implied: ImpliedRelationship[];
+    }> {
+        const groups = new Map<Relationship, { base: Relationship; direct?: ImpliedRelationship; implied: ImpliedRelationship[] }>();
+        for (const entry of entries) {
+            const base = entry.linked ?? entry.relationship;
+            let group = groups.get(base);
+            if (!group) {
+                group = { base, implied: [] };
+                groups.set(base, group);
+            }
+            if (entry.linked === undefined) {
+                if (!group.direct) group.direct = entry;
+            } else {
+                group.implied.push(entry);
+            }
+        }
+        return this.byDeclarationOrder(groups.values(), group => group.base);
+    }
+
+    /**
+     * Reduces groups of relationships to the set the reference library keeps. A declared
+     * relationship is dropped when it duplicates an earlier one and then contributes no
+     * implied relationships, and an implied relationship is kept only when its
+     * source/destination pair carries no relationship yet.
+     */
+    private reduceRelationships(groups: Array<{
+        direct?: ImpliedRelationship;
+        implied: ImpliedRelationship[];
+    }>): ImpliedRelationship[] {
+        const pairs = new Set<string>();
+        const keys = new Set<string>();
+        const result: ImpliedRelationship[] = [];
+        for (const group of groups) {
+            if (group.direct) {
+                const pair = this.relationshipPairKey(group.direct);
+                const key = `${pair}|${this.description(group.direct.relationship)}`;
+                if (keys.has(key)) continue;
+                keys.add(key);
+                pairs.add(pair);
+                result.push(group.direct);
+            }
+            for (const candidate of group.implied) {
+                const candidatePair = this.relationshipPairKey(candidate);
+                if (pairs.has(candidatePair)) continue;
+                pairs.add(candidatePair);
+                result.push(candidate);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Position of every relationship in declaration order. The relationships are collected
+     * in document order, with includes followed at the point of the directive, so this is
+     * the order in which the reference library parses them.
+     */
+    private declaredRelationshipOrder(): Map<Relationship, number> {
+        if (!this.declaredRelationshipOrderCache) {
+            this.declaredRelationshipOrderCache = new Map<Relationship, number>();
+            this.relationships.forEach((rel, index) => this.declaredRelationshipOrderCache!.set(rel, index));
+        }
+        return this.declaredRelationshipOrderCache;
+    }
+
+    /**
+     * Sorts entries by the declaration position of the relationship they are derived
+     * from. Entries whose relationship is not part of the parsed model sort last.
+     */
+    private byDeclarationOrder<T>(entries: Iterable<T>, base: (entry: T) => Relationship): T[] {
+        const order = this.declaredRelationshipOrder();
+        const position = (entry: T): number => order.get(base(entry)) ?? Number.MAX_SAFE_INTEGER;
+        return [...entries].sort((a, b) => position(a) - position(b));
+    }
+
+    /**
+     * Reduces a parent element's relationships to the set the reference library replicates
+     * onto its deployment instances: the same reduction the model applies to the whole
+     * workspace, restricted to the relationships the parent element owns.
+     */
+    private dedupImpliedByPair(entries: ImpliedRelationship[]): ImpliedRelationship[] {
+        return this.reduceRelationships(this.groupByBase(entries));
     }
 
     /** Source/destination pair key used to deduplicate relationships. */
@@ -3001,11 +3112,15 @@ class JsonGenerator {
         const cached = this.systemParentRelsCache.get(system);
         if (cached !== undefined) return cached;
         this.ensureRelationshipIndexes();
-        const rels = new Set<ImpliedRelationship>();
-        this.extractRelationshipsForSoftwareSystem(system).forEach(rel => rels.add(rel));
+        const entries: ImpliedRelationship[] = [...this.extractRelationshipsForSoftwareSystem(system)];
         for (const c of this.containersBySystemCache.get(system) ?? []) {
-            this.parentRelsForContainer(c).forEach(rel => rels.add(rel));
+            entries.push(...this.extractRelationshipsForContainer(c));
+            for (const comp of this.componentsByContainerCache.get(c) ?? []) {
+                entries.push(...this.extractRelationshipsForComponent(comp));
+            }
         }
+        const owned = entries.filter(rel => this.getId(rel.source) === this.getId(system));
+        const rels = new Set(this.dedupImpliedByPair(owned));
         this.systemParentRelsCache.set(system, rels);
         return rels;
     }
@@ -3018,11 +3133,12 @@ class JsonGenerator {
         const cached = this.containerParentRelsCache.get(container);
         if (cached !== undefined) return cached;
         this.ensureRelationshipIndexes();
-        const rels = new Set<ImpliedRelationship>();
-        this.extractRelationshipsForContainer(container).forEach(rel => rels.add(rel));
+        const entries: ImpliedRelationship[] = [...this.extractRelationshipsForContainer(container)];
         for (const comp of this.componentsByContainerCache.get(container) ?? []) {
-            this.extractRelationshipsForComponent(comp).forEach(rel => rels.add(rel));
+            entries.push(...this.extractRelationshipsForComponent(comp));
         }
+        const owned = entries.filter(rel => this.getId(rel.source) === this.getId(container));
+        const rels = new Set(this.dedupImpliedByPair(owned));
         this.containerParentRelsCache.set(container, rels);
         return rels;
     }

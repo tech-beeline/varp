@@ -353,6 +353,31 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     }
 
     /**
+     * Ancestors of a node, nearest first, for scope chaining: the lexical `$container`
+     * chain, continued through the `!include` directive that pulls a document in when
+     * the chain reaches a document root. A fragment is spliced into the including file,
+     * so a reference inside it sees the including context's scopes. Each jump is guarded
+     * by the visited documents so cyclic include chains terminate.
+     */
+    private enclosingChain(node: AstNode | undefined): AstNode[] {
+        const chain: AstNode[] = [];
+        const visitedUris = new Set<string>();
+        let current: AstNode | undefined = node;
+        while (current) {
+            chain.push(current);
+            if (current.$container) {
+                current = current.$container;
+                continue;
+            }
+            const docUri = AstUtils.getDocument(current)?.uri.toString();
+            if (!docUri || visitedUris.has(docUri)) break;
+            visitedUris.add(docUri);
+            current = this.findIncludeSite(docUri)?.$container;
+        }
+        return chain;
+    }
+
+    /**
      * Ancestor elements of `node` used for hierarchical naming, ordered outermost
      * first. Only NamedElements with an id or name participate; Groups are skipped as
      * they are visual only.
@@ -619,14 +644,8 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 // the type. The alias descriptions themselves still need filtering:
                 // an alias pointing at a nested element must not satisfy a reference
                 // to an unrelated type.
-                const enclosingChain: AstNode[] = [];
-                let enclosing: AstNode | undefined = context.container;
-                while (enclosing) {
-                    if (pkg.suffixAliasesByScope.has(enclosing)) {
-                        enclosingChain.push(enclosing);
-                    }
-                    enclosing = enclosing.$container;
-                }
+                const enclosing = this.enclosingChain(context.container);
+                const enclosingChain: AstNode[] = enclosing.filter(node => pkg.suffixAliasesByScope.has(node));
 
                 for (let i = enclosingChain.length - 1; i >= 0; i--) {
                     const aliases = pkg.suffixAliasesByScope.get(enclosingChain[i])!;
@@ -644,8 +663,17 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                     }
                 };
                 collectTagged(globalDescriptions);
-                for (const aliases of pkg.suffixAliasesByScope.values()) {
-                    collectTagged(aliases);
+                for (const node of enclosingChain) {
+                    collectTagged(pkg.suffixAliasesByScope.get(node)!);
+                }
+                // Suffix aliases of nested elements stay reachable inside a deployment
+                // environment: a `-/>` directive there names the instances of the
+                // deployment nodes it contains. Anywhere else a suffix names an element
+                // relative to its parent only (step 4), as the reference library requires.
+                if (enclosing.some(isDeploymentEnvironment)) {
+                    for (const aliases of pkg.suffixAliasesByScope.values()) {
+                        collectTagged(aliases);
+                    }
                 }
                 scope = new CaseInsensitiveIdentifierScope(scope, tagged);
 

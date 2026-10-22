@@ -4063,7 +4063,6 @@ structurizr.ui.Diagram = function(id, diagramIsEditable, constructionCompleteCal
         var textColor = structurizr.util.shadeColor(configuration.color, 100-configuration.opacity, darkMode);
         var stroke = structurizr.util.shadeColor(configuration.stroke, 100-configuration.opacity, darkMode);
         var strokeWidth = configuration.strokeWidth;
-        var fill = structurizr.util.shadeColor(configuration.background, 100-configuration.opacity, darkMode);
 
         var instanceCount = '';
         if (element.instances && element.instances !== '1') {
@@ -4086,7 +4085,10 @@ structurizr.ui.Diagram = function(id, diagramIsEditable, constructionCompleteCal
                     stroke: stroke,
                     'stroke-width': strokeWidth,
                     'stroke-dasharray': dashArrayForElement(configuration),
-                    fill: fill,
+                    // A deployment node is a frame around what it contains, so it stays
+                    // unfilled: a background would paint over the elements nested in it
+                    // and over the deployment nodes it sits in.
+                    fill: 'none',
                     opacity: editable ? 0.6 : 1.0
                 },
                 '.structurizrName': {

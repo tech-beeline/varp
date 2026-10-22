@@ -9,6 +9,7 @@ import { registerViewTools } from './tools-view';
 import { registerGraphTools } from './tools-graph';
 import { registerJsonTools } from './tools-json';
 import { registerBatchTools } from './tools-batch';
+import { registerLspTools } from './tools-lsp';
 import { registerResources } from './resources';
 import { registerPrompts } from './prompts';
 
@@ -67,6 +68,7 @@ function createMcpServer(source: C4ModelSource, version: string): McpServer {
     registerGraphTools(server, source);
     registerJsonTools(server, source);
     registerBatchTools(server, source);
+    registerLspTools(server);
     registerResources(server, source);
     registerPrompts(server, source);
     return server;

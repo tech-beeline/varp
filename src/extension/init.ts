@@ -16,7 +16,6 @@
 
 import { commands, ExtensionContext, ViewColumn, workspace, window, Uri } from "vscode";
 import { createWorkspaceFileRequestHandlers } from "./workspace-file-requests";
-import { C4Snippets } from "./c4-snippets";
 import { CapabilityProvider } from "./capabilities";
 import { DIAGRAM_PREVIEW, EXPORT_JSON } from "./config";
 import { DiagramPreview } from "./diagram-preview";
@@ -278,7 +277,7 @@ async function getThemesForPreview(themeUrls: string[] | undefined): Promise<{ u
  * Initializes all VS Code extension components: views, commands, and event handlers.
  * 
  * Sets up:
- * - Tree views (snippets, capabilities, patterns)
+ * - Tree views (capabilities, patterns)
  * - Diagram preview webview panel
  * - Auto-refresh via c4/contentUpdated push notifications (onChange/onSave, see c4.autoRefresh)
  * - DIAGRAM_PREVIEW command (opens diagram in webview)
@@ -286,7 +285,6 @@ async function getThemesForPreview(themeUrls: string[] | undefined): Promise<{ u
  */
 export function init(context: ExtensionContext): void {
 
-    new C4Snippets(context);    
     new CapabilityProvider(context);
     new PatternProvider(context);
 

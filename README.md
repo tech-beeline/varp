@@ -22,7 +22,6 @@ architecture diagrams directly from code. Powered by [Langium](https://langium.o
 - [Quick Start](#quick-start)
 - [Model Context Protocol](#model-context-protocol)
 - [Development](#development)
-- [Project Structure](#project-structure)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -57,6 +56,12 @@ written for Structurizr parses, validates and renders here the same way, unchang
 - **Scope provider** — hierarchical identifiers and cross-file references
 - **CodeLens** — actions above each view and above the workspace
 
+### 🤖 MCP server
+
+- Optional built-in **Model Context Protocol** server (`varp.mcp.autoStart`) that
+  exposes the resolved model to AI assistants over streamable HTTP on `127.0.0.1`
+  (see [Model Context Protocol](#model-context-protocol))
+
 ### 🖼️ Diagram Preview
 
 - Render any view as an interactive Structurizr diagram
@@ -73,19 +78,7 @@ written for Structurizr parses, validates and renders here the same way, unchang
 - All view types: System Landscape, System Context, Container, Component, Deployment, Dynamic, Filtered, Custom
 - Rich include/exclude expressions (`element.tag==`, `element.type==`, `relationship==`, afferent/efferent coupling, star expressions)
 - `!elements` and `!relationships` directives for per-view element injection
-- Automatic layouts, animations, theming, terminology
-
-### 🔗 Modularity
-
-- `!include` of other files (relative paths, directories, remote URLs)
-- `extendsUri` workspace inheritance
-- `${CONST}` constant substitution across files
-
-### 🤖 MCP server
-
-- Optional built-in **Model Context Protocol** server (`varp.mcp.autoStart`) that
-  exposes the resolved model to AI assistants over streamable HTTP on `127.0.0.1`
-  (see [Model Context Protocol](#model-context-protocol))
+- Automatic layouts, theming, terminology
 
 ### 🌐 Desktop and web
 
@@ -142,8 +135,60 @@ Click **"Show As Structurizr Diagram"** above the `systemContext` block to rende
 ## Model Context Protocol
 
 With `varp.mcp.autoStart` enabled, the extension starts a built-in **MCP server**
-(streamable HTTP on `127.0.0.1`) that exposes the resolved C4 model to AI
-assistants. It is available in the desktop build only.
+(streamable HTTP on `127.0.0.1`) that exposes the resolved C4 model, and the language
+servers' answers for the open files, to AI assistants. It is available in the desktop
+build only.
+
+### Connecting clients
+
+The server speaks **streamable HTTP** and is bound to the loopback interface, so a
+client only needs the URL. Enable it in VS Code first (desktop build only, with the
+workspace open):
+
+```jsonc
+// VS Code settings.json
+{
+  "varp.mcp.autoStart": true
+}
+```
+
+The endpoint is `http://127.0.0.1:47474/mcp`; the port is fixed. Restart the client
+(or reload its MCP servers) after enabling the setting — the tools, prompts and
+resources above then appear under the `c4-varp` name.
+
+#### opencode
+
+Add the server to `opencode.json` in the project, or to the global
+`~/.config/opencode/opencode.json` ([docs](https://opencode.ai/docs/mcp-servers/)):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "c4-varp": {
+      "type": "remote",
+      "url": "http://127.0.0.1:47474/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+#### Hermes
+
+Hermes Agent reads MCP servers from `~/.hermes/config.yaml` under `mcp_servers`;
+a remote server only needs its URL ([docs](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)):
+
+```yaml
+mcp_servers:
+  c4-varp:
+    url: "http://127.0.0.1:47474/mcp"
+```
+
+Hermes prefixes the server's tools as `mcp_<server>_<tool>`, with dashes in the server
+name replaced by underscores (`mcp_c4_varp_list_projects`); run `/reload-mcp` in a
+running session after editing the file, and `hermes mcp test c4-varp` to check the
+connection.
 
 ### Tools
 
@@ -170,6 +215,16 @@ assistants. It is available in the desktop build only.
 | `batch-read-elements` | Read full details of multiple elements in one call; not-found ids are reported in `missing`. |
 | `element-diff` | Side-by-side comparison of two elements: attributes, properties, tags and relationships. |
 | `subgraph-summary` | Compact summary of all descendants of an element: per-element metadata, tags, relationship counts and a breakdown by type. |
+| `get-diagnostics` | Errors, warnings, information and hints from the language servers, optionally for one file. |
+| `find-references` | All references to the symbol at a position, as reported by the language server. |
+| `go-to-definition` | Definition location(s) of the symbol at a position. |
+| `get-hover` | Hover information (type, documentation) for the symbol at a position. |
+| `get-document-symbols` | Symbols declared in a document, with their nesting. |
+| `search-workspace-symbols` | Search symbols across the workspace through the language servers. |
+
+The last six query whichever language server VS Code has for the file, so they answer
+for C4 DSL files through this extension's Langium server and for other languages
+through theirs.
 
 ### Prompts
 
@@ -221,37 +276,6 @@ After editing the grammar, regenerate the Langium artifacts:
 
 ```bash
 npx langium generate
-```
-
-## Project Structure
-
-```
-src/
-├── generated/            # Langium-generated AST, module, and grammar artifacts
-├── language/             # Language server (Langium) implementation
-│   ├── c4.langium        # C4 DSL grammar definition
-│   ├── c4-json-generator.ts          # Structurizr-compatible render JSON generator
-│   ├── c4-json-generator-handler.ts  # JSON build lifecycle & caching
-│   ├── c4-json-enricher.ts           # documentation, decisions, health checks, DSL identifiers
-│   ├── c4-dsl-source.ts              # retained portable DSL (base64) of the workspace
-│   ├── c4-json-compare.ts            # golden-test JSON comparator
-│   ├── c4-drawio-layout.ts           # DrawIO layout reader
-│   ├── c4-validator.ts               # Validation checks
-│   ├── c4-scope-provider.ts          # Reference scoping & includes
-│   ├── c4-document-builder.ts / c4-include-resolver.ts  # !include and extendsUri loading
-│   ├── c4-inlay-hints.ts / c4-code-lens.ts / c4-document-link.ts  # LSP features
-│   ├── c4-binary-file-system.ts / c4-base64.ts  # web file-system bridge
-│   └── main.ts / main.browser.ts     # Language server entry points
-├── extension/            # VS Code extension host
-│   ├── init.ts           # Extension activation & command registration
-│   ├── diagram-preview.ts  # Structurizr diagram webview (themes, export, layout import)
-│   ├── workspace-file-requests.ts / workspace-metadata.ts
-│   ├── c4-snippets.ts / patterns.ts / capabilities.ts  # Sidebar views
-│   ├── hmac.ts / config.ts
-│   └── mcp/              # built-in MCP server (tools, prompts, resources)
-css/                      # Structurizr rendering styles
-js/                       # Structurizr rendering engine (JointJS, Dagre, panzoom)
-test/fixtures/            # DSL → expected JSON golden tests
 ```
 
 ## Contributing

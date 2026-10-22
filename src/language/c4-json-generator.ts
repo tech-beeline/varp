@@ -8514,18 +8514,18 @@ class JsonGenerator {
                         finalOrder = (globalSequence++).toString();
                     }
 
-                    // Find direct relationship in the global model
-                    let modelRel = this.relationships.find(rel =>
-                        this.resolveSource(rel) === source && this.resolveTarget(rel) === target
-                    );
+                    // Find the relationship the step walks along. A step names two
+                    // elements, while the model may only relate their ancestors or
+                    // descendants, so the lookup covers the emitted relationships -
+                    // declared and implied - not just the declared ones.
+                    const candidates = this.collectAllRelationships();
+                    let modelRel = candidates.find(rel => rel.source === source && rel.target === target)?.relationship;
 
                     let isResponse = false;
 
                     // If no direct relationship, look for reverse (response) relationship
                     if (!modelRel) {
-                        modelRel = this.relationships.find(rel =>
-                            this.resolveSource(rel) === target && this.resolveTarget(rel) === source
-                        );
+                        modelRel = candidates.find(rel => rel.source === target && rel.target === source)?.relationship;
 
                         if (modelRel) {
                             isResponse = true;

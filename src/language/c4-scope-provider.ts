@@ -18,7 +18,7 @@ import {
     DefaultScopeProvider, Scope, ReferenceInfo, AstUtils,
     AstNode, LangiumCoreServices, AstNodeDescription, MapScope, WorkspaceCache,
     LangiumDocument, Stream, stream} from 'langium';
-import { isModelBlock, isWorkspace, isNamedElement, Workspace, NamedElement, isArchetypeDefinition, isDeploymentEnvironment, isInclude, Include, isC4Document, isGroup, isIdentifiersProperty, isElementExtension } from '../generated/ast';
+import { isModelBlock, isWorkspace, isNamedElement, Workspace, NamedElement, isArchetypeDefinition, isDeploymentEnvironment, isInclude, Include, isC4Document, isGroup, isIdentifiersProperty, isElementExtension, isRelationship } from '../generated/ast';
 import { URI } from 'vscode-uri';
 import * as includeResolver from './c4-include-resolver';
 import { archetypeInstanceTypeByRefText } from './c4-utils';
@@ -270,7 +270,14 @@ export class C4ScopeProvider extends DefaultScopeProvider {
 
         // 1. Register by ID (if present)
         if (elementId) {
-            if (isHierarchical) {
+            if (isRelationship(element)) {
+                // A relationship identifier is flat in the reference library: it names
+                // the relationship itself, not a path through the elements it connects,
+                // so `!identifiers hierarchical` must not prefix it.
+                const relDesc = this.services.workspace.AstNodeDescriptionProvider.createDescription(element, elementId, document);
+                markIdentifierDescription(relDesc);
+                descriptions.push(relDesc);
+            } else if (isHierarchical) {
                 // Build FQN: [ancestor_n, ..., parent, elementId]
                 const parts = this.calculateHierarchicalParts(element, elementId);
                 const fqn = parts.join('.');

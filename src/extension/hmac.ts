@@ -15,6 +15,7 @@
 */
 
 import { createHash, createHmac, randomBytes } from 'crypto';
+import { gzipSync } from 'fflate';
 import { env, extensions, UIKind, workspace } from 'vscode';
 
 const EXTENSION_ID = 'vimpelcom.c4-varp';
@@ -30,13 +31,32 @@ function agentHeader(): string {
     return `varp-${host}-${version}`;
 }
 
-export function generateHmac(method: string, path: string, body: string | undefined = undefined, contentType: string | undefined = undefined): Record<string, string> {
+/**
+ * Compresses a request body for `generateHmac` called with `gzip: true`. The gzip
+ * header carries no timestamp, so a body always compresses to the same bytes and the
+ * caller can send them as the request body as they are.
+ */
+export function gzipBody(body: string): Uint8Array {
+    return gzipSync(new TextEncoder().encode(body), { level: 9, mtime: 0 });
+}
+
+/**
+ * Builds the ArchOps authentication headers for a request. The signature covers the
+ * MD5 of the body, so with `gzip` the digest is taken over the compressed bytes the
+ * caller sends: pass the request body through `gzipBody` and add the returned
+ * `Content-Encoding: gzip` header to the request.
+ */
+export function generateHmac(method: string, path: string, body: string | undefined = undefined, contentType: string | undefined = undefined, gzip = false): Record<string, string> {
     const headers: Record<string, string> = { 'X-Agent': agentHeader() };
+    if (gzip) {
+        headers['Content-Encoding'] = 'gzip';
+    }
     const archopsApiSecret = workspace.getConfiguration().get<string>('archops.api.secret');
     const archopsApiKey = workspace.getConfiguration().get<string>('archops.api.key');
     if(!archopsApiKey || !archopsApiSecret) return headers;
     const nonce = randomBytes(8).toString('base64');
-    const md5Hash = (body === undefined) ? 'd41d8cd98f00b204e9800998ecf8427e' : createHash('md5').update(body).digest('hex');
+    const payload: string | Uint8Array | undefined = body === undefined ? undefined : (gzip ? gzipBody(body) : body);
+    const md5Hash = (payload === undefined) ? 'd41d8cd98f00b204e9800998ecf8427e' : createHash('md5').update(payload).digest('hex');
     const parts: string[] = [method, path, md5Hash, contentType ?? '', nonce];
     const message: string = parts.join('\n') + '\n';
     const hmac = createHmac('sha256', archopsApiSecret).update(message).digest('base64');

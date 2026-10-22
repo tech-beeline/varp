@@ -30,9 +30,24 @@
           "title": "C4 Architecture As A Code",
           "icon": "images/logo.svg"
         }
+      ],
+      "panel": [
+        {
+          "id": "varp-fitness-panel",
+          "title": "Fitness Results",
+          "icon": "images/logo.svg"
+        }
       ]
     },
     "views": {
+      "varp-fitness-panel": [
+        {
+          "id": "fitness-results",
+          "name": "Fitness Results",
+          "type": "webview",
+          "when": "extension:c4"
+        }
+      ],
       "varp-sidebar": [
         {
           "id": "s4-snippets",

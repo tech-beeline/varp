@@ -21,6 +21,8 @@ import { CapabilityProvider } from "./capabilities";
 import { DIAGRAM_PREVIEW, EXPORT_JSON } from "./config";
 import { DiagramPreview } from "./diagram-preview";
 import { PatternProvider } from "./patterns";
+import { registerFitnessChecks } from "./fitness-functions";
+import { FitnessResultsView } from "./fitness-results-view";
 
 /**
  * Minimal shape of the language client (node or browser) used by the extension.
@@ -39,6 +41,10 @@ let languageClient: C4LanguageClient | undefined;
 // auto-refresh notification handler registered in setLanguageClient().
 let diagramPreview: DiagramPreview | undefined;
 
+// Fitness check results shown in the panel view; created eagerly so the language
+// client can hand it results regardless of which of init/setLanguageClient runs first.
+const fitnessResultsView = new FitnessResultsView();
+
 // Guards against registering the notification handler more than once.
 let refreshNotificationRegistered = false;
 
@@ -49,6 +55,7 @@ let refreshNotificationRegistered = false;
 export function setLanguageClient(client: C4LanguageClient): void {
     languageClient = client;
     registerAutoRefreshNotification(client);
+    registerFitnessChecks(client, fitnessResultsView);
 }
 
 /**
@@ -282,6 +289,10 @@ export function init(context: ExtensionContext): void {
     new C4Snippets(context);    
     new CapabilityProvider(context);
     new PatternProvider(context);
+
+    context.subscriptions.push(
+        window.registerWebviewViewProvider(FitnessResultsView.viewType, fitnessResultsView)
+    );
 
     diagramPreview = new DiagramPreview(context);
     // Second layout pass: the webview measures the frame texts it draws and reports

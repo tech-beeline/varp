@@ -745,6 +745,38 @@ class JsonGenerator {
     }
 
     /**
+     * Nodes of one document that several collection phases need: constants, default
+     * archetypes, includes and named elements, gathered in one traversal per document.
+     */
+    private readonly documentScans = new Map<string, {
+        constants: Constant[];
+        archetypes: ArchetypesBlock[];
+        includes: Include[];
+        namedElements: NamedElement[];
+    }>();
+
+    private scanDocument(root: AstNode): {
+        constants: Constant[];
+        archetypes: ArchetypesBlock[];
+        includes: Include[];
+        namedElements: NamedElement[];
+    } {
+        const doc = AstUtils.getDocument(root);
+        const key = doc?.uri.toString() ?? '';
+        const cached = this.documentScans.get(key);
+        if (cached) return cached;
+        const scan = { constants: [] as Constant[], archetypes: [] as ArchetypesBlock[], includes: [] as Include[], namedElements: [] as NamedElement[] };
+        for (const content of AstUtils.streamAllContents(doc?.parseResult?.value ?? root)) {
+            if (isConstant(content)) scan.constants.push(content);
+            else if (isInclude(content) && content.file) scan.includes.push(content);
+            else if (isArchetypesBlock(content)) scan.archetypes.push(content);
+            else if (isNamedElement(content)) scan.namedElements.push(content);
+        }
+        this.documentScans.set(key, scan);
+        return scan;
+    }
+
+    /**
      * Unified method for collecting constants (!const directives) across documents and includes.
      */
     private collectConstants(node: AstNode | undefined, visited: Set<string> = new Set<string>()): void {
@@ -767,13 +799,8 @@ class JsonGenerator {
         // in elements. Gather both in a single walk of the document subtree, then apply
         // constants first (so they take precedence over included ones) and recurse into
         // the includes — matching the original two-pass order.
-        const constantsFound: Constant[] = [];
-        const includesFound: Include[] = [];
-        for (const content of AstUtils.streamAllContents(root)) {
-            if (isConstant(content)) constantsFound.push(content);
-            else if (isInclude(content) && content.file) includesFound.push(content);
-        }
-        for (const c of constantsFound) {
+        const scan = this.scanDocument(root);
+        for (const c of scan.constants) {
             const name = (c.name ?? '').toString().replace(/['"]/g, '');
             const rawValue = (c.value ?? '').toString();
             const value = rawValue.trimStart().startsWith('"""')
@@ -781,7 +808,7 @@ class JsonGenerator {
                 : (typeof rawValue === 'string' ? rawValue.replace(/^['"]|['"]$/g, '') : rawValue);
             if (name && !this.constants.has(name)) this.constants.set(name, value);
         }
-        for (const inc of includesFound) {
+        for (const inc of scan.includes) {
             const includedRoot = this.resolveIncludedRoot(inc, inc.file);
             if (includedRoot) this.collectConstants(includedRoot, visited);
         }
@@ -827,13 +854,8 @@ class JsonGenerator {
         // Gather archetype blocks and !include directives in a single walk, then apply
         // archetypes first (so they take precedence over included ones) and recurse into
         // the includes — matching the original two-pass order.
-        const archetypeBlocks: ArchetypesBlock[] = [];
-        const includesFound: Include[] = [];
-        for (const content of AstUtils.streamAllContents(node)) {
-            if (isArchetypesBlock(content)) archetypeBlocks.push(content);
-            else if (isInclude(content) && content.file) includesFound.push(content);
-        }
-        for (const block of archetypeBlocks) {
+        const scan = this.scanDocument(node);
+        for (const block of scan.archetypes) {
             for (const definition of block.definitions ?? []) {
                 if (isArchetypeNamed(definition)) continue;
                 const key = this.archetypeTypeKey(definition);
@@ -842,7 +864,7 @@ class JsonGenerator {
                 }
             }
         }
-        for (const inc of includesFound) {
+        for (const inc of scan.includes) {
             const includedRoot = this.resolveIncludedRoot(node, inc.file);
             if (includedRoot) this.collectDefaultArchetypes(includedRoot, visited);
         }
@@ -2526,12 +2548,10 @@ class JsonGenerator {
     private collectAllRelationships(): ImpliedRelationship[] {
         if (this.allRelationshipsCache) return this.allRelationshipsCache;
 
-        const lists = this.elements.map(el => this.extractRelationshipsForElement(el));
-
         const declared: ImpliedRelationship[] = [];
         const projections: ImpliedRelationship[] = [];
-        for (const list of lists) {
-            for (const entry of list) {
+        for (const element of this.elements) {
+            for (const entry of this.extractRelationshipsForElement(element)) {
                 if (entry.projected) projections.push(entry);
                 else declared.push(entry);
             }
@@ -3688,6 +3708,31 @@ class JsonGenerator {
      * Default tags assigned to an element by its type. These are used when
      * matching `element.tag==...` view expressions.
      */
+    /** Element tags (defaults + declared) per node: expressions and styles ask repeatedly. */
+    private readonly elementTagsCache = new WeakMap<NamedElement, string[]>();
+
+    private tagsOf(element: NamedElement): string[] {
+        const cached = this.elementTagsCache.get(element);
+        if (cached !== undefined) return cached;
+        const defaults = this.elementDefaultTags(element);
+        const raw = this.extractTags(element, defaults[0], defaults[1]);
+        const tags = raw !== undefined ? raw.split(',').map(tag => tag.trim()) : [];
+        this.elementTagsCache.set(element, tags);
+        return tags;
+    }
+
+    /** Relationship tags per node, memoized for the tag expressions. */
+    private readonly relationshipTagsCache = new WeakMap<Relationship, string[]>();
+
+    private tagsOfRelationship(relationship: Relationship): string[] {
+        const cached = this.relationshipTagsCache.get(relationship);
+        if (cached !== undefined) return cached;
+        const raw = this.extractTags(relationship, 'Relationship');
+        const tags = raw !== undefined ? raw.split(',').map(tag => tag.trim()) : [];
+        this.relationshipTagsCache.set(relationship, tags);
+        return tags;
+    }
+
     private elementDefaultTags(element: AstNode | undefined): [string, string?] {
         if (isPerson(element)) return ['Element', 'Person'];
         if (isSoftwareSystem(element)) return ['Element', 'Software System'];
@@ -3777,35 +3822,38 @@ class JsonGenerator {
 
     /**
      * Collects nested child elements of a specific type from a parent node.
-     * Recursively searches through groups, containers, components, deployment nodes, etc.
+     * Recursively searches through groups, containers, components, deployment nodes,
+     * etc., and follows `!include` directives found inside the block.
      */
-    private collectNested<T>(node: any, check: (item: any) => item is T, visitedDocs: Set<string> = new Set()): T[] | undefined {
-        let results: T[] = [];
-        
-        // Check all possible element collections on the current node
-        const items = [
-            ...(node.elements || []),
-            ...(node.containers || []),
-            ...(node.components || []),
-            ...(node.groups || []),
-            ...(node.children || []),
-            ...(node.nodes || []),
-            ...(node.infrastructureNodes || []),
-            ...(node.softwareSystemInstances || []),
-            ...(node.containerInstances || []),
-            ...(node.genericInstances || []).map((inst: any) => this.el(inst)),
-            // Nested archetype instances, exposed as their materialised element.
-            ...(node.archetypeInstances || []).map((inst: any) => this.el(inst)),
-        ];
-        
-        for (const item of items) {
+    private collectNested<T>(node: any, check: (item: any) => item is T, visitedDocs: Set<string> = new Set(), results: T[] = []): T[] | undefined {
+        const accept = (item: any) => {
             if (check(item)) {
                 results.push(item);
             } else if (isGroup(item)) {
-                // If it's a group, recurse deeper
-                results = results.concat(this.collectNested(item, check, visitedDocs) || []);
+                this.collectNested(item, check, visitedDocs, results);
             }
-        }
+        };
+        const visit = (list: any[] | undefined) => {
+            if (!list) return;
+            for (const item of list) accept(item);
+        };
+        const visitInstances = (list: any[] | undefined) => {
+            if (!list) return;
+            for (const inst of list) accept(this.el(inst));
+        };
+
+        visit(node.elements);
+        visit(node.containers);
+        visit(node.components);
+        visit(node.groups);
+        visit(node.children);
+        visit(node.nodes);
+        visit(node.infrastructureNodes);
+        visit(node.softwareSystemInstances);
+        visit(node.containerInstances);
+        visitInstances(node.genericInstances);
+        // Nested archetype instances, exposed as their materialised element.
+        visitInstances(node.archetypeInstances);
 
         // Elements defined via !include inside this block (e.g. containers included
         // inside a softwareSystem) are nested children of this block too. Resolve the
@@ -3821,12 +3869,12 @@ class JsonGenerator {
                     if (visitedDocs.has(docUri)) continue;
                     visitedDocs.add(docUri);
                 }
-                results = results.concat(this.collectNested(root, check, visitedDocs) || []);
+                this.collectNested(root, check, visitedDocs, results);
             }
         }
         return results.length > 0 ? results : undefined;
     }
-    
+
     /**
      * Transforms a Container AST node into JSON format, including nested components
      * and relationships. Components may have inline group properties merged with
@@ -4663,7 +4711,7 @@ class JsonGenerator {
 
         // Sizes (in inches at 300dpi) and cluster assignment for the elements that are
         // rendered as nodes (compound elements become clusters instead).
-        const sizes: Record<string, { w: string; h: string; label: string }> = {};
+        const sizes: Record<string, { w: string; h: string }> = {};
         // deployment node id -> a representative inner instance, so edges that
         // reference a deployment node are projected onto its content (like the
         // reference's findElementInside).
@@ -4672,13 +4720,11 @@ class JsonGenerator {
             const id = this.getId(el);
             if (this.isCompound(el)) continue; // rendered as a cluster
             const size = this.defaultElementSize(el);
-            // Strip the DSL string quotes from the name for the DOT label
-            // ("id: Name" without the surrounding quotes).
-            const name = this.dotElementName(el).replace(/^"|"$/g, '');
+            // Nodes carry no label: Graphviz only needs the box, and measuring the
+            // text of every node is a measurable share of the layout time.
             sizes[id] = {
                 w: (size.width / STRUCTURIZR_DPI).toFixed(6),
-                h: (size.height / STRUCTURIZR_DPI).toFixed(6),
-                label: `${id}: ${name}`
+                h: (size.height / STRUCTURIZR_DPI).toFixed(6)
             };
             nodeWidths[id] = size.width;
             const frameParent = this.resolveFrameParent(el, scopeElement);
@@ -4766,7 +4812,7 @@ class JsonGenerator {
         const emitNode = (id: string, indent: string) => {
             const s = sizes[id];
             if (s === undefined) throw new Error(`graphviz export: no size for element ${id}`);
-            lines.push(`${indent}${idToken(id)} [width=${s.w},height=${s.h},fixedsize=true,id=${idToken(id)},label=${q(s.label)}]`);
+            lines.push(`${indent}${idToken(id)} [width=${s.w},height=${s.h},fixedsize=true,id=${idToken(id)}]`);
         };
         const emitCluster = (cid: string, indent: string) => {
             const pad = indent + '  ';
@@ -4863,9 +4909,20 @@ class JsonGenerator {
      * is defined, DSL + theme style sizes merged per tag, and the shape-based cell size.
      */
     private defaultElementSize(el: NamedElement): { width: number; height: number } {
+        const cached = this.elementSizeCache.get(el);
+        if (cached !== undefined) return cached;
         const style = this.resolveElementStyle(el);
-        return this.cellSizeForStyle(style.width, style.height, style.shape);
+        const size = this.cellSizeForStyle(style.width, style.height, style.shape);
+        this.elementSizeCache.set(el, size);
+        return size;
     }
+
+    /**
+     * Element size per AST node: a view lays out the same element once per view it
+     * appears in, and resolving the size walks the tags and merges the style map each
+     * time. The map is stable for the lifetime of one generate() call.
+     */
+    private readonly elementSizeCache = new WeakMap<NamedElement, { width: number; height: number }>();
 
     /** The Structurizr default type tag for an element (e.g. "Person", "Software System"). */
     private typeTagForElement(el: NamedElement): string {
@@ -4985,12 +5042,6 @@ class JsonGenerator {
     }
 
     /** Display name for the DOT node label (instances inherit their container/system name). */
-    private dotElementName(el: any): string {
-        if (isContainerInstance(el)) return String(el.container?.ref?.name ?? this.getId(el));
-        if (isSoftwareSystemInstance(el)) return String(el.softwareSystem?.ref?.name ?? this.getId(el));
-        return String(el?.name ?? this.getId(el));
-    }
-
     /** Finds the frame parent of a view element, if any. */
     private resolveFrameParent(el: any, scopeElement: NamedElement | undefined): NamedElement | undefined {
         // Container view: containers live inside the software system frame.
@@ -5805,16 +5856,14 @@ class JsonGenerator {
             const docUri = doc?.uri.toString();
             if (!docUri || depths.has(docUri)) return;
             depths.set(docUri, depth);
-            const tree = doc?.parseResult.value ?? root;
-            for (const content of AstUtils.streamAllContents(tree)) {
-                if (isInclude(content) && content.file) {
-                    const includedRoot = this.resolveIncludedRoot(content, content.file);
-                    if (includedRoot) visit(includedRoot, depth, base + (content.$cstNode?.offset ?? 0));
-                    continue;
-                }
-                if (!isNamedElement(content) || positions.has(content)) continue;
-                if (AstUtils.getDocument(content)?.uri.toString() !== docUri) continue;
+            const scan = this.scanDocument(root);
+            for (const content of scan.namedElements) {
+                if (positions.has(content)) continue;
                 positions.set(content, base + (content.$cstNode?.offset ?? 0));
+            }
+            for (const content of scan.includes) {
+                const includedRoot = this.resolveIncludedRoot(content, content.file);
+                if (includedRoot) visit(includedRoot, depth, base + (content.$cstNode?.offset ?? 0));
             }
         };
         const walk = (ws: Workspace, depth: number) => {
@@ -5870,6 +5919,20 @@ class JsonGenerator {
      */
     private resolveComponentParent(component: Component): Container | undefined {
         return this.ancestorOfKind(component, isContainer);
+    }
+
+    /**
+     * Parent of an element in the model hierarchy, whichever level it belongs to:
+     * a component's container, a container's software system, or a deployment
+     * element's deployment node.
+     */
+    private parentOf(element: NamedElement): NamedElement | undefined {
+        if (isComponent(element)) return this.resolveComponentParent(element);
+        if (isContainer(element)) return this.resolveContainerParent(element);
+        if (isDeploymentNode(element) || isSoftwareSystemInstance(element) || isContainerInstance(element)) {
+            return this.resolveDeploymentNodeParent(element);
+        }
+        return undefined;
     }
 
     /**
@@ -6249,15 +6312,7 @@ class JsonGenerator {
         else if (isElementParentExpression(e)) {
             const parentRef = this.resolveExpressionReference(e.element);
             if (parentRef) this.elements.forEach(el => {
-                // Resolve parent using type-guarded helper functions
-                let elParent: NamedElement | undefined;
-                if (isComponent(el)) {
-                    elParent = this.resolveComponentParent(el);
-                } else if (isContainer(el)) {
-                    elParent = this.resolveContainerParent(el);
-                } else if (isDeploymentNode(el) || isSoftwareSystemInstance(el) || isContainerInstance(el)) {
-                    elParent = this.resolveDeploymentNodeParent(el);
-                }
+                const elParent = this.parentOf(el);
                 if (elParent === parentRef || this.getId(elParent) === this.getId(parentRef)) {
                     if (isAllowed(el)) res.add(el);
                 }
@@ -6268,8 +6323,7 @@ class JsonGenerator {
         else if (isElementTagExpression(e)) {
             const searchTags = e.values.map(t => C4Utils.stripQuotes(t));
             this.elements.forEach(el => {
-                const defaults = this.elementDefaultTags(el);
-                const elTags = (this.extractTags(el, defaults[0], defaults[1])?.split(',') || []).map(t => t.trim());
+                const elTags = this.tagsOf(el);
                 const hasAllTags = searchTags.every(st => elTags.includes(st));
                 const matches = e.operator === '==' ? hasAllTags : !hasAllTags;
                 if (matches && isAllowed(el)) res.add(el);
@@ -6313,7 +6367,7 @@ class JsonGenerator {
         else if (isRelationshipTagExpression(e)) {
             const searchTags = e.values.map(t => C4Utils.stripQuotes(t));
             relationshipsAtScope.forEach(r => {
-                const relTags = (this.extractTags(r.relationship, 'Relationship')?.split(',') || []).map(t => t.trim());
+                const relTags = this.tagsOfRelationship(r.relationship);
                 const hasAllTags = searchTags.every(st => relTags.includes(st));
                 const matches = e.operator === '==' ? hasAllTags : !hasAllTags;
                 if (matches) {
@@ -7824,6 +7878,31 @@ class JsonGenerator {
      * software system instances, and container instances matching the environment,
      * then resolves their relationships within the deployment context.
      */
+    /**
+     * Deployment-model elements (nodes, infrastructure nodes, instances, custom
+     * elements) with their environment, used to resolve deployment views.
+     */
+    private deploymentIndex: { elements: NamedElement[]; environmentOf: Map<NamedElement, string | undefined> } | undefined;
+
+    private deploymentElements(): { elements: NamedElement[]; environmentOf: Map<NamedElement, string | undefined> } {
+        if (this.deploymentIndex) return this.deploymentIndex;
+        const elements: NamedElement[] = [];
+        const environmentOf = new Map<NamedElement, string | undefined>();
+        for (const el of this.elements) {
+            if (isDeploymentNode(el) || isInfrastructureNode(el) || isSoftwareSystemInstance(el) || isContainerInstance(el) || isCustomElement(el)) {
+                elements.push(el);
+                environmentOf.set(el, this.getEnvironment(el));
+            }
+        }
+        this.deploymentIndex = { elements, environmentOf };
+        return this.deploymentIndex;
+    }
+
+    /** Environment of a deployment element, from the index built by {@link deploymentElements}. */
+    private deploymentEnvironmentOf(el: NamedElement): string | undefined {
+        return this.deploymentElements().environmentOf.get(el);
+    }
+
     private resolveDeployment(
         view: DeploymentView,
         elementsAtView: Set<RelationshipMember>,
@@ -7833,17 +7912,17 @@ class JsonGenerator {
     ) {
         // collect all relationships for deployment elements matching the environment
         const rels = new Set<ImpliedRelationship>();
-        this.elements.forEach(el => {
+        for (const el of this.deploymentElements().elements) {
             if (isDeploymentNode(el)) {
-                if (!environment || environment === this.getEnvironment(el)) this.extractRelationshipsForDeploymentNode(el).forEach(r => rels.add(r));
+                if (!environment || environment === this.deploymentEnvironmentOf(el)) this.extractRelationshipsForDeploymentNode(el).forEach(r => rels.add(r));
             } else if (isInfrastructureNode(el)) {
-                if (!environment || environment === this.getEnvironment(el)) this.extractRelationshipsForInfrastructureNode(el).forEach(r => rels.add(r));
+                if (!environment || environment === this.deploymentEnvironmentOf(el)) this.extractRelationshipsForInfrastructureNode(el).forEach(r => rels.add(r));
             } else if (isSoftwareSystemInstance(el)) {
-                if (!environment || environment === this.getEnvironment(el)) this.extractRelationshipsForSoftwareSystemInstance(el).forEach(r => rels.add(r));
+                if (!environment || environment === this.deploymentEnvironmentOf(el)) this.extractRelationshipsForSoftwareSystemInstance(el).forEach(r => rels.add(r));
             } else if (isContainerInstance(el)) {
-                if (!environment || environment === this.getEnvironment(el)) this.extractRelationshipsForContainerInstance(el).forEach(r => rels.add(r));
+                if (!environment || environment === this.deploymentEnvironmentOf(el)) this.extractRelationshipsForContainerInstance(el).forEach(r => rels.add(r));
             } else if(isCustomElement(el)) this.extractRelationshipsForCustom(el).forEach(rel => rels.add(rel));
-        });
+        }
 
         // scope guard: only deployment elements matching the environment (and optionally softwareSystem) are allowed
         const allowedDocuments = this.allowedViewDocuments(view);
@@ -7854,15 +7933,15 @@ class JsonGenerator {
             if (!this.isInAllowedDocuments(el, allowedDocuments)) return false;
             // DeploymentNode and InfrastructureNode must match the environment
             if(isDeploymentNode(el) || isInfrastructureNode(el)) {
-                return (!environment || environment === this.getEnvironment(el));
+                return (!environment || environment === this.deploymentEnvironmentOf(el));
             }
             // SoftwareSystemInstance must match environment and optionally the scope SoftwareSystem
             if(isSoftwareSystemInstance(el)) {
-                return ((!environment || environment === this.getEnvironment(el)));
+                return ((!environment || environment === this.deploymentEnvironmentOf(el)));
             }
             // ContainerInstance must match environment and optionally belong to the scope SoftwareSystem
             if(isContainerInstance(el)) {
-                return ((!environment || environment === this.getEnvironment(el)));
+                return ((!environment || environment === this.deploymentEnvironmentOf(el)));
             }
             // CustomElement is always allowed
             return isCustomElement(el);
@@ -7877,18 +7956,18 @@ class JsonGenerator {
 
             if (isInclude && prop.all === '*') {
                 // add all deployment elements matching the environment
-                this.elements.forEach(el => {
-                    if (!this.isInAllowedDocuments(el, allowedDocuments)) return;
+                for (const el of this.deploymentElements().elements) {
+                    if (!this.isInAllowedDocuments(el, allowedDocuments)) continue;
                     if(isDeploymentNode(el) || isInfrastructureNode(el)) {
-                        if(!environment || environment === this.getEnvironment(el)) elementsAtView.add(el);
+                        if(!environment || environment === this.deploymentEnvironmentOf(el)) elementsAtView.add(el);
                     }
                     if(isSoftwareSystemInstance(el)) {
-                        if ((!environment || environment === this.getEnvironment(el)) && (!softwareSystem || softwareSystem === this.el(el.softwareSystem.ref))) elementsAtView.add(el);
+                        if ((!environment || environment === this.deploymentEnvironmentOf(el)) && (!softwareSystem || softwareSystem === this.el(el.softwareSystem.ref))) elementsAtView.add(el);
                     }
                     if(isContainerInstance(el)) {
-                        if ((!environment || environment === this.getEnvironment(el)) && (!softwareSystem || (el.container.ref !== undefined && this.resolveContainerParent(el.container.ref) === softwareSystem))) elementsAtView.add(el);
+                        if ((!environment || environment === this.deploymentEnvironmentOf(el)) && (!softwareSystem || (el.container.ref !== undefined && this.resolveContainerParent(el.container.ref) === softwareSystem))) elementsAtView.add(el);
                     }
-                });                
+                }
 
                 // add any additional element that has a relationship with an already visible element
                 const include = new Set<RelationshipMember>();
@@ -8134,16 +8213,28 @@ class JsonGenerator {
      * stands for its instances.
      */
     private expandDeploymentAnimationElement(element: NamedElement): NamedElement[] {
-        if (isSoftwareSystem(element)) {
-            return this.elements.filter(el =>
-                isSoftwareSystemInstance(el) && this.el(el.softwareSystem?.ref) === element);
+        if (!isSoftwareSystem(element) && !isContainer(element)) {
+            return [element];
         }
-        if (isContainer(element)) {
-            return this.elements.filter(el =>
-                isContainerInstance(el) && this.el(el.container?.ref) === element);
+        if (this.instancesByElement === undefined) {
+            const index = new Map<NamedElement, NamedElement[]>();
+            for (const instance of this.deploymentInstances()) {
+                const reference = isSoftwareSystemInstance(instance)
+                    ? instance.softwareSystem?.ref
+                    : isContainerInstance(instance) ? instance.container?.ref : undefined;
+                const resolved = this.el(reference);
+                if (!resolved) continue;
+                const list = index.get(resolved);
+                if (list === undefined) index.set(resolved, [instance]);
+                else list.push(instance);
+            }
+            this.instancesByElement = index;
         }
-        return [element];
+        return this.instancesByElement.get(element) ?? [];
     }
+
+    /** Deployment instances grouped by the element they instantiate, in element order. */
+    private instancesByElement: Map<NamedElement, NamedElement[]> | undefined;
 
     /**
      * Removes duplicate relationships from a set. For pairs sharing the same source,
@@ -8219,7 +8310,7 @@ class JsonGenerator {
                 description: this.description(view),
                 properties: this.viewProperties(view),
                 elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),
-                relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
+                relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
                 enterpriseBoundaryVisible: true,
                 automaticLayout: this.transformAutoLayout(view),
                 // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
@@ -8252,7 +8343,7 @@ class JsonGenerator {
                     description: this.description(view),
                     properties: this.viewProperties(view),
                     elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),// elements,,
-                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
+                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     ...this.graphvizFields(view, this.transformAutoLayout(view), scopeSystem, true, elements, relationships),
@@ -8284,7 +8375,7 @@ class JsonGenerator {
                     description: this.description(view),
                     properties: this.viewProperties(view),
                     elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),// elements,,
-                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
+                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     ...this.graphvizFields(view, this.transformAutoLayout(view), scopeContainer, true, elements, relationships),
@@ -8367,7 +8458,7 @@ class JsonGenerator {
                     softwareSystemId: scopeSystem ? this.getId(scopeSystem) : undefined,
                     environment: environment,
                     elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),// elements,,
-                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(el => this.elementJson(el))),
+                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     ...this.graphvizFields(view, this.transformAutoLayout(view), undefined, false, elements, relationships),

@@ -104,6 +104,9 @@ export class C4Utils {
     static stripQuotes(value: string | undefined): string {
         const trimmed = value?.trim();
         if (!trimmed) return '';
+        // Fast path: a plain value (no surrounding quote and no escape) is returned
+        // as-is; this is the common case for names and property values.
+        if (trimmed.charCodeAt(0) !== 34 /* " */ && trimmed.indexOf('\\') === -1) return trimmed;
         const match = trimmed.match(/^("""|")([\s\S]*?)\1$/);
         const inner = match ? match[2] : trimmed;
         // A trailing backslash continues the value on the next line; the leading

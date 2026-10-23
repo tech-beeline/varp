@@ -4,10 +4,7 @@
     {
       "id": "c4",
       "fileExtensions": [".dsl"],
-      "grammar": "src/language/c4.langium",
-      "textMate": {
-        "out": "syntaxes/c4.tmLanguage.json"
-      }
+      "grammar": "src/language/c4.langium"
     }
   ],
   "out": "src/generated"

@@ -4,6 +4,7 @@ dist/
 coverage/
 src/generated/
 syntaxes/*.json
+!syntaxes/c4.tmLanguage.json
 out/
 plans/
 .DS_Store

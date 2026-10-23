@@ -1,0 +1,307 @@
+{
+  "name": "C4 DSL",
+  "scopeName": "source.c4",
+  "fileTypes": [
+    "c4",
+    "dsl"
+  ],
+  "patterns": [
+    {
+      "match": "#[a-fA-F0-9]{3}([a-fA-F0-9]{3})?\\b",
+      "name": "constant.other.color.c4"
+    },
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#text-block"
+    },
+    {
+      "include": "#script-block"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#strings-single"
+    },
+    {
+      "include": "#directives"
+    },
+    {
+      "include": "#relationship"
+    },
+    {
+      "match": "(?i)\\b(element|relationship)\\.(tag|type|parent|technology|properties|group|source|destination)\\b",
+      "captures": {
+        "1": {
+          "name": "keyword.control.c4"
+        },
+        "2": {
+          "name": "variable.other.property.c4"
+        }
+      }
+    },
+    {
+      "match": "(?i)\\b(workspace|model|views|styles|style|configuration|terminology|branding|themes|theme|defaults|archetypes|archetype|extends|identifiers|script|properties|perspectives|perspective|documentation|docs|adrs|decisions|element|relationship|group|enterprise|include|exclude|instanceof|this|animation|autolayout)\\b",
+      "name": "keyword.control.c4"
+    },
+    {
+      "match": "(?i)\\b(person|softwareSystem|container|component|deploymentEnvironment|deploymentNode|infrastructureNode|containerInstance|softwareSystemInstance|deploymentGroup|custom|systemLandscape|systemContext|deployment|dynamic|filtered|image)\\b",
+      "name": "support.type.c4"
+    },
+    {
+      "match": "(?i)\\b(title|description|technology|url|tags|tag|group|shape|icon|iconPosition|width|height|background|color|colour|stroke|strokeWidth|fontSize|border|opacity|metadata|dashed|thickness|routing|position|jump|instances|default|visibility|users|scope|name|value|healthcheck|animation|autolayout)\\b",
+      "name": "variable.other.property.c4"
+    },
+    {
+      "match": "(?i)\\b(tb|bt|lr|rl|top|bottom|left|right|hierarchical|flat|direct|orthogonal|curved|solid|dotted|dashed|landscape|portrait|light|dark|public|private|read|write|none|plantuml|mermaid|kroki)\\b",
+      "name": "entity.name.type.enum.c4"
+    },
+    {
+      "match": "(?i)\\b(true|false)\\b",
+      "name": "constant.language.c4"
+    },
+    {
+      "match": "\\b\\d+(\\.\\d+)?\\b",
+      "name": "constant.numeric.c4"
+    },
+    {
+      "match": "(<->|->|-/>|==|!=|&&|\\|\\||~)",
+      "name": "keyword.operator.c4"
+    },
+    {
+      "match": "[{}()\\[\\]:;,=]",
+      "name": "keyword.symbol.c4"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.c4",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.c4"
+            }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.c4"
+            }
+          }
+        },
+        {
+          "name": "comment.line.c4",
+          "match": "(//|#).*$",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.comment.c4"
+            }
+          }
+        }
+      ]
+    },
+    "text-block": {
+      "name": "string.quoted.triple.c4",
+      "begin": "\"\"\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.c4"
+        }
+      },
+      "end": "\"\"\"",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.c4"
+        }
+      },
+      "contentName": "meta.embedded.block.markdown",
+      "patterns": [
+        {
+          "include": "text.html.markdown"
+        }
+      ]
+    },
+    "script-block": {
+      "patterns": [
+        {
+          "name": "meta.embedded.block.groovy",
+          "begin": "(!script)\\s+(groovy)\\s*(\\{)",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.directive.c4"
+            },
+            "2": {
+              "name": "entity.name.type.enum.c4"
+            },
+            "3": {
+              "name": "keyword.symbol.c4"
+            }
+          },
+          "end": "(\\})",
+          "endCaptures": {
+            "1": {
+              "name": "keyword.symbol.c4"
+            }
+          },
+          "patterns": [
+            {
+              "include": "source.groovy"
+            }
+          ]
+        },
+        {
+          "name": "meta.embedded.block.kotlin",
+          "begin": "(!script)\\s+(kotlin)\\s*(\\{)",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.directive.c4"
+            },
+            "2": {
+              "name": "entity.name.type.enum.c4"
+            },
+            "3": {
+              "name": "keyword.symbol.c4"
+            }
+          },
+          "end": "(\\})",
+          "endCaptures": {
+            "1": {
+              "name": "keyword.symbol.c4"
+            }
+          },
+          "patterns": [
+            {
+              "include": "source.kotlin"
+            }
+          ]
+        },
+        {
+          "name": "meta.embedded.block.ruby",
+          "begin": "(!script)\\s+(ruby)\\s*(\\{)",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.directive.c4"
+            },
+            "2": {
+              "name": "entity.name.type.enum.c4"
+            },
+            "3": {
+              "name": "keyword.symbol.c4"
+            }
+          },
+          "end": "(\\})",
+          "endCaptures": {
+            "1": {
+              "name": "keyword.symbol.c4"
+            }
+          },
+          "patterns": [
+            {
+              "include": "source.ruby"
+            }
+          ]
+        },
+        {
+          "name": "meta.embedded.block.javascript",
+          "begin": "(!script)\\s+(javascript)\\s*(\\{)",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.directive.c4"
+            },
+            "2": {
+              "name": "entity.name.type.enum.c4"
+            },
+            "3": {
+              "name": "keyword.symbol.c4"
+            }
+          },
+          "end": "(\\})",
+          "endCaptures": {
+            "1": {
+              "name": "keyword.symbol.c4"
+            }
+          },
+          "patterns": [
+            {
+              "include": "source.js"
+            }
+          ]
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.c4",
+      "begin": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.c4"
+        }
+      },
+      "end": "\"",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.c4"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#string-character-escape"
+        }
+      ]
+    },
+    "strings-single": {
+      "name": "string.quoted.single.c4",
+      "begin": "'",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.c4"
+        }
+      },
+      "end": "'",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.c4"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#string-character-escape"
+        }
+      ]
+    },
+    "string-character-escape": {
+      "name": "constant.character.escape.c4",
+      "match": "\\\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|u\\{[0-9A-Fa-f]+\\}|[0-2][0-7]{0,2}|3[0-6][0-7]?|37[0-7]?|[4-7][0-7]?|.)"
+    },
+    "directives": {
+      "name": "keyword.control.directive.c4",
+      "match": "(?i)!(include|const|var|elements|element|adrs|decisions|relationships|relationship|script|docs|identifiers|impliedrelationships|plugin|components)\\b"
+    },
+    "relationship": {
+      "patterns": [
+        {
+          "match": "(--)([^\\n]*?)(->|-/>)",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.c4"
+            },
+            "2": {
+              "name": "string.unquoted.relationship.c4"
+            },
+            "3": {
+              "name": "keyword.operator.c4"
+            }
+          }
+        },
+        {
+          "match": "(<->|->|-/>)",
+          "name": "keyword.operator.c4"
+        }
+      ]
+    }
+  }
+}

@@ -2060,6 +2060,12 @@ class JsonGenerator {
         ? { id: this.getId(el) }
         : { id: this.getId(el), x: 0, y: 0 };
 
+    /**
+     * Relationship view: the vendor model has no position for a relationship, only the
+     * id plus the geometry the layout adds (vertices, routing).
+     */
+    private readonly relationshipViewJson = (rel: any) => ({ id: this.getId(rel) });
+
     /** Returns undefined when the array is empty, so empty collections are never emitted in JSON. */
     private onlyIfNotEmpty<T>(arr: T[] | undefined): T[] | undefined {
         return arr && arr.length > 0 ? arr : undefined;
@@ -4436,7 +4442,7 @@ class JsonGenerator {
                     description: this.description(view),
                     properties: this.viewProperties(view),
                     elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),
-                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
+                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.relationshipViewJson(rel))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     ...this.graphvizFields(view, this.transformAutoLayout(view), undefined, false, elements, relationships),
@@ -4464,7 +4470,7 @@ class JsonGenerator {
                     description: this.description(view),
                     properties: this.viewProperties(view),
                     elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),
-                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
+                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.relationshipViewJson(rel))),
                     enterpriseBoundaryVisible: true,
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
@@ -5658,7 +5664,10 @@ class JsonGenerator {
             for (const id of Object.keys(rawVerticesById)) {
                 const rel = relById[id];
                 if (!rel) continue;
-                rel.vertices = rawVerticesById[id].map(v => ({ x: Math.round(v.x + shiftX), y: Math.round(v.y + shiftY) }));
+                const vertices = rawVerticesById[id].map(v => ({ x: Math.round(v.x + shiftX), y: Math.round(v.y + shiftY) }));
+                // Graphviz encodes a sharp corner in a polyline by repeating the point,
+                // so consecutive duplicates carry no information.
+                rel.vertices = vertices.filter((v, i) => i === 0 || v.x !== vertices[i - 1].x || v.y !== vertices[i - 1].y);
             }
         } else {
             // Dynamic views keep straight lines, so forward + response steps
@@ -8310,7 +8319,7 @@ class JsonGenerator {
                 description: this.description(view),
                 properties: this.viewProperties(view),
                 elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),
-                relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
+                relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.relationshipViewJson(rel))),
                 enterpriseBoundaryVisible: true,
                 automaticLayout: this.transformAutoLayout(view),
                 // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
@@ -8343,7 +8352,7 @@ class JsonGenerator {
                     description: this.description(view),
                     properties: this.viewProperties(view),
                     elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),// elements,,
-                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
+                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.relationshipViewJson(rel))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     ...this.graphvizFields(view, this.transformAutoLayout(view), scopeSystem, true, elements, relationships),
@@ -8375,7 +8384,7 @@ class JsonGenerator {
                     description: this.description(view),
                     properties: this.viewProperties(view),
                     elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),// elements,,
-                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
+                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.relationshipViewJson(rel))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     ...this.graphvizFields(view, this.transformAutoLayout(view), scopeContainer, true, elements, relationships),
@@ -8458,7 +8467,7 @@ class JsonGenerator {
                     softwareSystemId: scopeSystem ? this.getId(scopeSystem) : undefined,
                     environment: environment,
                     elements: this.onlyIfNotEmpty(Array.from(elements).map(el => this.elementJson(el))),// elements,,
-                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.elementJson(rel))),
+                    relationships: this.onlyIfNotEmpty(Array.from(relationships).map(rel => this.relationshipViewJson(rel))),
                     automaticLayout: this.transformAutoLayout(view),
                     // Transient: consumed by applyGraphvizAutoLayouts in the plugin.
                     ...this.graphvizFields(view, this.transformAutoLayout(view), undefined, false, elements, relationships),

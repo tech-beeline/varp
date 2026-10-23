@@ -15,6 +15,8 @@
 */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { EmptyFileSystem } from 'langium';
 import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
@@ -132,6 +134,54 @@ include *
         const modelIds = modelRelationshipIds(json);
         for (const id of viewRelationshipIds(json)) {
             expect(modelIds.has(id)).toBe(true);
+        }
+    });
+});
+describe('relationship view shape', () => {
+    const DSL = `workspace {
+    model {
+        a = softwareSystem "A"
+        b = softwareSystem "B"
+        c = softwareSystem "C"
+        a -> b "ab"
+        a -> c "ac"
+        b -> c "bc"
+    }
+
+    views {
+        systemLandscape "L" {
+            include *
+        }
+    }
+}`;
+
+    it('carries no element coordinates', async () => {
+        const json = await generate(DSL);
+        const relationships = json.views.systemLandscapeViews[0].relationships;
+
+        expect(relationships.length).toBeGreaterThan(0);
+        for (const relationship of relationships) {
+            expect(relationship).not.toHaveProperty('x');
+            expect(relationship).not.toHaveProperty('y');
+        }
+    });
+
+    it('has no duplicate consecutive vertices', async () => {
+        // A workspace whose edges really are routed around other elements.
+        const json = await generate(readFileSync(resolve('test/fixtures/big-bank-plc/input.dsl'), 'utf8'));
+        const relationships = Object.keys(json.views)
+            .filter(key => Array.isArray(json.views[key]))
+            .flatMap(key => json.views[key])
+            .flatMap((view: any) => view.relationships ?? []);
+        const routed = relationships.filter((relationship: any) => (relationship.vertices ?? []).length > 0);
+
+        expect(routed.length).toBeGreaterThan(0);
+        for (const relationship of routed) {
+            const vertices = relationship.vertices;
+            for (let i = 1; i < vertices.length; i++) {
+                expect({ x: vertices[i].x, y: vertices[i].y })
+                    .not.toEqual({ x: vertices[i - 1].x, y: vertices[i - 1].y });
+            }
         }
     });
 });

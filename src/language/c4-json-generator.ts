@@ -35,6 +35,7 @@ import {
     isStarToElementExpression, isStarFromElementExpression, isStarStarExpression,
     isDirectCouplingExpression,
     isElementEqAfferentExpression, isElementEqEfferentExpression, isElementEqAfferentEfferentExpression,
+    isElementEqExpression, isElementNotEqExpression,
     ImplicitRelationship,
     isImplicitRelationship, isInfrastructureNode,
     isSoftwareSystemInstance, isContainerInstance, isGenericInstance,
@@ -6305,6 +6306,28 @@ class JsonGenerator {
                         if(r.target === el && isAllowed(r.source)) res.add(r.source);
                     });
                 }
+            });
+        }
+        // element==<identifier|expression>: the specified element(s) or the leaves of the specified group(s)
+        else if (isElementEqExpression(e)) {
+            const matched = this.applyExpression(e.expr, elementsAtView, relationshipsAtScope, isAllowed);
+            matched.forEach(el => {
+                if (isGroup(el)) {
+                    this.leafElementsOfGroup(el).forEach(ge => this.addLeafElementWithInstanceFallback(ge, res, isAllowed));
+                } else if (isRelationshipMember(el) && isAllowed(el)) {
+                    res.add(el);
+                }
+            });
+        }
+        // element!=<identifier|expression>: every element except the specified element(s) or group leaves
+        else if (isElementNotEqExpression(e)) {
+            const excluded = new Set<any>();
+            this.applyExpression(e.expr, elementsAtView, relationshipsAtScope, isAllowed).forEach(el => {
+                if (isGroup(el)) this.leafElementsOfGroup(el).forEach(ge => excluded.add(ge));
+                else excluded.add(el);
+            });
+            this.elements.forEach(el => {
+                if (!excluded.has(el) && isRelationshipMember(el) && isAllowed(el)) res.add(el);
             });
         }
         // element.type==<type>: elements of the specified type (Person, SoftwareSystem, Container, Component, DeploymentNode, InfrastructureNode, SoftwareSystemInstance, ContainerInstance, Custom)

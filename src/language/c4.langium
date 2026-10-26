@@ -144,6 +144,18 @@ interface DirectCouplingExpression extends ViewExpression {
     targetExpr: ViewExpression
 }
 
+// element==<expression>: the elements of the expression
+interface ElementEqExpression extends ViewExpression {
+    isElementEq: string
+    expr: ViewExpression
+}
+
+// element!=<expression>: every element except the elements of the expression
+interface ElementNotEqExpression extends ViewExpression {
+    isElementNotEq: string
+    expr: ViewExpression
+}
+
 // element==-><expression>: element== with afferent couplings
 // e.g., element==->MyComponent (shows MyComponent and all incoming relationships)
 interface ElementEqAfferentExpression extends ViewExpression {
@@ -1028,6 +1040,8 @@ PrimaryViewExpression returns ViewExpression:
     | ElementEqAfferentExpression
     | ElementEqEfferentExpression
     | ElementEqAfferentEfferentExpression
+    | ElementEqExpression
+    | ElementNotEqExpression
     | SingleElementExpression;
 
 // ─── Explicit expression rules ──────────────────────────────────────────────
@@ -1140,6 +1154,14 @@ DirectCouplingExpression returns ViewExpression:
 // element==-><expression>: element== with afferent couplings
 ElementEqAfferentExpression returns ViewExpression:
     {ElementEqAfferentExpression} isElementEq='element==' ARROW expr=NonArrowExpression;
+
+// element==<expression>: the elements of the expression
+ElementEqExpression returns ViewExpression:
+    {ElementEqExpression} isElementEq='element==' expr=NonArrowExpression;
+
+// element!=<expression>: every element except the elements of the expression
+ElementNotEqExpression returns ViewExpression:
+    {ElementNotEqExpression} isElementNotEq='element!=' expr=NonArrowExpression;
 
 // element==<expression>->: element== with efferent couplings
 ElementEqEfferentExpression returns ViewExpression:

@@ -15,7 +15,7 @@
 */
 
 import { AstNode, AstUtils, isAstNode, type ValidationAcceptor, type ValidationChecks } from 'langium';
-import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, ModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty, type StringLiteralExpression } from '../generated/ast';
+import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, ModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty, type StringLiteralExpression, isElementEqExpression, isExcludeProperty, type ExcludeProperty, type ViewExpression } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
 import * as includeResolver from './c4-include-resolver';
@@ -216,6 +216,9 @@ export function registerValidationChecks(services: C4Services) {
         StringLiteralExpression: [
             (node, accept) => validator.checkQuotedViewExpression(node, accept)
         ],
+        ExcludeProperty: [
+            (node, accept) => validator.checkExcludeExpressions(node, accept)
+        ],
         PropertiesBlock: [
             (node, accept) => validator.checkIncludeElements(node, accept, 'PropertiesBlock')
         ],
@@ -399,16 +402,55 @@ export class C4Validator {
     }
 
     /**
-     * A quoted view filter is re-parsed as an expression. When the text does not
-     * parse as an expression it is treated as an element/relationship name, so it is
+     * A quoted view filter is re-parsed as an expression. `*` and `element==*` select the
+     * default elements of the view and are valid only as the whole include filter. Any
+     * other text that does not parse is treated as an element/relationship name, so it is
      * reported the way the reference implementation does.
      */
     checkQuotedViewExpression(node: StringLiteralExpression, accept: ValidationAcceptor): void {
         const text = C4Utils.stripQuotes(node.value);
         if (!text) return;
-        if (parseQuotedFilterText(this.sharedServices, text).expressions.length === 0) {
+        const parsed = parseQuotedFilterText(this.sharedServices, text);
+        if (parsed.all || this.containsAllElementsExpression(parsed.expressions)) {
+            const standalone = parsed.all || text.trim() === 'element==*';
+            if (!standalone || this.isExcludeExpression(node)) {
+                accept('error', 'The element/relationship "*" does not exist', { node });
+            }
+            return;
+        }
+        if (parsed.expressions.length === 0) {
             accept('error', `The element/relationship "${text}" does not exist`, { node });
         }
+    }
+
+    /**
+     * `element==*` selects the default elements of the view, which only an include can do;
+     * the reference implementation reports it as a missing element inside an exclude.
+     */
+    checkExcludeExpressions(node: ExcludeProperty, accept: ValidationAcceptor): void {
+        for (const item of node.expressions ?? []) {
+            const expression = item.expression;
+            if (isElementEqExpression(expression) && expression.all === '*') {
+                accept('error', 'The element/relationship "*" does not exist', { node: item });
+            }
+        }
+    }
+
+    /** True when the quoted filter sits in an exclude directive. */
+    private isExcludeExpression(node: StringLiteralExpression): boolean {
+        const element = node.$container;
+        return !!element && isExcludeProperty(element.$container);
+    }
+
+    /** True when an expression contains `*` or `element==*`, which are not references. */
+    private containsAllElementsExpression(expressions: ViewExpression[]): boolean {
+        for (const expression of expressions) {
+            if (isElementEqExpression(expression) && expression.all === '*') return true;
+            for (const node of AstUtils.streamAllContents(expression)) {
+                if (isElementEqExpression(node) && node.all === '*') return true;
+            }
+        }
+        return false;
     }
 
     /**

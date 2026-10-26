@@ -19,7 +19,7 @@ import { EmptyFileSystem } from 'langium';
 import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
 
-async function diagnosticsFor(filter: string): Promise<string[]> {
+async function diagnosticsFor(viewBody: string): Promise<string[]> {
     const services = createC4Services({ connection: undefined as any, ...EmptyFileSystem }).C4;
     const dsl = `workspace {
     model {
@@ -27,7 +27,7 @@ async function diagnosticsFor(filter: string): Promise<string[]> {
     }
     views {
         systemLandscape {
-            include ${filter}
+${viewBody}
         }
     }
 }
@@ -40,11 +40,29 @@ async function diagnosticsFor(filter: string): Promise<string[]> {
 
 describe('quoted view filter validation', () => {
     it('reports a filter that does not parse the way the reference implementation does', async () => {
-        const diagnostics = await diagnosticsFor('"relationship.tag=alpha"');
+        const diagnostics = await diagnosticsFor('            include "relationship.tag=alpha"');
         expect(diagnostics).toContain('The element/relationship "relationship.tag=alpha" does not exist');
     });
 
     it('accepts a valid quoted filter', async () => {
-        expect(await diagnosticsFor('"relationship.tag==alpha"')).toEqual([]);
+        expect(await diagnosticsFor('            include "relationship.tag==alpha"')).toEqual([]);
+    });
+
+    it('accepts the default-element filters in an include', async () => {
+        expect(await diagnosticsFor('            include "element==*"')).toEqual([]);
+        expect(await diagnosticsFor('            include element==*')).toEqual([]);
+        expect(await diagnosticsFor('            include "*"')).toEqual([]);
+    });
+
+    it('reports the default-element filters in an exclude', async () => {
+        const message = 'The element/relationship "*" does not exist';
+        expect(await diagnosticsFor('            include *\n            exclude "element==*"')).toContain(message);
+        expect(await diagnosticsFor('            include *\n            exclude element==*')).toContain(message);
+        expect(await diagnosticsFor('            include *\n            exclude "*"')).toContain(message);
+    });
+
+    it('reports a default-element filter inside a larger expression', async () => {
+        const diagnostics = await diagnosticsFor('            include "element==* && element.tag==alpha"');
+        expect(diagnostics).toContain('The element/relationship "*" does not exist');
     });
 });

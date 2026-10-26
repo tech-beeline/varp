@@ -6310,6 +6310,9 @@ class JsonGenerator {
         }
         // element==<identifier|expression>: the specified element(s) or the leaves of the specified group(s)
         else if (isElementEqExpression(e)) {
+            // `element==*` selects the default elements of the view and is applied by the
+            // view resolvers, which know what the default elements of the view type are.
+            if (!e.expr) return res;
             const matched = this.applyExpression(e.expr, elementsAtView, relationshipsAtScope, isAllowed);
             matched.forEach(el => {
                 if (isGroup(el)) {
@@ -7409,7 +7412,7 @@ class JsonGenerator {
             const prop = op.prop;
             const isInclude = isIncludeProperty(prop);
 
-            if (isInclude && prop.all === '*') {
+            if (isInclude && this.selectsAllElements(prop)) {
 
                 // add all Components belonging to the scope Container
                 for (const el of this.componentsOfContainer(scopeContainer)) {
@@ -7432,6 +7435,8 @@ class JsonGenerator {
 
             // process explicit expression-based include/exclude directives
             prop.expressions.forEach((expr: { expression: ViewExpression; }) => {
+                // `*` and `element==*` are applied by the include branch above.
+                if (this.isAllElementsExpression(expr.expression)) return;
                 const res = this.applyExpression(expr.expression, elementsAtView, relationshipsAllowed, isAllowed);
                 if (res) {
                     // update relationship visibility based on element changes
@@ -7496,7 +7501,7 @@ class JsonGenerator {
             const prop = op.prop;
             const isInclude = isIncludeProperty(prop);
 
-            if (isInclude && prop.all === '*') {
+            if (isInclude && this.selectsAllElements(prop)) {
                 // add all Containers belonging to the scope SoftwareSystem
                 for (const el of this.containersOfSystem(scopeSoftwareSystem)) {
                     elementsAtView.add(el);
@@ -7518,6 +7523,8 @@ class JsonGenerator {
 
             // process explicit expression-based include/exclude directives
             prop.expressions.forEach((expr: { expression: ViewExpression; }) => {
+                // `*` and `element==*` are applied by the include branch above.
+                if (this.isAllElementsExpression(expr.expression)) return;
                 const res = this.applyExpression(expr.expression, elementsAtView, relationshipsAllowed, isAllowed);
                 if (res) {
                     // update relationship visibility based on element changes
@@ -7572,7 +7579,7 @@ class JsonGenerator {
             const prop = op.prop;
             const isInclude = isIncludeProperty(prop);
 
-            if (isInclude && prop.all === '*') {
+            if (isInclude && this.selectsAllElements(prop)) {
                 // add all CustomElements
                 const include = new Set<RelationshipMember>();
                 this.elements.filter(isInScope).forEach(el => include.add(el));
@@ -7591,6 +7598,8 @@ class JsonGenerator {
 
             // process explicit expression-based include/exclude directives
             prop.expressions.forEach((expr: { expression: ViewExpression; }) => {
+                // `*` and `element==*` are applied by the include branch above.
+                if (this.isAllElementsExpression(expr.expression)) return;
                 const res = this.applyExpression(expr.expression, elementsAtView, relationshipsAllowed, isInScope);
                 if(res) {
                     // update relationship visibility based on element changes
@@ -7657,7 +7666,7 @@ class JsonGenerator {
             const prop = op.prop;
             const isInclude = isIncludeProperty(prop);
 
-            if (isInclude && prop.all === '*') {
+            if (isInclude && this.selectsAllElements(prop)) {
                 // add the scope SoftwareSystem to the diagram
                 elementsAtView.add(scopeSoftwareSystem);
 
@@ -7678,6 +7687,8 @@ class JsonGenerator {
 
             // process explicit expression-based include/exclude directives
             prop.expressions.forEach((expr: { expression: ViewExpression; }) => {
+                // `*` and `element==*` are applied by the include branch above.
+                if (this.isAllElementsExpression(expr.expression)) return;
                 const res = this.applyExpression(expr.expression, elementsAtView, rels, isInScope);
                 if (res) {
                     // update relationship visibility based on element changes
@@ -7701,6 +7712,22 @@ class JsonGenerator {
 
         }
         this.filterDuplicateRelationships(relationshipsAtView);
+    }
+
+    /** True when the directive selects the default elements of the view: `*` or `element==*`. */
+    private selectsAllElements(prop: IncludeProperty | ExcludeProperty): boolean {
+        if (isIncludeProperty(prop) && prop.all === '*') return true;
+        const expressions = prop.expressions ?? [];
+        return expressions.length === 1 && this.isAllElementsExpression(expressions[0].expression);
+    }
+
+    /** True for `*` and `element==*`, which stand for the default elements of the view. */
+    private isAllElementsExpression(expression: ViewExpression | undefined): boolean {
+        if (!expression) return false;
+        if (isElementEqExpression(expression)) return expression.all === '*';
+        if (!isStringLiteralExpression(expression)) return false;
+        const text = C4Utils.stripQuotes(expression.value).trim();
+        return text === '*' || text === 'element==*';
     }
 
     /**
@@ -7804,7 +7831,7 @@ class JsonGenerator {
             const prop = op.prop;
             const isInclude = isIncludeProperty(prop);
 
-            if (isInclude && prop.all === '*') {
+            if (isInclude && this.selectsAllElements(prop)) {
                 // add all SoftwareSystem and Person elements (top-level only)
                 this.elements.forEach(el => {
                     if(isSoftwareSystem(el) || isPerson(el)) elementsAtView.add(el);
@@ -7826,6 +7853,8 @@ class JsonGenerator {
 
             // process explicit expression-based include/exclude directives
             prop.expressions.forEach((expr: { expression: ViewExpression; }) => {
+                // `*` and `element==*` are applied by the include branch above.
+                if (this.isAllElementsExpression(expr.expression)) return;
                 const res = this.applyExpression(expr.expression, elementsAtView, relationshipsAllowed, isAllowed);
                 if(res) {
                     // update relationship visibility based on element changes
@@ -7993,7 +8022,7 @@ class JsonGenerator {
             const prop = op.prop;
             const isInclude = isIncludeProperty(prop);
 
-            if (isInclude && prop.all === '*') {
+            if (isInclude && this.selectsAllElements(prop)) {
                 // add all deployment elements matching the environment
                 for (const el of this.deploymentElements().elements) {
                     if (!this.isInAllowedDocuments(el, allowedDocuments)) continue;
@@ -8024,6 +8053,8 @@ class JsonGenerator {
 
             // process explicit expression-based include/exclude directives
             prop.expressions.forEach((expr: { expression: ViewExpression; }) => {
+                // `*` and `element==*` are applied by the include branch above.
+                if (this.isAllElementsExpression(expr.expression)) return;
                 const res = this.applyExpression(expr.expression, elementsAtView, rels, isAllowed);
                 if(res) {
                     // update relationship visibility based on element changes

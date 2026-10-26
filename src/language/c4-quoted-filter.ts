@@ -61,6 +61,8 @@ export function requoteFilterValues(text: string): string {
 export interface QuotedFilterParseResult {
     /** Expressions the filter text parsed into; empty when it is not a valid filter. */
     expressions: ViewExpression[];
+    /** True when the whole text is `*`, which selects the default elements of the view. */
+    all: boolean;
     /** Raw parser messages, for callers that want the underlying reason. */
     parserErrors: string[];
 }
@@ -72,7 +74,7 @@ export interface QuotedFilterParseResult {
  * `$refText` instead.
  */
 export function parseQuotedFilterText(sharedServices: any, text: string): QuotedFilterParseResult {
-    if (!text) return { expressions: [], parserErrors: [] };
+    if (!text) return { expressions: [], all: false, parserErrors: [] };
 
     const dsl = `views {\n    custom {\n        include ${requoteFilterValues(text)}\n    }\n}`;
     const document = sharedServices.workspace.LangiumDocumentFactory
@@ -86,8 +88,10 @@ export function parseQuotedFilterText(sharedServices: any, text: string): Quoted
             if (element.expression) expressions.push(element.expression);
         }
     }
+    const includeProps = root?.viewsBlocks?.at(0)?.views?.at(0)?.includeProps ?? [];
     return {
         expressions,
+        all: includeProps.some((include: any) => include.all === '*'),
         parserErrors: document.parseResult.parserErrors.map((e: any) => e.message)
     };
 }

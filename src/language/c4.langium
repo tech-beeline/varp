@@ -144,10 +144,11 @@ interface DirectCouplingExpression extends ViewExpression {
     targetExpr: ViewExpression
 }
 
-// element==<expression>: the elements of the expression
+// element==<expression> or element==*: the elements of the expression, or the default elements
 interface ElementEqExpression extends ViewExpression {
     isElementEq: string
-    expr: ViewExpression
+    all?: string
+    expr?: ViewExpression
 }
 
 // element!=<expression>: every element except the elements of the expression
@@ -1155,9 +1156,9 @@ DirectCouplingExpression returns ViewExpression:
 ElementEqAfferentExpression returns ViewExpression:
     {ElementEqAfferentExpression} isElementEq='element==' ARROW expr=NonArrowExpression;
 
-// element==<expression>: the elements of the expression
+// element==<expression> or element==*: the elements of the expression, or the default elements
 ElementEqExpression returns ViewExpression:
-    {ElementEqExpression} isElementEq='element==' expr=NonArrowExpression;
+    {ElementEqExpression} isElementEq='element==' (all='*' | expr=NonArrowExpression);
 
 // element!=<expression>: every element except the elements of the expression
 ElementNotEqExpression returns ViewExpression:

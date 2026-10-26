@@ -22,6 +22,7 @@ import { DiagramPreview } from "./diagram-preview";
 import { PatternProvider } from "./patterns";
 import { registerFitnessChecks } from "./fitness-functions";
 import { FitnessResultsView } from "./fitness-results-view";
+import { ARCHOPS_CONFIGURED_CONTEXT, archopsConfigured } from "../shared/archops";
 import { resolveFreshViewKey } from "./view-keys";
 
 /**
@@ -258,6 +259,13 @@ async function getThemesForPreview(themeUrls: string[] | undefined): Promise<{ u
  */
 export function init(context: ExtensionContext): void {
 
+    // The archops views (patterns, capabilities and fitness results) only make sense
+    // when the server is configured; the context key drives their visibility clauses.
+    const updateArchopsContext = () => commands.executeCommand('setContext', ARCHOPS_CONFIGURED_CONTEXT, archopsConfigured(workspace.getConfiguration()));
+    void updateArchopsContext();
+    context.subscriptions.push(workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration('archops')) void updateArchopsContext();
+    }));
 
     new CapabilityProvider(context);
     new PatternProvider(context);

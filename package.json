@@ -45,20 +45,20 @@
           "id": "fitness-results",
           "name": "Fitness Results",
           "type": "webview",
-          "when": "extension:c4"
+          "when": "extension:c4 && varp.archops"
         }
       ],
       "varp-sidebar": [
         {
           "id": "patterns-catalogue",
           "name": "Patterns Catalogue",
-          "when": "extension:c4",
+          "when": "extension:c4 && varp.archops",
           "icon": "$(book)"
         },
         {
           "id": "capabilities-catalogue",
           "name": "Capabilities Catalogue",
-          "when": "extension:c4",
+          "when": "extension:c4 && varp.archops",
           "icon": "$(book)"
         }
       ]

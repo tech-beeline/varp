@@ -16,9 +16,10 @@
 
 import { AstUtils, type AstNode } from 'langium';
 import {
-    isArchetypeInstance, isComponent, isConstant, isContainer, isContainerInstance, isCustomElement,
-    isDeploymentNode, isGenericInstance, isGroup, isInfrastructureNode, isPerson,
-    isPropertiesBlock, isRelationship, isSoftwareSystem, isSoftwareSystemInstance
+    isArchetypeDefinition, isArchetypeInstance, isComponent, isConstant, isContainer, isContainerInstance,
+    isCustomElement, isDeploymentNode, isElementExtension, isElementsDirective, isGenericInstance, isGroup,
+    isInfrastructureNode, isPerson, isPropertiesBlock, isRelationship, isRelationshipExtension, isRelationshipsDirective,
+    isSoftwareSystem, isSoftwareSystemInstance
 } from '../generated/ast';
 import { C4Utils } from './c4-utils';
 
@@ -92,6 +93,19 @@ export function collectDocumentValues(root: AstNode | undefined): DocumentValues
         if (node.$type.endsWith('View') && typeof (node as any).key === 'string') {
             const key = C4Utils.stripQuotes((node as any).key).trim();
             if (key) values.views.add(key);
+            continue;
+        }
+        // Overlays, element extensions and archetypes declare values that end up on the
+        // elements they modify or instantiate.
+        if (isElementsDirective(node) || isElementExtension(node) || isArchetypeDefinition(node)) {
+            collectTags(node, values.elementTags);
+            collectTechnology(node, values.technologies);
+            collectProperties(node, values.elementPropertyKeys, values.elementPropertyValues);
+            continue;
+        }
+        if (isRelationshipExtension(node) || isRelationshipsDirective(node)) {
+            collectTags(node, values.relationshipTags);
+            collectProperties(node, values.relationshipPropertyKeys, values.relationshipPropertyValues);
             continue;
         }
         if (isRelationship(node)) {

@@ -262,3 +262,74 @@ ${MODEL}
         expect(await complete(second, updated)).toEqual(['Kotlin', 'PostgreSQL']);
     });
 });
+
+const OVERLAY_WORKSPACE = (expression: string) => `workspace {
+    model {
+        archetypes {
+            svc = softwareSystem {
+                tags "archetype"
+                technology "ArchetypeTech"
+            }
+        }
+        s = softwareSystem "S" {
+            tags "core"
+        }
+        a = softwareSystem "A"
+        !elements element.tag==core {
+            tags "overlay"
+            technology "OverlayTech"
+            properties {
+                "layer" "core"
+            }
+        }
+        !element a {
+            tags "extended"
+            technology "ExtTech"
+        }
+        !relationships *->* {
+            tags "overlay-rel"
+            properties {
+                "mode" "async"
+            }
+        }
+    }
+    views {
+        systemLandscape "L" {
+            include ${expression}
+        }
+    }
+}`;
+
+describe('expression value completion for overlays and archetypes', () => {
+    it('offers tags declared in overlays, extensions and archetypes', async () => {
+        const text = OVERLAY_WORKSPACE('element.tag==');
+        const labels = (await completeAt(text, at(text, 'element.tag=='))).map(item => item.label);
+
+        expect(labels).toEqual(['archetype', 'core', 'extended', 'overlay']);
+    });
+
+    it('offers technologies declared in overlays, extensions and archetypes', async () => {
+        const text = OVERLAY_WORKSPACE('element.technology==');
+        const labels = (await completeAt(text, at(text, 'element.technology=='))).map(item => item.label);
+
+        expect(labels).toEqual(['ArchetypeTech', 'ExtTech', 'OverlayTech']);
+    });
+
+    it('offers relationship tags declared in a relationships overlay', async () => {
+        const text = OVERLAY_WORKSPACE('relationship.tag==');
+        const labels = (await completeAt(text, at(text, 'relationship.tag=='))).map(item => item.label);
+
+        expect(labels).toEqual(['overlay-rel']);
+    });
+
+    it('offers property keys and values declared in overlays', async () => {
+        const keys = OVERLAY_WORKSPACE('element.properties["');
+        expect((await completeAt(keys, at(keys, 'element.properties["'))).map(item => item.label)).toEqual(['layer']);
+
+        const values = OVERLAY_WORKSPACE('element.properties["layer"]==');
+        expect((await completeAt(values, at(values, 'element.properties["layer"]=='))).map(item => item.label)).toEqual(['core']);
+
+        const relationshipKeys = OVERLAY_WORKSPACE('relationship.properties["');
+        expect((await completeAt(relationshipKeys, at(relationshipKeys, 'relationship.properties["'))).map(item => item.label)).toEqual(['mode']);
+    });
+});

@@ -221,6 +221,54 @@ ${MODEL}
         }
     });
 
+    it('offers values after a logical operator or a comma-separated include', async () => {
+        for (const expression of [
+            'element.tag==critical && element.technology==',
+            'element.tag==critical || element.technology==',
+            '(element.tag==critical) && element.technology==',
+            'a, element.technology==',
+        ]) {
+            const text = VIEW(expression);
+            const labels = (await completeAt(text, at(text, 'element.technology=='))).map(item => item.label);
+
+            expect(labels).toEqual(['Java', 'PostgreSQL']);
+        }
+    });
+
+    it('offers values in a quoted filter being typed', async () => {
+        const text = VIEW('"element.tag==critical && element.technology==');
+        const labels = (await completeAt(text, at(text, 'element.technology=='))).map(item => item.label);
+
+        expect(labels).toEqual(['Java', 'PostgreSQL']);
+    });
+
+    it('offers property values after a logical operator', async () => {
+        const text = VIEW('element.properties["owner"]==team-a && element.properties["owner"]==');
+        const labels = (await completeAt(text, at(text, 'element.properties["owner"]=='))).map(item => item.label);
+
+        expect(labels).toEqual(['team-a']);
+    });
+
+    it('does not offer values in an unterminated description or a comment', async () => {
+        for (const body of [
+            'description "about element.tag==',
+            '// about element.tag==',
+            '/* about element.tag==',
+        ]) {
+            const text = `workspace {
+    model {
+        s = softwareSystem "S" {
+            tags "critical"
+            ${body}
+        }
+    }
+}`;
+            const items = await completeAt(text, at(text, 'element.tag=='));
+
+            expect(items.map(item => item.label)).not.toContain('critical');
+        }
+    });
+
     it('does not offer values inside prose', async () => {
         const text = `workspace {
     model {

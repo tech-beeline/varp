@@ -47,6 +47,20 @@ const VIEW = (body: string) => `workspace {
 }`;
 
 describe('expression completion', () => {
+    it('offers element properties after a logical operator', async () => {
+        const text = VIEW('include element.tag==A && element.');
+        const items = await completeAt(text, text.indexOf('&& element.') + '&& element.'.length);
+
+        expect(items.map(item => item.label).sort()).toEqual([
+            'element.group',
+            'element.parent',
+            'element.properties',
+            'element.tag',
+            'element.technology',
+            'element.type',
+        ]);
+    });
+
     it('offers element properties after element.', async () => {
         const text = VIEW('include element.');
         const items = await completeAt(text, text.indexOf('element.') + 'element.'.length);

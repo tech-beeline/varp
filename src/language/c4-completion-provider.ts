@@ -49,8 +49,6 @@ const ELEMENT_TYPES = [
     'infrastructureNode', 'softwareSystemInstance', 'containerInstance', 'custom',
 ];
 
-/** AST nodes whose children hold view or model expressions. */
-const EXPRESSION_CONTAINERS = new Set(['IncludeProperty', 'ExcludeProperty', 'ElementsDirective', 'AnimationStep']);
 
 /** Concrete reference types and the AST types they accept. */
 const CONCRETE_REFERENCE_TYPES = new Map<string, Set<string>>([
@@ -338,15 +336,15 @@ export class C4CompletionProvider extends DefaultCompletionProvider {
         const values = this.expressionValues();
 
         const propertyKey = /(element|relationship)\.properties\[\s*"?([^"\]]*)$/i.exec(linePrefix);
-        if (propertyKey && this.isExpression(document, linePrefix, lineStart + propertyKey.index)) {
+        if (propertyKey && this.isExpression(document, lineStart + linePrefix.length)) {
             const keys = propertyKey[1].toLowerCase() === 'element'
                 ? values.elementPropertyKeys
                 : values.relationshipPropertyKeys;
             return this.valueItems(document, position, keys, propertyKey[2], lineStart + propertyKey.index + propertyKey[0].length - propertyKey[2].length, 'property');
         }
 
-        const propertyValue = /(element|relationship)\.properties\[\s*"([^"]*)"\s*\]\s*==\s*(.*)$/i.exec(linePrefix);
-        if (propertyValue && this.isExpression(document, linePrefix, lineStart + propertyValue.index)) {
+        const propertyValue = /(element|relationship)\.properties\[\s*"([^"]*)"\s*\]\s*==\s*((?:(?!&&|\|\|).)*)$/i.exec(linePrefix);
+        if (propertyValue && this.isExpression(document, lineStart + linePrefix.length)) {
             const byKey = propertyValue[1].toLowerCase() === 'element'
                 ? values.elementPropertyValues
                 : values.relationshipPropertyValues;
@@ -354,8 +352,8 @@ export class C4CompletionProvider extends DefaultCompletionProvider {
             return this.valueItems(document, position, byKey.get(propertyValue[2]) ?? [], typed, lineStart + propertyValue.index + propertyValue[0].length - typed.length, 'property value');
         }
 
-        const comparison = /(element|relationship)\.(tag|type|technology|group)\s*(?:==|!=)\s*(.*)$/i.exec(linePrefix);
-        if (!comparison || !this.isExpression(document, linePrefix, lineStart + comparison.index)) {
+        const comparison = /(element|relationship)\.(tag|type|technology|group)\s*(?:==|!=)\s*((?:(?!&&|\|\|).)*)$/i.exec(linePrefix);
+        if (!comparison || !this.isExpression(document, lineStart + linePrefix.length)) {
             return undefined;
         }
 
@@ -426,7 +424,7 @@ export class C4CompletionProvider extends DefaultCompletionProvider {
         const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
         const linePrefix = text.slice(lineStart, offset);
         const match = /\b(element|relationship)\.([\w\u00A0-\uFFFF]*)$/i.exec(linePrefix);
-        if (!match || !this.isExpression(document, linePrefix, lineStart + match.index)) {
+        if (!match || !this.isExpression(document, lineStart + linePrefix.length)) {
             return undefined;
         }
 
@@ -494,32 +492,63 @@ export class C4CompletionProvider extends DefaultCompletionProvider {
     }
 
     /**
-     * True when the expression keyword at `index` sits in an expression. The AST check
-     * covers regular views; a view body included from another file parses as a fragment
-     * without the enclosing view node, so the position is also accepted when the keyword
-     * starts a line, follows `include`/`exclude`, or opens a quoted or grouped expression.
+     * True when the cursor sits in code rather than in prose. Every caller matches a full
+     * expression shape in the text (`element.tag==`, `element.properties["`), which cannot
+     * occur outside a view or model expression, so only comments and prose strings must
+     * suppress the suggestions.
      */
-    private isExpression(document: LangiumDocument, linePrefix: string, offset: number): boolean {
-        if (this.isExpressionPosition(document, offset)) return true;
-        const text = document.textDocument.getText();
-        const relative = offset - (text.lastIndexOf('\n', offset - 1) + 1);
-        const before = linePrefix.slice(0, relative).trimEnd();
-        return before === '' || /(?:^|\s)(?:include|exclude)$/i.test(before) || /["(,]$/.test(before);
+    private isExpression(document: LangiumDocument, offset: number): boolean {
+        return !this.isInProse(document, offset);
     }
 
-    /** True when the offset sits inside a view or model expression. */
-    private isExpressionPosition(document: LangiumDocument, offset: number): boolean {
-        const root = document.parseResult?.value?.$cstNode;
-        if (!root) return false;
-        // An incomplete expression (`element.technology==` with no value) has no CST
-        // node at the cursor, so fall back to the last node before the gap.
-        const leaf = CstUtils.findLeafNodeAtOffset(root, offset) ?? CstUtils.findLeafNodeBeforeOffset(root, offset);
-        let node: AstNode | undefined = leaf?.astNode;
-        while (node) {
-            if (EXPRESSION_CONTAINERS.has(node.$type)) return true;
-            node = node.$container;
+    /**
+     * Whether the offset sits in a comment or a prose string. A string closed later on the
+     * line is prose. An unterminated string is a quoted filter only where a filter can start
+     * (`include`, `exclude`, `filtered`, `!elements`, `!relationships`); elsewhere it is a
+     * description being typed.
+     */
+    private isInProse(document: LangiumDocument, offset: number): boolean {
+        const text = document.textDocument.getText();
+        let inBlockComment = false;
+        let stringStart = -1;
+        for (let index = 0; index < offset; index++) {
+            const char = text[index];
+            const next = text[index + 1];
+            if (inBlockComment) {
+                if (char === '*' && next === '/') {
+                    inBlockComment = false;
+                    index++;
+                }
+                continue;
+            }
+            if (stringStart >= 0) {
+                if (char === '\\') {
+                    index++;
+                } else if (char === '"') {
+                    stringStart = -1;
+                }
+                continue;
+            }
+            if (char === '/' && next === '/') {
+                const lineEnd = text.indexOf('\n', index);
+                if (lineEnd < 0 || lineEnd >= offset) return true;
+                index = lineEnd;
+                continue;
+            }
+            if (char === '/' && next === '*') {
+                inBlockComment = true;
+                index++;
+                continue;
+            }
+            if (char === '"') stringStart = index;
         }
-        return false;
+        if (inBlockComment) return true;
+        if (stringStart < 0) return false;
+        const lineEnd = text.indexOf('\n', offset);
+        if (text.slice(offset, lineEnd < 0 ? text.length : lineEnd).includes('"')) return true;
+        const quoteLineStart = text.lastIndexOf('\n', stringStart - 1) + 1;
+        const beforeQuote = text.slice(quoteLineStart, stringStart);
+        return !/^\s*(?:include|exclude|filtered|!elements|!relationships)\b/i.test(beforeQuote);
     }
 
     protected override getReferenceCandidates(refInfo: ReferenceInfo, context: CompletionContext): Stream<AstNodeDescription> {

@@ -7617,6 +7617,10 @@ class JsonGenerator {
 
         const rels = this.allRelationshipsSet();
 
+        // A system context view always contains the software system it scopes, even when
+        // its include expressions match nothing; exclude operations below can remove it.
+        elementsAtView.add(scopeSoftwareSystem);
+
         // scope guard: only top-level elements (SoftwareSystem, Person, CustomElement) are allowed on System Context
         const isInScope = (element: NamedElement | undefined) : element is (SoftwareSystem | Person | CustomElement) => {
             return (isSoftwareSystem(element) || isPerson(element) || isCustomElement(element));

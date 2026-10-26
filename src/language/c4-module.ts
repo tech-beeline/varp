@@ -21,6 +21,7 @@ import { C4Validator, registerValidationChecks } from './c4-validator';
 import { C4InlayHintProvider } from './c4-inlay-hints';
 import { C4DocumentLinkProvider } from './c4-document-link';
 import { C4CodeLensProvider } from './c4-code-lens';
+import { C4CompletionProvider } from './c4-completion-provider';
 import { C4ScopeProvider } from './c4-scope-provider';
 import { C4NameProvider } from './c4-name-provider';
 import { C4DocumentBuilder } from './c4-document-builder';
@@ -82,6 +83,7 @@ export const C4Module: Module<C4Services, PartialLangiumServices & C4AddedServic
        C4Validator: () => new C4Validator()
    },
     lsp: {
+        CompletionProvider: (services: C4Services) => new C4CompletionProvider(services),
         InlayHintProvider: () => new C4InlayHintProvider(),
         DocumentLinkProvider: (services: C4Services) => new C4DocumentLinkProvider(services),
         CodeLensProvider: (services: C4Services) => new C4CodeLensProvider(services)

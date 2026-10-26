@@ -340,3 +340,8 @@ export function declaredIdentifier(node: any): string | undefined {
     if (id === undefined || id === null) return undefined;
     return String(id).replace(/^["']|["']$/g, '').replace(/=\s*$/, '').trim();
 }
+
+/** Human-readable AST type: `SoftwareSystem` -> `software system`. */
+export function describeType(type: string): string {
+    return type.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
+}

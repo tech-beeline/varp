@@ -22,6 +22,7 @@ import { C4InlayHintProvider } from './c4-inlay-hints';
 import { C4DocumentLinkProvider } from './c4-document-link';
 import { C4CodeLensProvider } from './c4-code-lens';
 import { C4CompletionProvider } from './c4-completion-provider';
+import { C4HoverProvider } from './c4-hover-provider';
 import { C4ScopeProvider } from './c4-scope-provider';
 import { C4NameProvider } from './c4-name-provider';
 import { C4DocumentBuilder } from './c4-document-builder';
@@ -84,6 +85,7 @@ export const C4Module: Module<C4Services, PartialLangiumServices & C4AddedServic
    },
     lsp: {
         CompletionProvider: (services: C4Services) => new C4CompletionProvider(services),
+        HoverProvider: (services: C4Services) => new C4HoverProvider(services),
         InlayHintProvider: () => new C4InlayHintProvider(),
         DocumentLinkProvider: (services: C4Services) => new C4DocumentLinkProvider(services),
         CodeLensProvider: (services: C4Services) => new C4CodeLensProvider(services)

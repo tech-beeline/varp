@@ -436,13 +436,13 @@ export class C4Validator {
      * from reporting names it cannot see.
      */
     private referenceExists(text: string, node: StringLiteralExpression): boolean {
-        const name = C4Utils.stripQuotes(text).trim();
+        const name = C4Utils.stripQuotes(text).trim().toLowerCase();
         if (!name) return false;
         const names = this.referenceNames(node);
         return names.has(name) || names.has(name.split('.').pop() ?? name);
     }
 
-    /** Names and identifiers of the elements and relationships of the workspace root. */
+    /** Identifiers of the elements and relationships of the workspace root. */
     private referenceNames(node: StringLiteralExpression): Set<string> {
         const names = new Set<string>();
         const document = AstUtils.getDocument(node);
@@ -459,10 +459,9 @@ export class C4Validator {
         if (!node || typeof node !== 'object') return;
         const items = [node, ...AstUtils.streamAllContents(node)];
         for (const item of items) {
+            // Filters address elements and groups by identifier; a name is not one.
             const id = declaredIdentifier(item);
-            if (id) names.add(id);
-            const name = typeof (item as any).name === 'string' ? C4Utils.stripQuotes((item as any).name).trim() : '';
-            if (name) names.add(name);
+            if (id) names.add(id.toLowerCase());
         }
         for (const item of items) {
             for (const inc of (item as any).includes ?? []) {
@@ -546,14 +545,12 @@ export class C4Validator {
         return typeof reference.$refText === 'string' ? this.referenceTextIsScope(reference.$refText, scope) : undefined;
     }
 
-    /** Whether an identifier text names the scope element: its identifier, name or path end. */
+    /** Whether an identifier text names the scope element: its identifier or path end. */
     private referenceTextIsScope(text: string, scope: SoftwareSystem): boolean {
-        const name = C4Utils.stripQuotes(text).trim();
-        if (!name) return false;
-        const lastSegment = name.split('.').pop() ?? name;
-        const id = declaredIdentifier(scope);
-        const scopeName = C4Utils.stripQuotes(scope.name);
-        return name === id || name === scopeName || lastSegment === id || lastSegment === scopeName;
+        const name = C4Utils.stripQuotes(text).trim().toLowerCase();
+        const id = declaredIdentifier(scope)?.toLowerCase();
+        if (!name || !id) return false;
+        return name === id || (name.split('.').pop() ?? name) === id;
     }
 
     /** True when the quoted filter sits in an exclude directive. */

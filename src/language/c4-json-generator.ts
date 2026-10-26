@@ -299,6 +299,8 @@ class JsonGenerator {
     private readonly propertiesModel: Record<string, string> = {};
     private readonly propertiesViews: Record<string, string> = {};
     private readonly elements: NamedElement[] = [];
+    /** Groups declared in the workspace; view filters address them by identifier. */
+    private readonly groups: Group[] = [];
     private readonly relationships: Relationship[] = [];
     /** Index of relationships by resolved source element id (rebuilt after !elements synthetic pushes). */
     private readonly relationshipsBySource: Map<string, Relationship[]> = new Map();
@@ -1400,6 +1402,7 @@ class JsonGenerator {
         // Universal collection handler: processes a group, a relationship or a named element
         const processItem = (item: any): void => {
             if (isGroup(item)) {
+                this.groups.push(item);
                 // Groups add another recursion level with an extended group stack
                 this.collectLocal(item, [...groupStack, this.substitute(item.name) || ""], visitedDocs);
             }
@@ -6072,13 +6075,42 @@ class JsonGenerator {
         // Quoted-filter references are never linked: resolve from $refText only,
         // otherwise accessing `.ref` logs "Attempted reference resolution ...".
         if (this.quotedFilterReferences.has(reference)) {
-            return typeof text === 'string' ? this.findElementByReferenceText(text) : undefined;
+            return typeof text === 'string' ? this.findFilterReference(text) : undefined;
         }
         if (typeof text === 'string' && text.length > 0) {
             const match = this.findElementByReferenceText(text);
             if (match) return match;
         }
         return this.el(reference.ref);
+    }
+
+    /**
+     * Resolves a view-filter reference. Filters address elements and groups by their DSL
+     * identifier only, matched without regard to case, as the reference implementation
+     * does; an element name is not an identifier.
+     */
+    private findFilterReference(text: string): NamedElement | Group | undefined {
+        const name = C4Utils.stripQuotes(text).trim().toLowerCase();
+        if (!name) return undefined;
+        const element = this.elements.find(candidate => {
+            const id = this.elementId(candidate);
+            if (typeof id !== 'string' || id.length === 0) return false;
+            return id.toLowerCase() === name || this.qualifiedIdentifier(candidate).toLowerCase() === name;
+        });
+        if (element) return element;
+        return this.groups.find(group => {
+            const id = this.elementId(group);
+            if (typeof id !== 'string' || id.length === 0) return false;
+            return id.toLowerCase() === name || this.qualifiedGroupIdentifier(group).toLowerCase() === name;
+        });
+    }
+
+    /** Hierarchical identifier of a group: its parent path and its own identifier. */
+    private qualifiedGroupIdentifier(group: Group): string {
+        const id = this.elementId(group) ?? '';
+        const parent = this.el(group.$container);
+        const parentPath = parent && !isGroup(parent) ? this.qualifiedIdentifier(parent) : '';
+        return parentPath && id ? `${parentPath}.${id}` : id;
     }
 
     /** Resolves a reference text (identifier, name, or qualified path) to a collected element. */
@@ -6142,7 +6174,7 @@ class JsonGenerator {
         if (isStringLiteralExpression(e)) {
             const parsed = this.parseQuotedFilter(e.value);
             if (parsed.identifier !== undefined) {
-                const reference = this.findElementByReferenceText(parsed.identifier)
+                const reference = this.findFilterReference(parsed.identifier)
                     ?? this.relationshipsByIdentifier.get(C4Utils.stripQuotes(parsed.identifier));
                 if (reference) this.addReferenceToResult(reference, res, isAllowed);
                 return res;

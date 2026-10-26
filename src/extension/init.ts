@@ -22,6 +22,7 @@ import { DiagramPreview } from "./diagram-preview";
 import { PatternProvider } from "./patterns";
 import { registerFitnessChecks } from "./fitness-functions";
 import { FitnessResultsView } from "./fitness-results-view";
+import { resolveFreshViewKey } from "./view-keys";
 
 /**
  * Minimal shape of the language client (node or browser) used by the extension.
@@ -182,34 +183,6 @@ function scheduleRefresh(uri: string, json: any, generation?: number, textMeasur
     });
 }
 
-/**
- * Finds the view in freshly generated JSON that corresponds to the currently
- * displayed view. View keys embed a CST-offset hash that changes when the source
- * is edited, so the exact key can go stale; matching is done on the stable base
- * prefix (`<TargetName>-<ViewType>`).
- */
-function resolveFreshViewKey(json: any, currentKey: string | undefined): string | undefined {
-    if (!currentKey) {
-        return undefined;
-    }
-    const dash = currentKey.lastIndexOf('-');
-    const prefix = dash > 0 ? currentKey.substring(0, dash) : currentKey;
-    for (const bucket of Object.values((json?.views ?? {}) as Record<string, unknown>)) {
-        if (!Array.isArray(bucket)) {
-            continue;
-        }
-        for (const v of bucket as any[]) {
-            if (!v || typeof v.key !== 'string') {
-                continue;
-            }
-            if (prefix ? v.key.startsWith(prefix + '-') : v.key === currentKey) {
-                return v.key;
-            }
-        }
-    }
-    return undefined;
-}
-
 /** Opens a side panel with the raw workspace JSON for debugging. */
 async function openJsonDebugTab(json: any): Promise<void> {
     const content = JSON.stringify(json, null, 2);
@@ -235,7 +208,7 @@ async function refreshDiagram(uri: string, json: any, generation?: number, textM
     const firstDelivery = preview.isPendingJson();
     // View keys change when the source shifts, so resolve the matching key in the
     // fresh JSON; updateWebView stores it for subsequent refreshes.
-    const viewKey = resolveFreshViewKey(json, currentKey) ?? currentKey;
+    const viewKey = resolveFreshViewKey(json, currentKey, preview.getCurrentJson()) ?? currentKey;
     // Themes are fetched once when the preview is opened and are already stored
     // on the preview (included in every postMessage), so re-rendering the same
     // diagram must not block on re-fetching theme files.
@@ -284,6 +257,7 @@ async function getThemesForPreview(themeUrls: string[] | undefined): Promise<{ u
  * - Export commands (DrawIO, SVG)
  */
 export function init(context: ExtensionContext): void {
+
 
     new CapabilityProvider(context);
     new PatternProvider(context);

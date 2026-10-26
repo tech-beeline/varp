@@ -7702,6 +7702,8 @@ class JsonGenerator {
                     // update element visibility
                     res.forEach(e => {
                         if (isRelationshipMember(e)) {
+                            // The scope software system cannot be removed from its system context view.
+                            if (!isInclude && e === scopeSoftwareSystem) return;
                             isInclude ? elementsAtView.add(e) : elementsAtView.delete(e);
                         } else if (isRelationship(e)) {
                             this.applyRelationshipVisibility(e, isInclude, elementsAtView, relationshipsAtView);

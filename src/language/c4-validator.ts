@@ -15,11 +15,11 @@
 */
 
 import { AstNode, AstUtils, isAstNode, type ValidationAcceptor, type ValidationChecks } from 'langium';
-import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, ModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty, type StringLiteralExpression, isElementEqExpression, isExcludeProperty, type ExcludeProperty, type ViewExpression } from '../generated/ast';
+import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, ModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty, type StringLiteralExpression, isElementEqExpression, isElementNotEqExpression, isBinaryExpression, isSingleElementExpression, isStringLiteralExpression, isExcludeProperty, type ExcludeProperty, type ViewExpression } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
 import * as includeResolver from './c4-include-resolver';
-import { C4Utils } from './c4-utils';
+import { C4Utils, declaredIdentifier } from './c4-utils';
 import { parseQuotedFilterText } from './c4-quoted-filter';
 import { canonicalElementName, findDuplicateRelationships, type DeclaredRelationship } from './c4-implied-relationships';
 
@@ -424,16 +424,75 @@ export class C4Validator {
     }
 
     /**
-     * `element==*` selects the default elements of the view, which only an include can do;
-     * the reference implementation reports it as a missing element inside an exclude.
+     * Checks the exclusions the reference implementation rejects: `element==*`, which only
+     * an include can use, and a system context view excluding the software system it scopes.
      */
     checkExcludeExpressions(node: ExcludeProperty, accept: ValidationAcceptor): void {
+        const view = node.$container;
+        const scope = isSystemContextView(view) ? view.softwareSystem?.ref : undefined;
         for (const item of node.expressions ?? []) {
             const expression = item.expression;
             if (isElementEqExpression(expression) && expression.all === '*') {
                 accept('error', 'The element/relationship "*" does not exist', { node: item });
+                continue;
+            }
+            if (scope && this.excludesScopeElement(expression, scope)) {
+                accept('error', `The element named '${C4Utils.stripQuotes(scope.name)}' cannot be removed from this view.`, { node: item });
             }
         }
+    }
+
+    /** True when the exclusion evaluates to the software system the view is scoped to. */
+    private excludesScopeElement(expression: ViewExpression, scope: SoftwareSystem): boolean {
+        const quoted = isStringLiteralExpression(expression);
+        const expressions = quoted
+            ? parseQuotedFilterText(this.sharedServices, C4Utils.stripQuotes(expression.value)).expressions
+            : [expression];
+        return expressions.some(item => this.containsScopeElement(item, scope, quoted) === true);
+    }
+
+    /**
+     * Whether the evaluated expression contains the scope element. `undefined` means the
+     * expression depends on the model (tags, types, technologies), which this check does
+     * not evaluate.
+     */
+    private containsScopeElement(expression: ViewExpression | undefined, scope: SoftwareSystem, quoted: boolean): boolean | undefined {
+        if (!expression) return undefined;
+        if (isSingleElementExpression(expression)) return this.referenceIsScope(expression.element, scope, quoted);
+        if (isElementEqExpression(expression)) {
+            if (expression.all === '*') return true;
+            return this.containsScopeElement(expression.expr, scope, quoted);
+        }
+        if (isElementNotEqExpression(expression)) {
+            const inner = this.containsScopeElement(expression.expr, scope, quoted);
+            return inner === undefined ? undefined : !inner;
+        }
+        if (isBinaryExpression(expression)) {
+            const left = this.containsScopeElement(expression.left, scope, quoted);
+            const right = this.containsScopeElement(expression.right, scope, quoted);
+            if (expression.operator === '||') {
+                if (left === true || right === true) return true;
+                return left === false && right === false ? false : undefined;
+            }
+            if (left === false || right === false) return false;
+            return left === true && right === true ? true : undefined;
+        }
+        return undefined;
+    }
+
+    /**
+     * Whether an element reference names the scope element. Quoted filters are parsed into
+     * an unlinked document, so their references are matched by text.
+     */
+    private referenceIsScope(reference: any, scope: SoftwareSystem, quoted: boolean): boolean | undefined {
+        if (!reference) return undefined;
+        if (!quoted) return reference.ref === scope;
+        const text = typeof reference.$refText === 'string' ? C4Utils.stripQuotes(reference.$refText).trim() : '';
+        if (!text) return undefined;
+        const lastSegment = text.split('.').pop() ?? text;
+        const id = declaredIdentifier(scope);
+        const name = C4Utils.stripQuotes(scope.name);
+        return text === id || text === name || lastSegment === id || lastSegment === name;
     }
 
     /** True when the quoted filter sits in an exclude directive. */

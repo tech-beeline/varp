@@ -6400,7 +6400,10 @@ class JsonGenerator {
             const searchTags = e.values.map(t => C4Utils.stripQuotes(t));
             relationshipsAtScope.forEach(r => {
                 const relTags = this.tagsOfRelationship(r.relationship);
-                const hasAllTags = searchTags.every(st => relTags.includes(st));
+                // An implied relationship has no tags of its own, so the tag is also
+                // read from the linked relationship.
+                const linkedTags = r.linked ? this.tagsOfRelationship(r.linked) : [];
+                const hasAllTags = searchTags.every(st => relTags.includes(st) || linkedTags.includes(st));
                 const matches = e.operator === '==' ? hasAllTags : !hasAllTags;
                 if (matches) {
                     if(elementsAtView.has(r.source) && elementsAtView.has(r.target)) res.add(r.relationship);

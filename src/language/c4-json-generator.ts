@@ -17,7 +17,7 @@
 import { AstNode, AstUtils, Reference, isReference } from 'langium';
 import { URI } from 'vscode-uri';
 import { flatId, C4Utils, archetypeChain, archetypeInstanceType, declaredIdentifier, type FlatIdResolvers } from './c4-utils';
-import { parseQuotedFilterText } from './c4-quoted-filter';
+import { parseQuotedFilterText, type QuotedFilterParseResult } from './c4-quoted-filter';
 import { encodePlantUml } from './plantuml-encoder';
 import { Graphviz } from '@hpcc-js/wasm-graphviz';
 
@@ -359,7 +359,7 @@ class JsonGenerator {
      * Cache for quoted view filters, keyed by filter
      * text. The filter content is re-parsed on demand.
      */
-    private readonly quotedFilterExpressions: Map<string, ViewExpression[]> = new Map();
+    private readonly quotedFilterExpressions: Map<string, QuotedFilterParseResult> = new Map();
     /** References that belong to unlinked quoted-filter expressions; resolved by $refText, never by .ref. */
     private readonly quotedFilterReferences = new WeakSet<object>();
 
@@ -6005,22 +6005,44 @@ class JsonGenerator {
     }
 
     /**
-     * Re-parses the content of a quoted view filter through the grammar and returns
-     * the resulting expressions. The filter text is parsed as a synthetic document
-     * that is never registered. Results are cached by filter text. An invalid filter
-     * yields no expressions; the validator reports it separately.
+     * Adds an element, group or relationship reference to an expression result. A
+     * relationship identifier also brings every implied relationship linked to it, and a
+     * group expands to its leaf-level elements.
      */
-    private parseQuotedFilter(value: string | undefined): ViewExpression[] {
+    private addReferenceToResult(
+        reference: NamedElement | Relationship | Group,
+        res: Set<RelationshipMember | Relationship>,
+        isAllowed: (el: NamedElement | undefined) => el is RelationshipMember
+    ): void {
+        if (isRelationship(reference)) {
+            res.add(reference);
+            for (const wrapper of this.collectAllRelationships()) {
+                if (wrapper.linked === reference) res.add(wrapper.relationship);
+            }
+        } else if (isGroup(reference)) {
+            this.leafElementsOfGroup(reference).forEach(el => this.addLeafElementWithInstanceFallback(el, res, isAllowed));
+        } else {
+            this.addLeafElementWithInstanceFallback(reference, res, isAllowed);
+        }
+    }
+
+    /**
+     * Re-parses the content of a quoted view filter. Text without an expression prefix is
+     * returned as a single identifier; anything else is parsed as a synthetic document that
+     * is never registered. Results are cached by filter text. A filter that references
+     * nothing yields an empty result; the validator reports it separately.
+     */
+    private parseQuotedFilter(value: string | undefined): QuotedFilterParseResult {
         const text = C4Utils.stripQuotes(value);
-        if (!text) return [];
+        if (!text) return { expressions: [], all: false, parserErrors: [] };
 
         const cached = this.quotedFilterExpressions.get(text);
         if (cached) return cached;
 
-        const parsed = parseQuotedFilterText(this.services.shared, text).expressions;
+        const parsed = parseQuotedFilterText(this.services.shared, text);
         // The document is never linked, so register its references: they must be
         // resolved from $refText instead of triggering reference resolution.
-        for (const expression of parsed) {
+        for (const expression of parsed.expressions) {
             this.registerQuotedFilterReferences(expression);
         }
         this.quotedFilterExpressions.set(text, parsed);
@@ -6118,8 +6140,15 @@ class JsonGenerator {
         // Quoted filter: the grammar wraps the whole filter in a
         // StringLiteralExpression; evaluate the re-parsed content.
         if (isStringLiteralExpression(e)) {
-            for (const parsed of this.parseQuotedFilter(e.value)) {
-                this.applyExpression(parsed, elementsAtView, relationshipsAtScope, isAllowed)
+            const parsed = this.parseQuotedFilter(e.value);
+            if (parsed.identifier !== undefined) {
+                const reference = this.findElementByReferenceText(parsed.identifier)
+                    ?? this.relationshipsByIdentifier.get(C4Utils.stripQuotes(parsed.identifier));
+                if (reference) this.addReferenceToResult(reference, res, isAllowed);
+                return res;
+            }
+            for (const expression of parsed.expressions) {
+                this.applyExpression(expression, elementsAtView, relationshipsAtScope, isAllowed)
                     .forEach(item => res.add(item));
             }
             return res;
@@ -6127,28 +6156,13 @@ class JsonGenerator {
         if (isSingleElementExpression(e)) {
             // Normalise to the materialised element before matching.
             const ref = this.resolveExpressionReference(e.element);
-            if (isRelationship(ref)) {
-                // Relationship identifier: it resolves the relationship and every
-                // implied relationship linked to it.
-                res.add(ref);
-                for (const wrapper of this.collectAllRelationships()) {
-                    if (wrapper.linked === ref) res.add(wrapper.relationship);
-                }
-            } else if (isGroup(ref)) {
-                // Groups expand to their leaf-level named elements
-                this.leafElementsOfGroup(ref).forEach(el => this.addLeafElementWithInstanceFallback(el, res, isAllowed));
-            } else if (ref) {
-                this.addLeafElementWithInstanceFallback(ref as NamedElement, res, isAllowed);
+            if (ref) {
+                this.addReferenceToResult(ref, res, isAllowed);
             } else {
                 // Unlinked identifier: fall back to the relationship index.
                 const text = e.element?.$refText;
                 const relationship = text ? this.relationshipsByIdentifier.get(C4Utils.stripQuotes(text)) : undefined;
-                if (relationship) {
-                    res.add(relationship);
-                    for (const wrapper of this.collectAllRelationships()) {
-                        if (wrapper.linked === relationship) res.add(wrapper.relationship);
-                    }
-                }
+                if (relationship) this.addReferenceToResult(relationship, res, isAllowed);
             }
         }
         // BinaryExpression: expr1 && expr2 (intersection) or expr1 || expr2 (union)

@@ -15,6 +15,7 @@
 */
 
 import { AstNode, AstUtils, isAstNode, type ValidationAcceptor, type ValidationChecks } from 'langium';
+import { URI } from 'vscode-uri';
 import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, ModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty, type StringLiteralExpression, isElementEqExpression, isElementNotEqExpression, isBinaryExpression, isSingleElementExpression, isStringLiteralExpression, isExcludeProperty, type ExcludeProperty, type ViewExpression } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
@@ -402,15 +403,21 @@ export class C4Validator {
     }
 
     /**
-     * A quoted view filter is re-parsed as an expression. `*` and `element==*` select the
-     * default elements of the view and are valid only as the whole include filter. Any
-     * other text that does not parse is treated as an element/relationship name, so it is
-     * reported the way the reference implementation does.
+     * A quoted view filter is re-parsed the way the reference implementation reads it.
+     * `*` and `element==*` select the default elements of the view and are valid only as
+     * the whole include filter. Text without an expression prefix is an element or
+     * relationship identifier, which must exist in the model.
      */
     checkQuotedViewExpression(node: StringLiteralExpression, accept: ValidationAcceptor): void {
         const text = C4Utils.stripQuotes(node.value);
         if (!text) return;
         const parsed = parseQuotedFilterText(this.sharedServices, text);
+        if (parsed.identifier !== undefined) {
+            if (!this.referenceExists(parsed.identifier, node)) {
+                accept('error', `The element/relationship "${parsed.identifier}" does not exist`, { node });
+            }
+            return;
+        }
         if (parsed.all || this.containsAllElementsExpression(parsed.expressions)) {
             const standalone = parsed.all || text.trim() === 'element==*';
             if (!standalone || this.isExcludeExpression(node)) {
@@ -420,6 +427,54 @@ export class C4Validator {
         }
         if (parsed.expressions.length === 0) {
             accept('error', `The element/relationship "${text}" does not exist`, { node });
+        }
+    }
+
+    /**
+     * Whether an element or relationship identifier exists in the workspace that owns the
+     * filter. Hierarchical paths resolve through their last segment, which keeps the check
+     * from reporting names it cannot see.
+     */
+    private referenceExists(text: string, node: StringLiteralExpression): boolean {
+        const name = C4Utils.stripQuotes(text).trim();
+        if (!name) return false;
+        const names = this.referenceNames(node);
+        return names.has(name) || names.has(name.split('.').pop() ?? name);
+    }
+
+    /** Names and identifiers of the elements and relationships of the workspace root. */
+    private referenceNames(node: StringLiteralExpression): Set<string> {
+        const names = new Set<string>();
+        const document = AstUtils.getDocument(node);
+        if (!document) return names;
+        const rootUri = includeResolver.getRootWorkspaceUri(this.sharedServices, document.uri.toString());
+        const rootDocument = this.sharedServices.workspace.LangiumDocuments.getDocument(URI.parse(rootUri));
+        const root = rootDocument?.parseResult.value ?? document.parseResult.value;
+        this.collectReferenceNames(root, names, new Set([document.uri.toString()]));
+        return names;
+    }
+
+    /** Collects names and identifiers from a subtree, following its !include directives. */
+    private collectReferenceNames(node: any, names: Set<string>, visited: Set<string>): void {
+        if (!node || typeof node !== 'object') return;
+        const items = [node, ...AstUtils.streamAllContents(node)];
+        for (const item of items) {
+            const id = declaredIdentifier(item);
+            if (id) names.add(id);
+            const name = typeof (item as any).name === 'string' ? C4Utils.stripQuotes((item as any).name).trim() : '';
+            if (name) names.add(name);
+        }
+        for (const item of items) {
+            for (const inc of (item as any).includes ?? []) {
+                const includedRoot = this.resolveIncludedRoot(inc);
+                if (!includedRoot) continue;
+                const uri = AstUtils.getDocument(includedRoot)?.uri.toString();
+                if (uri) {
+                    if (visited.has(uri)) continue;
+                    visited.add(uri);
+                }
+                this.collectReferenceNames(includedRoot, names, visited);
+            }
         }
     }
 
@@ -444,11 +499,12 @@ export class C4Validator {
 
     /** True when the exclusion evaluates to the software system the view is scoped to. */
     private excludesScopeElement(expression: ViewExpression, scope: SoftwareSystem): boolean {
-        const quoted = isStringLiteralExpression(expression);
-        const expressions = quoted
-            ? parseQuotedFilterText(this.sharedServices, C4Utils.stripQuotes(expression.value)).expressions
-            : [expression];
-        return expressions.some(item => this.containsScopeElement(item, scope, quoted) === true);
+        if (isStringLiteralExpression(expression)) {
+            const parsed = parseQuotedFilterText(this.sharedServices, C4Utils.stripQuotes(expression.value));
+            if (parsed.identifier !== undefined) return this.referenceTextIsScope(parsed.identifier, scope);
+            return parsed.expressions.some(item => this.containsScopeElement(item, scope, true) === true);
+        }
+        return this.containsScopeElement(expression, scope, false) === true;
     }
 
     /**
@@ -487,12 +543,17 @@ export class C4Validator {
     private referenceIsScope(reference: any, scope: SoftwareSystem, quoted: boolean): boolean | undefined {
         if (!reference) return undefined;
         if (!quoted) return reference.ref === scope;
-        const text = typeof reference.$refText === 'string' ? C4Utils.stripQuotes(reference.$refText).trim() : '';
-        if (!text) return undefined;
-        const lastSegment = text.split('.').pop() ?? text;
+        return typeof reference.$refText === 'string' ? this.referenceTextIsScope(reference.$refText, scope) : undefined;
+    }
+
+    /** Whether an identifier text names the scope element: its identifier, name or path end. */
+    private referenceTextIsScope(text: string, scope: SoftwareSystem): boolean {
+        const name = C4Utils.stripQuotes(text).trim();
+        if (!name) return false;
+        const lastSegment = name.split('.').pop() ?? name;
         const id = declaredIdentifier(scope);
-        const name = C4Utils.stripQuotes(scope.name);
-        return text === id || text === name || lastSegment === id || lastSegment === name;
+        const scopeName = C4Utils.stripQuotes(scope.name);
+        return name === id || name === scopeName || lastSegment === id || lastSegment === scopeName;
     }
 
     /** True when the quoted filter sits in an exclude directive. */

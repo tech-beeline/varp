@@ -59,12 +59,50 @@ export function requoteFilterValues(text: string): string {
 }
 
 export interface QuotedFilterParseResult {
-    /** Expressions the filter text parsed into; empty when it is not a valid filter. */
+    /** Expressions the filter text parsed into; empty when the text is not an expression. */
     expressions: ViewExpression[];
+    /** The whole text as an element or relationship identifier, when it is not an expression. */
+    identifier?: string;
     /** True when the whole text is `*`, which selects the default elements of the view. */
     all: boolean;
     /** Raw parser messages, for callers that want the underlying reason. */
     parserErrors: string[];
+}
+
+/** Expression prefixes of the reference implementation, in lower case. */
+const EXPRESSION_PREFIXES = [
+    'element.type==',
+    'element.technology==',
+    'element.technology!=',
+    'element.tag==',
+    'element.tag!=',
+    'element.group==',
+    'element.parent==',
+    'element==',
+    'element!=',
+    'relationship.tag==',
+    'relationship.tag!=',
+    'relationship.source==',
+    'relationship.destination==',
+    'relationship==',
+];
+
+/** Expression shapes that are not a plain prefix, matching the reference implementation. */
+const EXPRESSION_PATTERNS = [
+    /^element\.properties\[.*]==.*/,
+    /^relationship\.properties\[.*]==.*/
+];
+
+/**
+ * Whether the reference implementation reads the filter text as an expression. Text
+ * without an expression prefix is an element or relationship identifier, so operators
+ * inside it do not combine expressions: `a && b` names one element.
+ */
+export function isFilterExpression(text: string): boolean {
+    const value = text.trim().toLowerCase();
+    return value.includes('->')
+        || EXPRESSION_PREFIXES.some(prefix => value.startsWith(prefix))
+        || EXPRESSION_PATTERNS.some(pattern => pattern.test(value));
 }
 
 /**
@@ -75,6 +113,9 @@ export interface QuotedFilterParseResult {
  */
 export function parseQuotedFilterText(sharedServices: any, text: string): QuotedFilterParseResult {
     if (!text) return { expressions: [], all: false, parserErrors: [] };
+    const trimmed = text.trim();
+    if (trimmed === '*') return { expressions: [], all: true, parserErrors: [] };
+    if (!isFilterExpression(trimmed)) return { expressions: [], identifier: trimmed, all: false, parserErrors: [] };
 
     const dsl = `views {\n    custom {\n        include ${requoteFilterValues(text)}\n    }\n}`;
     const document = sharedServices.workspace.LangiumDocumentFactory
@@ -88,10 +129,9 @@ export function parseQuotedFilterText(sharedServices: any, text: string): Quoted
             if (element.expression) expressions.push(element.expression);
         }
     }
-    const includeProps = root?.viewsBlocks?.at(0)?.views?.at(0)?.includeProps ?? [];
     return {
         expressions,
-        all: includeProps.some((include: any) => include.all === '*'),
+        all: false,
         parserErrors: document.parseResult.parserErrors.map((e: any) => e.message)
     };
 }

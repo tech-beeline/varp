@@ -1,5 +1,5 @@
 name: Push
-run-name: ${{ github.actor }} is running build on push event🚀
+run-name: ${{ github.actor }} is running build on push event 🚀
 on:
   push:
     branches:
@@ -8,32 +8,26 @@ on:
       - '!release'
 jobs:
   build:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./extension
+    runs-on: ubuntu-24.04
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Set Java 17.x
-        uses: actions/setup-java@v4
+      - name: Set Node.js 24.18.0
+        uses: actions/setup-node@v5
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          node-version: '24.18.0'
+          cache: 'npm'
 
-      - name: Set Node.js 20.x
-        uses: actions/setup-node@v4
+      - name: Cache Emscripten SDK
+        uses: actions/cache@v4
         with:
-          node-version: '20'
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Set Yarn version
-        run: yarn set version stable
+          path: native/graphviz/build-wasm/_deps
+          key: emsdk-${{ runner.os }}-${{ hashFiles('native/graphviz/cmake/emsdk.cmake') }}
 
       - name: Install dependencies
-        run: yarn install --immutable
+        run: npm ci
 
-      - name: Build
-        run: yarn package-github
+      - name: Build, test and package
+        run: npm run build:ci

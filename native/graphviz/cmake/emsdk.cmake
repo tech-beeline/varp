@@ -30,19 +30,22 @@ if(NOT emsdk_activate EQUAL 0)
     message(FATAL_ERROR "emsdk activate ${EMSDK_VERSION} failed with ${emsdk_activate}")
 endif()
 
-# emcc.bat starts the compiler driver with %EMSDK_PYTHON% and falls back to a bare
-# "python" from PATH, so the interpreter installed by emsdk is taken from the
-# generated config and exported for the toolchain checks and for the build.
-file(STRINGS "${emsdk_SOURCE_DIR}/.emscripten" emsdk_config)
-foreach(line IN LISTS emsdk_config)
-    if(line MATCHES "^PYTHON = emsdk_path \\+ '([^']+)'")
-        set(EMSDK_PYTHON "${emsdk_SOURCE_DIR}${CMAKE_MATCH_1}" CACHE FILEPATH "Python used by emcc")
+# On Windows emcc.bat starts the compiler driver with %EMSDK_PYTHON% and falls
+# back to a bare "python" from PATH, so the interpreter installed by emsdk is taken
+# from the generated config and exported for the toolchain checks and the build.
+# Other platforms run emcc with the system python3 and have no PYTHON entry.
+if(WIN32)
+    file(STRINGS "${emsdk_SOURCE_DIR}/.emscripten" emsdk_config)
+    foreach(line IN LISTS emsdk_config)
+        if(line MATCHES "^PYTHON = emsdk_path \\+ '([^']+)'")
+            set(EMSDK_PYTHON "${emsdk_SOURCE_DIR}${CMAKE_MATCH_1}" CACHE FILEPATH "Python used by emcc")
+        endif()
+    endforeach()
+    if(NOT EMSDK_PYTHON)
+        message(FATAL_ERROR "PYTHON is not defined in ${emsdk_SOURCE_DIR}/.emscripten")
     endif()
-endforeach()
-if(NOT EMSDK_PYTHON)
-    message(FATAL_ERROR "PYTHON is not defined in ${emsdk_SOURCE_DIR}/.emscripten")
+    set(ENV{EMSDK_PYTHON} "${EMSDK_PYTHON}")
 endif()
-set(ENV{EMSDK_PYTHON} "${EMSDK_PYTHON}")
 
 set(CMAKE_TOOLCHAIN_FILE
     "${emsdk_SOURCE_DIR}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"

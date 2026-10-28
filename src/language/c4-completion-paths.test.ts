@@ -16,12 +16,13 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { NodeFileSystem } from 'langium/node';
 import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
 
-const ROOT = join(process.env.TEMP ?? process.env.TMP ?? '.', 'c4-path-completion');
+const ROOT = join(tmpdir(), 'c4-path-completion');
 
 beforeAll(() => {
     rmSync(ROOT, { recursive: true, force: true });

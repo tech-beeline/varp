@@ -4811,13 +4811,14 @@ class JsonGenerator {
             if (inner !== undefined) innerOf[nodeId] = inner;
         }
 
+        const header: string[] = [];
+        header.push('digraph {');
+        header.push('  compound=true');
+        header.push(`  graph [splines=polyline,rankdir=${rankdir},ranksep=${ranksep},nodesep=${nodesep},fontsize=5]`);
+        header.push('  node [shape=box,fontsize=5]');
+        header.push('  edge []');
+        header.push('');
         const lines: string[] = [];
-        lines.push('digraph {');
-        lines.push('  compound=true');
-        lines.push(`  graph [splines=polyline,rankdir=${rankdir},ranksep=${ranksep},nodesep=${nodesep},fontsize=5]`);
-        lines.push('  node [shape=box,fontsize=5]');
-        lines.push('  edge []');
-        lines.push('');
 
         const emitNode = (id: string, indent: string) => {
             const s = sizes[id];
@@ -4865,6 +4866,27 @@ class JsonGenerator {
         // misleading parallel edges). Deduplicated by (id + direction): dynamic views
         // emit forward AND response edges that share the same id.
         const seen = new Set<string>();
+        // Connected components decide whether the graph is packed. Dot lays the
+        // components of a disconnected graph out in one long rank, which turns a view
+        // with many isolated elements into a strip; packing arranges them in a grid.
+        const componentRoot = new Map<string, string>();
+        for (const id of Object.keys(sizes)) componentRoot.set(id, id);
+        const componentOf = (start: string): string => {
+            let root = start;
+            while (componentRoot.get(root) !== root) root = componentRoot.get(root)!;
+            let current = start;
+            while (componentRoot.get(current) !== root) {
+                const next = componentRoot.get(current)!;
+                componentRoot.set(current, root);
+                current = next;
+            }
+            return root;
+        };
+        const joinComponents = (a: string, b: string) => {
+            const rootA = componentOf(a);
+            const rootB = componentOf(b);
+            if (rootA !== rootB) componentRoot.set(rootB, rootA);
+        };
         for (const item of relationships) {
             const relationship = item?.relationship ?? item;
             const rawSourceId = this.getId(this.resolveSource(relationship));
@@ -4877,6 +4899,7 @@ class JsonGenerator {
             const targetId = deployCluster[rawTargetId] !== undefined ? innerOf[rawTargetId] : rawTargetId;
             if (sourceId === undefined || targetId === undefined) continue;
             if (sizes[sourceId] === undefined || sizes[targetId] === undefined) continue;
+            joinComponents(sourceId, targetId);
             const edgeId = item?.id ?? this.getId(item);
             const dedupeKey = `${edgeId}\u0000${sourceId}\u0000${targetId}`;
             if (seen.has(dedupeKey)) continue;
@@ -4888,11 +4911,27 @@ class JsonGenerator {
         }
 
         lines.push('}');
+
+        // A connected graph is left to dot's own component handling, and so is a view
+        // whose elements mostly form connected pieces. Only a large view that is
+        // almost entirely isolated elements is packed: there dot lays the components
+        // out in one long rank and the view turns into a strip. Packing arranges the
+        // components in an array grid whose column count grows with the square root of
+        // the component count, so the result stays close to a 16:9 shape.
+        const nodeCount = Object.keys(sizes).length;
+        const componentCount = new Set(Object.keys(sizes).map(componentOf)).size;
+        if (nodeCount >= 50 && componentCount >= nodeCount * 0.9) {
+            const columns = Math.min(64, Math.max(2, Math.round(Math.sqrt(componentCount) * 0.85)));
+            const separation = Number(autoLayout.nodeSeparation) || STRUCTURIZR_DPI;
+            const margin = Math.round((separation / STRUCTURIZR_DPI) * 72);
+            header[2] = `  graph [splines=polyline,rankdir=${rankdir},ranksep=${ranksep},nodesep=${nodesep},fontsize=5,packmode=array${columns},pack=${margin}]`;
+        }
+
         // Keep the frame tree so the paper can be refitted when element coordinates
         // change outside the graphviz layout (drawio import).
         this.frameTrees.set(viewKey, { childrenOf, clusterKind });
         return {
-            dot: lines.join('\n'),
+            dot: header.concat(lines).join('\n'),
             measurements: { candidates, clusters, children: childrenOf, nodeWidths }
         };
     }

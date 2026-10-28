@@ -5,6 +5,8 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-24.04
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v5
 

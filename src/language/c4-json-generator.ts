@@ -19,7 +19,7 @@ import { URI } from 'vscode-uri';
 import { flatId, C4Utils, archetypeChain, archetypeInstanceType, declaredIdentifier, type FlatIdResolvers } from './c4-utils';
 import { parseQuotedFilterText, type QuotedFilterParseResult } from './c4-quoted-filter';
 import { encodePlantUml } from './plantuml-encoder';
-import { Graphviz } from '@hpcc-js/wasm-graphviz';
+import { layoutDot } from './graphviz-layout';
 
 import {
     Workspace, Container,
@@ -5374,17 +5374,16 @@ class JsonGenerator {
 
     /**
      * Lays out the DOT graph, reusing the shared layout cache when the same DOT
-     * was laid out before. graphviz.layout() is a pure function of the DOT, so a
-     * cached result is always valid for that graph - only the caller's
-     * post-processing (which depends on the model) has to run again.
+     * was laid out before. The layout is a pure function of the DOT, so a cached
+     * result is always valid for that graph - only the caller's post-processing
+     * (which depends on the model) has to run again.
      */
     private async layoutGraphviz(dot: string): Promise<any> {
         const cached = this.layoutCache?.get(dot);
         if (cached !== undefined) {
             return cached;
         }
-        const graphviz = await Graphviz.load();
-        const json = JSON.parse(graphviz.layout(dot, 'json'));
+        const json = await layoutDot(dot);
         this.layoutCache?.set(dot, json);
         return json;
     }

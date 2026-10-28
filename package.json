@@ -232,15 +232,15 @@
   "browser": "./dist/extension.browser.js",
   "main": "./dist/extension.js",
   "scripts": {
-    "vscode:prepublish": "langium generate --mode production && tsc -b && node esbuild.mjs",
-    "build": "langium generate --mode production && tsc -b && node esbuild.mjs && vitest run",
-    "build:ci": "langium generate --mode production && tsc -b && node esbuild.mjs && vitest run && vsce package --no-dependencies",
+    "vscode:prepublish": "npm run build:graphviz && langium generate --mode production && tsc -b && node esbuild.mjs",
+    "build": "npm run build:graphviz && langium generate --mode production && tsc -b && node esbuild.mjs && vitest run",
+    "build:ci": "npm run build:graphviz && langium generate --mode production && tsc -b && node esbuild.mjs && vitest run && vsce package --no-dependencies",
+    "build:graphviz": "node native/graphviz/build.mjs",
     "test": "vitest run",
     "package": "vsce package --no-dependencies",
     "dev": "npm run build && node -e \"require('http').createServer((req, res) => { res.writeHead(200, {'Content-Type': 'text/html'}); res.end('<h1>c4varp VS Code Extension</h1><p>This is a VS Code extension project.</p>'); }).listen(3000, '0.0.0.0');\""
   },
   "dependencies": {
-    "@hpcc-js/wasm-graphviz": "^1.28.0",
     "@modelcontextprotocol/sdk": "^1.9.0",
     "@xmldom/xmldom": "^0.9.12",
     "fflate": "^0.8.3",

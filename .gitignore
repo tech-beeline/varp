@@ -17,3 +17,4 @@ plans/
 .vibe/*
 .vscode/*
 .kilo/*
+native/graphviz/build*/

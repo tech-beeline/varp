@@ -6,7 +6,7 @@
 architecture diagrams directly from code. Powered by [Langium](https://langium.org/).
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![VS Code Marketplace](https://img.shields.io/badge/VS%20Code%20Marketplace-2.1.0-0078D4.svg)](https://marketplace.visualstudio.com/items?itemName=vimpelcom.c4-varp)
+[![VS Code Marketplace](https://img.shields.io/badge/VS%20Code%20Marketplace-2.1.1-0078D4.svg)](https://marketplace.visualstudio.com/items?itemName=vimpelcom.c4-varp)
 [![Open VSX](https://img.shields.io/open-vsx/v/vimpelcom/c4-varp.svg?label=Open%20VSX)](https://open-vsx.org/extension/vimpelcom/c4-varp)
 [![Node.js 24.18.0](https://img.shields.io/badge/Node.js-24.18.0-339933.svg)](package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6.svg)](package.json)

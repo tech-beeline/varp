@@ -1,0 +1,30 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : { },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "2",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCg0KICAgIHZpZXdzIHsNCiAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAicGxhbnR1bWwudXJsIiAiaHR0cHM6Ly9wbGFudHVtbC5jb20vcGxhbnR1bWwiDQogICAgICAgIH0NCg0KICAgICAgICAhY29uc3QgU09VUkNFICIiIg0KICAgICAgICAgICAgY2xhc3MgTXlDbGFzcw0KICAgICAgICAgICAgIiIiDQoNCiAgICAgICAgIXZhciBTVFlMRVMgIiIiDQogICAgICAgICAgICA8c3R5bGU+DQogICAgICAgICAgICByb290IHsNCiAgICAgICAgICAgICAgICBCYWNrZ3JvdW5kQ29sb3I6ICNmZmZmZmY7DQogICAgICAgICAgICB9DQogICAgICAgICAgICA8L3N0eWxlPg0KICAgICAgICAiIiINCg0KICAgICAgICBpbWFnZSAqICJpbWFnZSIgew0KICAgICAgICAgICAgcGxhbnR1bWwgIiIiDQogICAgICAgICAgICAgICAgIEBzdGFydHVtbA0KDQogICAgICAgICAgICAgICAgICR7U1RZTEVTfQ0KDQogICAgICAgICAgICAgICAgICR7U09VUkNFfQ0KICAgICAgICAgICAgICAgICBAZW5kdW1sDQogICAgICAgICAgICAgIiIiDQogICAgICAgIH0NCiAgICB9DQoNCn0=",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "properties" : {
+        "plantuml.url" : "https://plantuml.com/plantuml"
+      },
+      "styles" : { },
+      "terminology" : { }
+    },
+    "imageViews" : [ {
+      "content" : "https://plantuml.com/plantuml/svg/SoWkIImgAStDuUAoAIwfp4cruohApozHgEPI00AdnEJizAByqhmKv_oS_28h1UKqCB3cgkMoqOUgvqhEIImkLl2jT0RHN0wfUIb0ym00",
+      "contentType" : "image/svg+xml",
+      "key" : "image",
+      "order" : 1
+    } ]
+  }
+}

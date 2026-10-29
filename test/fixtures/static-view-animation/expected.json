@@ -1,0 +1,98 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "documentation" : { },
+      "id" : "1",
+      "name" : "A",
+      "properties" : {
+        "structurizr.dsl.identifier" : "a"
+      },
+      "relationships" : [ {
+        "destinationId" : "2",
+        "id" : "3",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "documentation" : { },
+      "id" : "2",
+      "name" : "B",
+      "properties" : {
+        "structurizr.dsl.identifier" : "b"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "9",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgYSA9IHNvZnR3YXJlU3lzdGVtICJBIg0KICAgICAgICBiID0gc29mdHdhcmVTeXN0ZW0gIkIiDQoNCiAgICAgICAgYSAtPiBiDQogICAgfQ0KICAgICAgICAgDQogICAgdmlld3Mgew0KICAgICAgICBzeXN0ZW1MYW5kc2NhcGUgew0KICAgICAgICAgICAgaW5jbHVkZSAqDQoNCiAgICAgICAgICAgIC8vIGFkZCBhbmltYXRpb24gc3RlcHMgdmlhIGVsZW1lbnQgaWRlbnRpZmllcnMNCiAgICAgICAgICAgIGFuaW1hdGlvbiB7DQogICAgICAgICAgICAgICAgYQ0KICAgICAgICAgICAgICAgIGINCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KDQogICAgICAgIHN5c3RlbUxhbmRzY2FwZSB7DQogICAgICAgICAgICBpbmNsdWRlICoNCg0KICAgICAgICAgICAgLy8gYWRkIGFuaW1hdGlvbiBzdGVwcyB2aWEgZWxlbWVudCBleHByZXNzaW9ucw0KICAgICAgICAgICAgYW5pbWF0aW9uIHsNCiAgICAgICAgICAgICAgICBhDQogICAgICAgICAgICAgICAgYS0+DQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQoNCn0=",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "systemLandscapeViews" : [ {
+      "animations" : [ {
+        "elements" : [ "1" ],
+        "order" : 1
+      }, {
+        "elements" : [ "2" ],
+        "order" : 2,
+        "relationships" : [ "3" ]
+      } ],
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-001",
+      "name" : "System Landscape View",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "3"
+      } ]
+    }, {
+      "animations" : [ {
+        "elements" : [ "1" ],
+        "order" : 1
+      }, {
+        "elements" : [ "2" ],
+        "order" : 2,
+        "relationships" : [ "3" ]
+      } ],
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-002",
+      "name" : "System Landscape View",
+      "order" : 2,
+      "relationships" : [ {
+        "id" : "3"
+      } ]
+    } ]
+  }
+}

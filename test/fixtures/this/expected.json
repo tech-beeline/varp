@@ -1,0 +1,292 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "customElements" : [ {
+      "id" : "1",
+      "name" : "Element",
+      "properties" : {
+        "structurizr.dsl.identifier" : "custom"
+      },
+      "relationships" : [ {
+        "destinationId" : "2",
+        "id" : "3",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      }, {
+        "destinationId" : "4",
+        "id" : "5",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      }, {
+        "destinationId" : "6",
+        "id" : "7",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      }, {
+        "destinationId" : "9",
+        "id" : "10",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element"
+    } ],
+    "deploymentNodes" : [ {
+      "children" : [ {
+        "containerInstances" : [ {
+          "containerId" : "4",
+          "environment" : "live",
+          "id" : "15",
+          "instanceId" : 1,
+          "properties" : {
+            "structurizr.dsl.identifier" : "56d3da3c-02a3-4fc0-b82b-3f7e8b6c7a08"
+          },
+          "tags" : "Container Instance"
+        } ],
+        "environment" : "live",
+        "id" : "11",
+        "instances" : "1",
+        "name" : "Deployment Node",
+        "properties" : {
+          "structurizr.dsl.identifier" : "dn"
+        },
+        "softwareSystemInstances" : [ {
+          "environment" : "live",
+          "id" : "13",
+          "instanceId" : 1,
+          "properties" : {
+            "structurizr.dsl.identifier" : "cee75252-637e-46fc-89ce-53b443cdab14"
+          },
+          "softwareSystemId" : "2",
+          "tags" : "Software System Instance"
+        } ],
+        "tags" : "Element,Deployment Node"
+      } ],
+      "environment" : "live",
+      "id" : "8",
+      "infrastructureNodes" : [ {
+        "environment" : "live",
+        "id" : "9",
+        "name" : "Infrastructure Node",
+        "properties" : {
+          "structurizr.dsl.identifier" : "in"
+        },
+        "relationships" : [ {
+          "destinationId" : "11",
+          "id" : "12",
+          "sourceId" : "9",
+          "tags" : "Relationship"
+        }, {
+          "destinationId" : "13",
+          "id" : "14",
+          "sourceId" : "9",
+          "tags" : "Relationship"
+        }, {
+          "destinationId" : "15",
+          "id" : "16",
+          "sourceId" : "9",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Infrastructure Node"
+      } ],
+      "instances" : "1",
+      "name" : "Live",
+      "properties" : {
+        "structurizr.dsl.identifier" : "f3dc992a-ed5e-4645-8e56-214da6692eaf"
+      },
+      "tags" : "Element,Deployment Node"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "components" : [ {
+          "documentation" : { },
+          "id" : "6",
+          "name" : "Component",
+          "properties" : {
+            "structurizr.dsl.identifier" : "f181ac78-0019-4a56-af27-280716b4b048"
+          },
+          "tags" : "Element,Component"
+        } ],
+        "documentation" : { },
+        "id" : "4",
+        "name" : "Container",
+        "properties" : {
+          "structurizr.dsl.identifier" : "c"
+        },
+        "tags" : "Element,Container"
+      } ],
+      "documentation" : { },
+      "id" : "2",
+      "name" : "Software System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "s"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "34",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgY3VzdG9tID0gZWxlbWVudCAiRWxlbWVudCINCg0KICAgICAgICBzID0gc29mdHdhcmVTeXN0ZW0gIlNvZnR3YXJlIFN5c3RlbSIgew0KICAgICAgICAgICAgY3VzdG9tIC0+IHRoaXMNCg0KICAgICAgICAgICAgYyA9IGNvbnRhaW5lciAiQ29udGFpbmVyIiB7DQogICAgICAgICAgICAgICAgY3VzdG9tIC0+IHRoaXMNCg0KICAgICAgICAgICAgICAgIGNvbXBvbmVudCAiQ29tcG9uZW50IiB7DQogICAgICAgICAgICAgICAgICAgIGN1c3RvbSAtPiB0aGlzDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQoNCiAgICAgICAgbGl2ZSA9IGRlcGxveW1lbnRFbnZpcm9ubWVudCAibGl2ZSIgew0KICAgICAgICAgICAgZGVwbG95bWVudE5vZGUgIkxpdmUiIHsNCiAgICAgICAgICAgICAgICBpbiA9IGluZnJhc3RydWN0dXJlTm9kZSAiSW5mcmFzdHJ1Y3R1cmUgTm9kZSIgew0KICAgICAgICAgICAgICAgICAgICBjdXN0b20gLT4gdGhpcw0KICAgICAgICAgICAgICAgIH0NCg0KICAgICAgICAgICAgICAgIGRuID0gZGVwbG95bWVudE5vZGUgIkRlcGxveW1lbnQgTm9kZSIgew0KICAgICAgICAgICAgICAgICAgICBpbiAtPiB0aGlzDQoNCiAgICAgICAgICAgICAgICAgICAgc29mdHdhcmVTeXN0ZW1JbnN0YW5jZSBzIHsNCiAgICAgICAgICAgICAgICAgICAgICAgIGluIC0+IHRoaXMNCiAgICAgICAgICAgICAgICAgICAgfQ0KDQogICAgICAgICAgICAgICAgICAgIGNvbnRhaW5lckluc3RhbmNlIGMgew0KICAgICAgICAgICAgICAgICAgICAgICAgaW4gLT4gdGhpcw0KICAgICAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQogICAgfQ0KDQogICAgdmlld3Mgew0KICAgICAgICBzeXN0ZW1MYW5kc2NhcGUgew0KICAgICAgICAgICAgaW5jbHVkZSAqDQogICAgICAgICAgICBpbmNsdWRlIGN1c3RvbQ0KICAgICAgICAgICAgYXV0b2xheW91dA0KICAgICAgICB9DQoNCiAgICAgICAgc3lzdGVtQ29udGV4dCBzIHsNCiAgICAgICAgICAgIGluY2x1ZGUgKg0KICAgICAgICAgICAgaW5jbHVkZSBjdXN0b20NCiAgICAgICAgICAgIGF1dG9sYXlvdXQNCiAgICAgICAgfQ0KDQogICAgICAgIGNvbnRhaW5lciBzIHsNCiAgICAgICAgICAgIGluY2x1ZGUgKg0KICAgICAgICAgICAgaW5jbHVkZSBjdXN0b20NCiAgICAgICAgICAgIGF1dG9sYXlvdXQNCiAgICAgICAgfQ0KDQogICAgICAgIGNvbXBvbmVudCBjIHsNCiAgICAgICAgICAgIGluY2x1ZGUgKg0KICAgICAgICAgICAgaW5jbHVkZSBjdXN0b20NCiAgICAgICAgICAgIGF1dG9sYXlvdXQNCiAgICAgICAgfQ0KDQogICAgICAgIGRlcGxveW1lbnQgKiBsaXZlIHsNCiAgICAgICAgICAgIGluY2x1ZGUgKg0KICAgICAgICAgICAgaW5jbHVkZSBjdXN0b20NCiAgICAgICAgICAgIGF1dG9sYXlvdXQNCiAgICAgICAgfQ0KICAgIH0NCg0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "componentViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "containerId" : "4",
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalContainerBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Component-001",
+      "name" : "Component View: Software System - Container",
+      "order" : 4,
+      "relationships" : [ {
+        "id" : "7"
+      } ]
+    } ],
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Container-001",
+      "name" : "Container View: Software System",
+      "order" : 3,
+      "relationships" : [ {
+        "id" : "5"
+      } ],
+      "softwareSystemId" : "2"
+    } ],
+    "deploymentViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "8",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "9",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "11",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "13",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "live",
+      "generatedKey" : true,
+      "key" : "Deployment-001",
+      "name" : "Deployment View: live",
+      "order" : 5,
+      "relationships" : [ {
+        "id" : "10"
+      }, {
+        "id" : "12"
+      }, {
+        "id" : "14"
+      } ]
+    } ],
+    "systemContextViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemContext-001",
+      "name" : "System Context View: Software System",
+      "order" : 2,
+      "relationships" : [ {
+        "id" : "3"
+      } ],
+      "softwareSystemId" : "2"
+    } ],
+    "systemLandscapeViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-001",
+      "name" : "System Landscape View",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "3"
+      } ]
+    } ]
+  }
+}

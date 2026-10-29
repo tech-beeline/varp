@@ -1,0 +1,68 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "components" : [ {
+          "documentation" : { },
+          "id" : "3",
+          "name" : "D",
+          "properties" : {
+            "structurizr.dsl.identifier" : "b.c.d"
+          },
+          "tags" : "Element,Component"
+        } ],
+        "documentation" : { },
+        "id" : "2",
+        "name" : "C",
+        "properties" : {
+          "structurizr.dsl.identifier" : "b.c"
+        },
+        "tags" : "Element,Container"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "B",
+      "properties" : {
+        "structurizr.dsl.identifier" : "b"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "13",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCg0KICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgYiA9IHNvZnR3YXJlU3lzdGVtICJCIiB7DQogICAgICAgICAgICBjID0gY29udGFpbmVyICJDIiB7DQogICAgICAgICAgICAgICAgZCA9IGNvbXBvbmVudCAiRCINCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIHZpZXdzIHsNCiAgICAgICAgY29udGFpbmVyIGIgIlYiIHsNCiAgICAgICAgICAgIGluY2x1ZGUgKg0KICAgICAgICAgICAgYXV0b0xheW91dA0KICAgICAgICB9DQogICAgfQ0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "key" : "V",
+      "name" : "Container View: B",
+      "order" : 1,
+      "softwareSystemId" : "1"
+    } ]
+  }
+}

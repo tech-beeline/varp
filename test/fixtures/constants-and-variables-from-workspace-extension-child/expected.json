@@ -1,0 +1,56 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "description" : "Description",
+      "documentation" : { },
+      "id" : "1",
+      "name" : "Name",
+      "properties" : {
+        "structurizr.dsl.identifier" : "6ac90ac7-1f4e-41c5-acde-c8fe88ba0b46"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "4",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "systemContextViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemContext-001",
+      "name" : "System Context View: Name",
+      "order" : 2,
+      "softwareSystemId" : "1"
+    } ],
+    "systemLandscapeViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-001",
+      "name" : "System Landscape View",
+      "order" : 1
+    } ]
+  }
+}

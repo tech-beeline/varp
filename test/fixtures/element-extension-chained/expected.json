@@ -1,0 +1,83 @@
+{
+  "configuration" : { },
+  "description" : "Base workspace",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "components" : [ {
+          "description" : "Component C",
+          "documentation" : { },
+          "id" : "3",
+          "name" : "C",
+          "properties" : {
+            "structurizr.dsl.identifier" : "c"
+          },
+          "tags" : "Element,Component"
+        }, {
+          "description" : "Component C2",
+          "documentation" : { },
+          "id" : "4",
+          "name" : "C2",
+          "properties" : {
+            "structurizr.dsl.identifier" : "c2"
+          },
+          "tags" : "Element,Component"
+        } ],
+        "description" : "Container Z",
+        "documentation" : { },
+        "id" : "2",
+        "name" : "Z",
+        "properties" : {
+          "structurizr.dsl.identifier" : "z"
+        },
+        "tags" : "Element,Container"
+      } ],
+      "description" : "System X",
+      "documentation" : { },
+      "id" : "1",
+      "name" : "X",
+      "properties" : {
+        "structurizr.dsl.identifier" : "x"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Base",
+  "properties" : {
+    "structurizr.inspection.error" : "10",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "componentViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "containerId" : "2",
+      "elements" : [ {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalContainerBoundariesVisible" : false,
+      "key" : "C",
+      "name" : "Component View: X - Z",
+      "order" : 1
+    } ],
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    }
+  }
+}

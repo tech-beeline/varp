@@ -1,0 +1,131 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "people" : [ {
+      "id" : "1",
+      "name" : "User",
+      "properties" : {
+        "structurizr.dsl.identifier" : "user"
+      },
+      "relationships" : [ {
+        "description" : "Uses",
+        "destinationId" : "3",
+        "id" : "4",
+        "perspectives" : [ {
+          "description" : "A relationship perspective",
+          "name" : "RelPerspective"
+        } ],
+        "properties" : {
+          "relprop" : "rel-value"
+        },
+        "sourceId" : "1",
+        "tags" : "Relationship,OwnTag,OverlayTag",
+        "technology" : "HTTPS",
+        "url" : "https://overlay.example"
+      }, {
+        "description" : "Uses",
+        "destinationId" : "2",
+        "id" : "5",
+        "linkedRelationshipId" : "4",
+        "perspectives" : [ {
+          "description" : "A relationship perspective",
+          "name" : "RelPerspective"
+        } ],
+        "properties" : {
+          "relprop" : "rel-value"
+        },
+        "sourceId" : "1",
+        "tags" : "OverlayTag",
+        "technology" : "HTTPS",
+        "url" : "https://overlay.example"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "3",
+        "name" : "Web Application",
+        "perspectives" : [ {
+          "description" : "Own alpha",
+          "name" : "Alpha"
+        }, {
+          "description" : "Overlay beta",
+          "name" : "Beta"
+        } ],
+        "properties" : {
+          "structurizr.dsl.identifier" : "webapp",
+          "added" : "overlay-value",
+          "own" : "own-value",
+          "override" : "overlay-override"
+        },
+        "tags" : "Element,Container"
+      } ],
+      "documentation" : { },
+      "id" : "2",
+      "name" : "Software System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "softwareSystem"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Overlay Merge Semantics",
+  "properties" : {
+    "structurizr.inspection.error" : "9",
+    "structurizr.dsl" : "d29ya3NwYWNlICJPdmVybGF5IE1lcmdlIFNlbWFudGljcyIgew0KDQogICAgbW9kZWwgew0KICAgICAgICB1c2VyID0gcGVyc29uICJVc2VyIg0KICAgICAgICBzb2Z0d2FyZVN5c3RlbSA9IHNvZnR3YXJlU3lzdGVtICJTb2Z0d2FyZSBTeXN0ZW0iIHsNCiAgICAgICAgICAgIHdlYmFwcCA9IGNvbnRhaW5lciAiV2ViIEFwcGxpY2F0aW9uIiB7DQogICAgICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgICAgICJvd24iICJvd24tdmFsdWUiDQogICAgICAgICAgICAgICAgICAgICJvdmVycmlkZSIgIm93bi1vdmVycmlkZSINCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICAgICAgcGVyc3BlY3RpdmVzIHsNCiAgICAgICAgICAgICAgICAgICAgIkFscGhhIiAiT3duIGFscGhhIg0KICAgICAgICAgICAgICAgIH0NCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KICAgICAgICB1c2VyIC0+IHdlYmFwcCAiVXNlcyIgIkhUVFBTIiAiT3duVGFnIg0KDQogICAgICAgICFlbGVtZW50cyBlbGVtZW50LnR5cGU9PUNvbnRhaW5lciB7DQogICAgICAgICAgICBwcm9wZXJ0aWVzIHsNCiAgICAgICAgICAgICAgICAib3ZlcnJpZGUiICJvdmVybGF5LW92ZXJyaWRlIg0KICAgICAgICAgICAgICAgICJhZGRlZCIgIm92ZXJsYXktdmFsdWUiDQogICAgICAgICAgICB9DQogICAgICAgICAgICBwZXJzcGVjdGl2ZXMgew0KICAgICAgICAgICAgICAgICJCZXRhIiAiT3ZlcmxheSBiZXRhIg0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQoNCiAgICAgICAgIXJlbGF0aW9uc2hpcHMgKi0+KiB7DQogICAgICAgICAgICB0YWcgIk92ZXJsYXlUYWciDQogICAgICAgICAgICB1cmwgImh0dHBzOi8vb3ZlcmxheS5leGFtcGxlIg0KICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgInJlbHByb3AiICJyZWwtdmFsdWUiDQogICAgICAgICAgICB9DQogICAgICAgICAgICBwZXJzcGVjdGl2ZXMgew0KICAgICAgICAgICAgICAgICJSZWxQZXJzcGVjdGl2ZSIgIkEgcmVsYXRpb25zaGlwIHBlcnNwZWN0aXZlIg0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQogICAgfQ0KDQogICAgdmlld3Mgew0KICAgICAgICBzeXN0ZW1jb250ZXh0IHNvZnR3YXJlU3lzdGVtIHsNCiAgICAgICAgICAgIGluY2x1ZGUgKg0KICAgICAgICAgICAgYXV0b2xheW91dA0KICAgICAgICB9DQogICAgICAgIHN0eWxlcyB7DQogICAgICAgICAgICBlbGVtZW50ICJDb250YWluZXIiIHsNCiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICNmZmZmZmYNCiAgICAgICAgICAgICAgICBwcm9wZXJ0aWVzIHsNCiAgICAgICAgICAgICAgICAgICAgInN0eWxlcHJvcCIgInN0eWxlLXZhbHVlIg0KICAgICAgICAgICAgICAgIH0NCiAgICAgICAgICAgIH0NCiAgICAgICAgICAgIHJlbGF0aW9uc2hpcCAiUmVsYXRpb25zaGlwIiB7DQogICAgICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgICAgICJyZWxzdHlsZSIgInJlbHN0eWxlLXZhbHVlIg0KICAgICAgICAgICAgICAgIH0NCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KICAgIH0NCg0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : {
+        "elements" : [ {
+          "background" : "#ffffff",
+          "properties" : {
+            "styleprop" : "style-value"
+          },
+          "tag" : "Container"
+        } ],
+        "relationships" : [ {
+          "properties" : {
+            "relstyle" : "relstyle-value"
+          },
+          "tag" : "Relationship"
+        } ]
+      },
+      "terminology" : { }
+    },
+    "systemContextViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemContext-001",
+      "name" : "System Context View: Software System",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "5"
+      } ],
+      "softwareSystemId" : "2"
+    } ]
+  }
+}

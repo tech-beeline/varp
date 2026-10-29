@@ -1,0 +1,563 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "deploymentNodes" : [ {
+      "containerInstances" : [ {
+        "containerId" : "3",
+        "environment" : "WithoutDeploymentGroups",
+        "id" : "6",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "b7fd5e1a-84e4-4dbc-b3df-5aa60020ab4f.85d7b7c6-8032-4345-966d-ce9bc55cde9e.09687c3a-62a9-4be3-9131-8513ee8f441c"
+        },
+        "relationships" : [ {
+          "description" : "Uses",
+          "destinationId" : "7",
+          "id" : "8",
+          "linkedRelationshipId" : "4",
+          "sourceId" : "6"
+        }, {
+          "description" : "Uses",
+          "destinationId" : "12",
+          "id" : "13",
+          "linkedRelationshipId" : "4",
+          "sourceId" : "6"
+        } ],
+        "tags" : "Container Instance"
+      }, {
+        "containerId" : "2",
+        "environment" : "WithoutDeploymentGroups",
+        "id" : "7",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "b7fd5e1a-84e4-4dbc-b3df-5aa60020ab4f.85d7b7c6-8032-4345-966d-ce9bc55cde9e.5e763aaf-be06-41a0-b3d8-41a36d26e1c4"
+        },
+        "tags" : "Container Instance"
+      } ],
+      "environment" : "WithoutDeploymentGroups",
+      "id" : "5",
+      "instances" : "1",
+      "name" : "Server 1",
+      "properties" : {
+        "structurizr.dsl.identifier" : "b7fd5e1a-84e4-4dbc-b3df-5aa60020ab4f.85d7b7c6-8032-4345-966d-ce9bc55cde9e"
+      },
+      "tags" : "Element,Deployment Node"
+    }, {
+      "containerInstances" : [ {
+        "containerId" : "3",
+        "environment" : "WithoutDeploymentGroups",
+        "id" : "10",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "b7fd5e1a-84e4-4dbc-b3df-5aa60020ab4f.6d6c91c8-f34d-4550-bbd1-c39b792839c0.116601ac-d739-4778-8a10-fe791a7d028c"
+        },
+        "relationships" : [ {
+          "description" : "Uses",
+          "destinationId" : "7",
+          "id" : "11",
+          "linkedRelationshipId" : "4",
+          "sourceId" : "10"
+        }, {
+          "description" : "Uses",
+          "destinationId" : "12",
+          "id" : "14",
+          "linkedRelationshipId" : "4",
+          "sourceId" : "10"
+        } ],
+        "tags" : "Container Instance"
+      }, {
+        "containerId" : "2",
+        "environment" : "WithoutDeploymentGroups",
+        "id" : "12",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "b7fd5e1a-84e4-4dbc-b3df-5aa60020ab4f.6d6c91c8-f34d-4550-bbd1-c39b792839c0.fa311abf-969e-4d18-bb36-6340534bdcf6"
+        },
+        "tags" : "Container Instance"
+      } ],
+      "environment" : "WithoutDeploymentGroups",
+      "id" : "9",
+      "instances" : "1",
+      "name" : "Server 2",
+      "properties" : {
+        "structurizr.dsl.identifier" : "b7fd5e1a-84e4-4dbc-b3df-5aa60020ab4f.6d6c91c8-f34d-4550-bbd1-c39b792839c0"
+      },
+      "tags" : "Element,Deployment Node"
+    }, {
+      "containerInstances" : [ {
+        "containerId" : "3",
+        "deploymentGroups" : [ "Service Instance 1" ],
+        "environment" : "WithSpecifiedDeploymentGroups",
+        "id" : "16",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "3715a125-fcd2-42d6-b961-e72df1ffea01.cfe60e52-23fa-4939-91c9-34dfc3421556.19ddcfcb-3efc-4fe6-a9ed-6d1c008d08ff"
+        },
+        "relationships" : [ {
+          "description" : "Uses",
+          "destinationId" : "17",
+          "id" : "18",
+          "linkedRelationshipId" : "4",
+          "sourceId" : "16"
+        } ],
+        "tags" : "Container Instance"
+      }, {
+        "containerId" : "2",
+        "deploymentGroups" : [ "Service Instance 1" ],
+        "environment" : "WithSpecifiedDeploymentGroups",
+        "id" : "17",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "3715a125-fcd2-42d6-b961-e72df1ffea01.cfe60e52-23fa-4939-91c9-34dfc3421556.53d86106-2d3b-4ec6-8429-d641b26e41ef"
+        },
+        "tags" : "Container Instance"
+      } ],
+      "environment" : "WithSpecifiedDeploymentGroups",
+      "id" : "15",
+      "instances" : "1",
+      "name" : "Server 1",
+      "properties" : {
+        "structurizr.dsl.identifier" : "3715a125-fcd2-42d6-b961-e72df1ffea01.cfe60e52-23fa-4939-91c9-34dfc3421556"
+      },
+      "tags" : "Element,Deployment Node"
+    }, {
+      "containerInstances" : [ {
+        "containerId" : "3",
+        "deploymentGroups" : [ "Service Instance 2" ],
+        "environment" : "WithSpecifiedDeploymentGroups",
+        "id" : "20",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "3715a125-fcd2-42d6-b961-e72df1ffea01.b2e8eb16-452f-43d7-8949-ad0eda167534.853eacbb-bfe8-4550-b80c-4dd47a29b140"
+        },
+        "relationships" : [ {
+          "description" : "Uses",
+          "destinationId" : "21",
+          "id" : "22",
+          "linkedRelationshipId" : "4",
+          "sourceId" : "20"
+        } ],
+        "tags" : "Container Instance"
+      }, {
+        "containerId" : "2",
+        "deploymentGroups" : [ "Service Instance 2" ],
+        "environment" : "WithSpecifiedDeploymentGroups",
+        "id" : "21",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "3715a125-fcd2-42d6-b961-e72df1ffea01.b2e8eb16-452f-43d7-8949-ad0eda167534.6bfca349-73ee-4f64-822b-d6ad56259fa4"
+        },
+        "tags" : "Container Instance"
+      } ],
+      "environment" : "WithSpecifiedDeploymentGroups",
+      "id" : "19",
+      "instances" : "1",
+      "name" : "Server 2",
+      "properties" : {
+        "structurizr.dsl.identifier" : "3715a125-fcd2-42d6-b961-e72df1ffea01.b2e8eb16-452f-43d7-8949-ad0eda167534"
+      },
+      "tags" : "Element,Deployment Node"
+    }, {
+      "containerInstances" : [ {
+        "containerId" : "3",
+        "deploymentGroups" : [ "Service Instance 1" ],
+        "environment" : "WithSpecifiedDeploymentGroupsAgain",
+        "id" : "24",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "b58ee6c0-0f2c-4645-80ed-e9d880b9980e.3e9e2ded-b7ba-4597-b60b-3d24cebf67e3.e7290db6-e2ff-465b-84bd-b2a58326dc12"
+        },
+        "relationships" : [ {
+          "description" : "Uses",
+          "destinationId" : "25",
+          "id" : "26",
+          "linkedRelationshipId" : "4",
+          "sourceId" : "24"
+        } ],
+        "tags" : "Container Instance"
+      }, {
+        "containerId" : "2",
+        "deploymentGroups" : [ "Service Instance 1" ],
+        "environment" : "WithSpecifiedDeploymentGroupsAgain",
+        "id" : "25",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "b58ee6c0-0f2c-4645-80ed-e9d880b9980e.3e9e2ded-b7ba-4597-b60b-3d24cebf67e3.eee26b41-0b02-46da-849f-cba4b298b61d"
+        },
+        "tags" : "Container Instance"
+      } ],
+      "environment" : "WithSpecifiedDeploymentGroupsAgain",
+      "id" : "23",
+      "instances" : "1",
+      "name" : "Server 1",
+      "properties" : {
+        "structurizr.dsl.identifier" : "b58ee6c0-0f2c-4645-80ed-e9d880b9980e.3e9e2ded-b7ba-4597-b60b-3d24cebf67e3"
+      },
+      "tags" : "Element,Deployment Node"
+    }, {
+      "containerInstances" : [ {
+        "containerId" : "3",
+        "deploymentGroups" : [ "Service Instance 2" ],
+        "environment" : "WithSpecifiedDeploymentGroupsAgain",
+        "id" : "28",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "b58ee6c0-0f2c-4645-80ed-e9d880b9980e.8511ee9d-8c12-4f71-843d-7f6044930005.6bf84428-c178-4d35-a967-336dfdef12bd"
+        },
+        "relationships" : [ {
+          "description" : "Uses",
+          "destinationId" : "29",
+          "id" : "30",
+          "linkedRelationshipId" : "4",
+          "sourceId" : "28"
+        } ],
+        "tags" : "Container Instance"
+      }, {
+        "containerId" : "2",
+        "deploymentGroups" : [ "Service Instance 2" ],
+        "environment" : "WithSpecifiedDeploymentGroupsAgain",
+        "id" : "29",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "b58ee6c0-0f2c-4645-80ed-e9d880b9980e.8511ee9d-8c12-4f71-843d-7f6044930005.67836bd5-690b-4af6-9ae3-86f9aa86ce30"
+        },
+        "tags" : "Container Instance"
+      } ],
+      "environment" : "WithSpecifiedDeploymentGroupsAgain",
+      "id" : "27",
+      "instances" : "1",
+      "name" : "Server 2",
+      "properties" : {
+        "structurizr.dsl.identifier" : "b58ee6c0-0f2c-4645-80ed-e9d880b9980e.8511ee9d-8c12-4f71-843d-7f6044930005"
+      },
+      "tags" : "Element,Deployment Node"
+    }, {
+      "containerInstances" : [ {
+        "containerId" : "3",
+        "environment" : "WithInheritedDeploymentGroups",
+        "id" : "32",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "51724da9-b68b-449d-99cf-02b046b7a305.c4331848-4bdc-4615-8970-e1fd0cb944e4.8f54d9b8-bc17-4f59-81dd-fc2f763e22b0"
+        },
+        "relationships" : [ {
+          "description" : "Uses",
+          "destinationId" : "33",
+          "id" : "34",
+          "linkedRelationshipId" : "4",
+          "sourceId" : "32"
+        } ],
+        "tags" : "Container Instance"
+      }, {
+        "containerId" : "2",
+        "environment" : "WithInheritedDeploymentGroups",
+        "id" : "33",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "51724da9-b68b-449d-99cf-02b046b7a305.c4331848-4bdc-4615-8970-e1fd0cb944e4.b98fb76d-d401-4050-99b7-8f2024b92f58"
+        },
+        "tags" : "Container Instance"
+      } ],
+      "deploymentGroups" : [ "Service Instance 1" ],
+      "environment" : "WithInheritedDeploymentGroups",
+      "id" : "31",
+      "instances" : "1",
+      "name" : "Server 1",
+      "properties" : {
+        "structurizr.dsl.identifier" : "51724da9-b68b-449d-99cf-02b046b7a305.c4331848-4bdc-4615-8970-e1fd0cb944e4"
+      },
+      "tags" : "Element,Deployment Node"
+    }, {
+      "containerInstances" : [ {
+        "containerId" : "3",
+        "environment" : "WithInheritedDeploymentGroups",
+        "id" : "36",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "51724da9-b68b-449d-99cf-02b046b7a305.edd4aba3-9f74-4547-a829-dd5c8c3cd378.28daf936-5a0f-4e4d-9b5f-86ea7078fd8c"
+        },
+        "relationships" : [ {
+          "description" : "Uses",
+          "destinationId" : "37",
+          "id" : "38",
+          "linkedRelationshipId" : "4",
+          "sourceId" : "36"
+        } ],
+        "tags" : "Container Instance"
+      }, {
+        "containerId" : "2",
+        "environment" : "WithInheritedDeploymentGroups",
+        "id" : "37",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "51724da9-b68b-449d-99cf-02b046b7a305.edd4aba3-9f74-4547-a829-dd5c8c3cd378.7a2750c5-15bc-4f7d-86d3-4f13c98e4160"
+        },
+        "tags" : "Container Instance"
+      } ],
+      "deploymentGroups" : [ "Service Instance 2" ],
+      "environment" : "WithInheritedDeploymentGroups",
+      "id" : "35",
+      "instances" : "1",
+      "name" : "Server 2",
+      "properties" : {
+        "structurizr.dsl.identifier" : "51724da9-b68b-449d-99cf-02b046b7a305.edd4aba3-9f74-4547-a829-dd5c8c3cd378"
+      },
+      "tags" : "Element,Deployment Node"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "2",
+        "name" : "DB",
+        "properties" : {
+          "structurizr.dsl.identifier" : "softwareSystem.database"
+        },
+        "tags" : "Element,Container"
+      }, {
+        "documentation" : { },
+        "id" : "3",
+        "name" : "API",
+        "properties" : {
+          "structurizr.dsl.identifier" : "softwareSystem.api"
+        },
+        "relationships" : [ {
+          "description" : "Uses",
+          "destinationId" : "2",
+          "id" : "4",
+          "sourceId" : "3",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "Software System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "softwareSystem"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "64",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCg0KICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgc29mdHdhcmVTeXN0ZW0gPSBzb2Z0d2FyZVN5c3RlbSAiU29mdHdhcmUgU3lzdGVtIiB7DQogICAgICAgICAgICBkYXRhYmFzZSA9IGNvbnRhaW5lciAiREIiDQogICAgICAgICAgICBhcGkgPSBjb250YWluZXIgIkFQSSIgew0KICAgICAgICAgICAgICAgIC0+IGRhdGFiYXNlICJVc2VzIg0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQoNCiAgICAgICAgZGVwbG95bWVudEVudmlyb25tZW50ICJXaXRob3V0RGVwbG95bWVudEdyb3VwcyIgew0KICAgICAgICAgICAgZGVwbG95bWVudE5vZGUgIlNlcnZlciAxIiB7DQogICAgICAgICAgICAgICAgY29udGFpbmVySW5zdGFuY2Ugc29mdHdhcmVTeXN0ZW0uYXBpDQogICAgICAgICAgICAgICAgY29udGFpbmVySW5zdGFuY2Ugc29mdHdhcmVTeXN0ZW0uZGF0YWJhc2UNCiAgICAgICAgICAgIH0NCiAgICAgICAgICAgIGRlcGxveW1lbnROb2RlICJTZXJ2ZXIgMiIgew0KICAgICAgICAgICAgICAgIGNvbnRhaW5lckluc3RhbmNlIHNvZnR3YXJlU3lzdGVtLmFwaQ0KICAgICAgICAgICAgICAgIGNvbnRhaW5lckluc3RhbmNlIHNvZnR3YXJlU3lzdGVtLmRhdGFiYXNlDQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICBkZXBsb3ltZW50RW52aXJvbm1lbnQgIldpdGhTcGVjaWZpZWREZXBsb3ltZW50R3JvdXBzIiB7DQogICAgICAgICAgICBzZXJ2aWNlSW5zdGFuY2UxID0gZGVwbG95bWVudEdyb3VwICJTZXJ2aWNlIEluc3RhbmNlIDEiDQogICAgICAgICAgICBzZXJ2aWNlSW5zdGFuY2UyID0gZGVwbG95bWVudEdyb3VwICJTZXJ2aWNlIEluc3RhbmNlIDIiDQogICAgICAgICAgICBkZXBsb3ltZW50Tm9kZSAiU2VydmVyIDEiIHsNCiAgICAgICAgICAgICAgICBjb250YWluZXJJbnN0YW5jZSBzb2Z0d2FyZVN5c3RlbS5hcGkgc2VydmljZUluc3RhbmNlMQ0KICAgICAgICAgICAgICAgIGNvbnRhaW5lckluc3RhbmNlIHNvZnR3YXJlU3lzdGVtLmRhdGFiYXNlIHNlcnZpY2VJbnN0YW5jZTENCiAgICAgICAgICAgIH0NCiAgICAgICAgICAgIGRlcGxveW1lbnROb2RlICJTZXJ2ZXIgMiIgew0KICAgICAgICAgICAgICAgIGNvbnRhaW5lckluc3RhbmNlIHNvZnR3YXJlU3lzdGVtLmFwaSBzZXJ2aWNlSW5zdGFuY2UyDQogICAgICAgICAgICAgICAgY29udGFpbmVySW5zdGFuY2Ugc29mdHdhcmVTeXN0ZW0uZGF0YWJhc2Ugc2VydmljZUluc3RhbmNlMg0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQoNCiAgICAgICAgZGVwbG95bWVudEVudmlyb25tZW50ICJXaXRoU3BlY2lmaWVkRGVwbG95bWVudEdyb3Vwc0FnYWluIiB7DQogICAgICAgICAgICBzZXJ2aWNlSW5zdGFuY2UxID0gZGVwbG95bWVudEdyb3VwICJTZXJ2aWNlIEluc3RhbmNlIDEiDQogICAgICAgICAgICBzZXJ2aWNlSW5zdGFuY2UyID0gZGVwbG95bWVudEdyb3VwICJTZXJ2aWNlIEluc3RhbmNlIDIiDQogICAgICAgICAgICBkZXBsb3ltZW50Tm9kZSAiU2VydmVyIDEiIHsNCiAgICAgICAgICAgICAgICBjb250YWluZXJJbnN0YW5jZSBzb2Z0d2FyZVN5c3RlbS5hcGkgc2VydmljZUluc3RhbmNlMQ0KICAgICAgICAgICAgICAgIGNvbnRhaW5lckluc3RhbmNlIHNvZnR3YXJlU3lzdGVtLmRhdGFiYXNlIHNlcnZpY2VJbnN0YW5jZTENCiAgICAgICAgICAgIH0NCiAgICAgICAgICAgIGRlcGxveW1lbnROb2RlICJTZXJ2ZXIgMiIgew0KICAgICAgICAgICAgICAgIGNvbnRhaW5lckluc3RhbmNlIHNvZnR3YXJlU3lzdGVtLmFwaSBzZXJ2aWNlSW5zdGFuY2UyDQogICAgICAgICAgICAgICAgY29udGFpbmVySW5zdGFuY2Ugc29mdHdhcmVTeXN0ZW0uZGF0YWJhc2Ugc2VydmljZUluc3RhbmNlMg0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQoNCiAgICAgICAgZGVwbG95bWVudEVudmlyb25tZW50ICJXaXRoSW5oZXJpdGVkRGVwbG95bWVudEdyb3VwcyIgew0KICAgICAgICAgICAgc2VydmljZUluc3RhbmNlMSA9IGRlcGxveW1lbnRHcm91cCAiU2VydmljZSBJbnN0YW5jZSAxIg0KICAgICAgICAgICAgc2VydmljZUluc3RhbmNlMiA9IGRlcGxveW1lbnRHcm91cCAiU2VydmljZSBJbnN0YW5jZSAyIg0KICAgICAgICAgICAgZGVwbG95bWVudE5vZGUgIlNlcnZlciAxIiB7DQogICAgICAgICAgICAgICAgZGVwbG95bWVudEdyb3VwIHNlcnZpY2VJbnN0YW5jZTENCiAgICAgICAgICAgICAgICBjb250YWluZXJJbnN0YW5jZSBzb2Z0d2FyZVN5c3RlbS5hcGkNCiAgICAgICAgICAgICAgICBjb250YWluZXJJbnN0YW5jZSBzb2Z0d2FyZVN5c3RlbS5kYXRhYmFzZQ0KICAgICAgICAgICAgfQ0KICAgICAgICAgICAgZGVwbG95bWVudE5vZGUgIlNlcnZlciAyIiB7DQogICAgICAgICAgICAgICAgZGVwbG95bWVudEdyb3VwIHNlcnZpY2VJbnN0YW5jZTINCiAgICAgICAgICAgICAgICBjb250YWluZXJJbnN0YW5jZSBzb2Z0d2FyZVN5c3RlbS5hcGkNCiAgICAgICAgICAgICAgICBjb250YWluZXJJbnN0YW5jZSBzb2Z0d2FyZVN5c3RlbS5kYXRhYmFzZQ0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQogICAgfQ0KDQp9",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "TopBottom",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Container-001",
+      "name" : "Container View: Software System",
+      "order" : 3,
+      "relationships" : [ {
+        "id" : "4"
+      } ],
+      "softwareSystemId" : "1"
+    } ],
+    "deploymentViews" : [ {
+      "elements" : [ {
+        "id" : "31",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "32",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "33",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "35",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "36",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "37",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "WithInheritedDeploymentGroups",
+      "generatedKey" : true,
+      "key" : "Deployment-001",
+      "name" : "Deployment View: Software System - WithInheritedDeploymentGroups",
+      "order" : 4,
+      "relationships" : [ {
+        "id" : "34"
+      }, {
+        "id" : "38"
+      } ],
+      "softwareSystemId" : "1"
+    }, {
+      "elements" : [ {
+        "id" : "15",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "16",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "17",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "19",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "20",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "21",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "WithSpecifiedDeploymentGroups",
+      "generatedKey" : true,
+      "key" : "Deployment-002",
+      "name" : "Deployment View: Software System - WithSpecifiedDeploymentGroups",
+      "order" : 5,
+      "relationships" : [ {
+        "id" : "18"
+      }, {
+        "id" : "22"
+      } ],
+      "softwareSystemId" : "1"
+    }, {
+      "elements" : [ {
+        "id" : "23",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "24",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "25",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "27",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "28",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "29",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "WithSpecifiedDeploymentGroupsAgain",
+      "generatedKey" : true,
+      "key" : "Deployment-003",
+      "name" : "Deployment View: Software System - WithSpecifiedDeploymentGroupsAgain",
+      "order" : 6,
+      "relationships" : [ {
+        "id" : "26"
+      }, {
+        "id" : "30"
+      } ],
+      "softwareSystemId" : "1"
+    }, {
+      "elements" : [ {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "9",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "10",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "12",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "WithoutDeploymentGroups",
+      "generatedKey" : true,
+      "key" : "Deployment-004",
+      "name" : "Deployment View: Software System - WithoutDeploymentGroups",
+      "order" : 7,
+      "relationships" : [ {
+        "id" : "11"
+      }, {
+        "id" : "13"
+      }, {
+        "id" : "14"
+      }, {
+        "id" : "8"
+      } ],
+      "softwareSystemId" : "1"
+    } ],
+    "systemContextViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemContext-001",
+      "name" : "System Context View: Software System",
+      "order" : 2,
+      "softwareSystemId" : "1"
+    } ],
+    "systemLandscapeViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-001",
+      "name" : "System Landscape View",
+      "order" : 1
+    } ]
+  }
+}

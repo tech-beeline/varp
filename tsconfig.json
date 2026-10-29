@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "rootDir": "src",
+    "outDir": "out",
+    "paths": {
+      "graphviz-layout-glue": [
+        "./native/graphviz/build-wasm/graphviz-layout.node.d.ts"
+      ]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "out", "dist"]
+}

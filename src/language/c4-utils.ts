@@ -1,0 +1,347 @@
+/*
+	Copyright 2026 VimpelCom PJSC
+
+	Licensed under the Apache License, Version 2.0 (the "License");
+	you may not use this file except in compliance with the License.
+	You may obtain a copy of the License at
+
+		http://www.apache.org/licenses/LICENSE-2.0
+
+	Unless required by applicable law or agreed to in writing, software
+	distributed under the License is distributed on an "AS IS" BASIS,
+	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+	See the License for the specific language governing permissions and
+	limitations under the License.
+*/
+
+import { AstUtils } from 'langium';
+import {
+    isArchetypeInstance,
+    isComponent,
+    isContainer,
+    isContainerInstance,
+    isDeploymentNode,
+    isGenericInstance,
+    isImplicitRelationship,
+    isInfrastructureNode,
+    isRelationship,
+    isSoftwareSystem,
+    isSoftwareSystemInstance,
+} from '../generated/ast';
+
+export class C4Utils {
+
+    /**
+     * Simple and fast string hashing to a 32-bit hex string.
+     * Uses the FNV-1a hash algorithm variant.
+     * Works in any JS environment (Node, Browser, Worker).
+     * Used for generating stable element/view IDs from CST offsets.
+     * 
+     * @param str The input string to hash
+     * @returns 32-bit unsigned integer as lowercase hex string (e.g., "a1b2c3d4")
+     */
+    static stringHash(str: string): string {
+        let hash = 0x811c9dc5;
+        for (let i = 0; i < str.length; i++) {
+            hash ^= str.charCodeAt(i);
+            hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+        }
+        // Return as unsigned hex
+        return (hash >>> 0).toString(16);
+    }
+    
+    /**
+     * Generates a compact hash from multiple string parts joined by '|'.
+     * Uses a Bernstein-style hash (djb2 variant) transformed to 32-bit integer.
+     * Used for generating stable IDs for relationships from source/target element IDs and offsets.
+     * 
+     * @param parts String parts to hash (typically element type, source ID, target ID, offset)
+     * @returns Compact positive hex string (e.g., "1a2b3c")
+     */
+    static generateHash(...parts: string[]): string {
+        const input = parts.join('|');
+        let hash = 0;
+        for (let i = 0; i < input.length; i++) {
+            const char = input.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash |= 0; // Convert to 32-bit integer
+        }
+        return Math.abs(hash).toString(16);
+    }
+
+    /**
+     * Normalises the value of a triple-quoted text block: the delimiter lines are
+     * dropped, every line is dedented by the first line's indentation, and the
+     * final line break is removed. Line endings become `\n`.
+     *
+     * @param raw the raw text block including the `"""` delimiters
+     * @returns the text block content
+     */
+    static textBlockValue(raw: string): string {
+        let inner = raw;
+        const open = inner.indexOf('"""');
+        if (open >= 0) inner = inner.slice(open + 3);
+        const close = inner.lastIndexOf('"""');
+        if (close >= 0) inner = inner.slice(0, close);
+        const lines = inner.split(/\r?\n/);
+        // The opening delimiter is followed by a line break.
+        if (lines.length > 0 && lines[0].trim() === '') lines.shift();
+        // The closing delimiter sits on its own line, indented like the block.
+        while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
+        const indent = lines.length > 0 ? (lines[0].match(/^[ \t]*/)?.[0].length ?? 0) : 0;
+        return lines.map(line => (line.trim() === '' ? '' : line.slice(indent))).join('\n');
+    }
+
+    /**
+     * Removes surrounding double quotes (or triple-double for text blocks), joins
+     * backslash line continuations, unescapes `\"` and `\n`, and trims
+     * whitespace. Returns empty string for undefined/null input. Single quotes are
+     * literal characters, matching the reference tokenizer, so they are kept.
+     *
+     * @param value The raw DSL string value, possibly with quotes
+     * @returns Cleaned string without surrounding quotes
+     */
+    static stripQuotes(value: string | undefined): string {
+        const trimmed = value?.trim();
+        if (!trimmed) return '';
+        // Fast path: a plain value (no surrounding quote and no escape) is returned
+        // as-is; this is the common case for names and property values.
+        if (trimmed.charCodeAt(0) !== 34 /* " */ && trimmed.indexOf('\\') === -1) return trimmed;
+        const match = trimmed.match(/^("""|")([\s\S]*?)\1$/);
+        const inner = match ? match[2] : trimmed;
+        // A trailing backslash continues the value on the next line; the leading
+        // whitespace of that line is not part of the value.
+        return inner.replace(/\\\r?\n[ \t]*/g, '').replace(/\\"/g, '"').replace(/\\n/g, '\n').trim();
+    }
+}
+
+export interface FlatIdResolvers {
+    /** Resolves the source element of a relationship (used for relationship ids). */
+    source?: (rel: any) => any | undefined;
+    /** Resolves the target element of a relationship (used for relationship ids). */
+    target?: (rel: any) => any | undefined;
+}
+
+/**
+ * Computes the stable flat id used by the JSON generator for any model node
+ * (Person, SoftwareSystem, Container, Component, DeploymentNode, CustomElement,
+ * Relationship, ...). The id is a prefix + hash of the element type, a document
+ * disambiguator and (for relationships) the resolved source/target ids and CST
+ * offset.
+ *
+ * This is the SINGLE implementation of the id scheme - both the JSON generator
+ * (via its own source/target resolvers) and the JSON enricher (to match AST
+ * nodes to already-emitted JSON) use it, so the ids always agree.
+ *
+ * @param element     the AST node ($type + $cstNode required)
+ * @param rootDocUri  the URI string of the root workspace document (may be '' to
+ *                    skip doc disambiguation, keeping ids identical to single-file)
+ * @param resolvers   optional source/target resolvers used for relationship ids;
+ *                    when omitted, a fallback context-element walk is used
+ */
+export function flatId(element: any, rootDocUri: string, resolvers?: FlatIdResolvers): string {
+    // Disambiguate elements defined outside the root workspace document so
+    // structurally identical files in !include / !extends chains never collide.
+    let docPart = '';
+    if (rootDocUri && element) {
+        try {
+            const doc = AstUtils.getDocument(element);
+            if (doc && doc.uri) {
+                const docUri = doc.uri.toString();
+                if (docUri !== rootDocUri) {
+                    // Use the FULL document URI, not just the basename: included files
+                    // frequently share a name (e.g. one landscape.dsl per catalog
+                    // folder) and the same header, so their first element sits at the
+                    // same CST offset. A basename does not identify such a document,
+                    // so two distinct elements would hash to the same id.
+                    docPart = docUri + '|';
+                }
+            }
+        } catch {
+            // ignore - keep short hash
+        }
+    }
+
+    const offset = element?.$cstNode?.offset ?? '0';
+    const type = canonicalElementType(element);
+    let hashInput: string;
+
+    if (isImplicitRelationship(element)) {
+        const source = (resolvers?.source ?? contextElement)(element);
+        const target = (resolvers?.target ?? contextElement)(element);
+        const sourceId = source ? flatId(source, rootDocUri, resolvers) : 'unknown_src';
+        const targetId = target ? flatId(target, rootDocUri, resolvers) : 'unknown_dst';
+        hashInput = `implicit|${sourceId}|${targetId}|${docPart}${offset}`;
+    } else if (isRelationship(element)) {
+        const source = (resolvers?.source ?? contextElement)(element);
+        const target = (resolvers?.target ?? contextElement)(element);
+        const sourceId = source ? flatId(source, rootDocUri, resolvers) : 'unknown_src';
+        const targetId = target ? flatId(target, rootDocUri, resolvers) : 'unknown_dst';
+        hashInput = `relationship|${sourceId}|${targetId}|${docPart}${offset}`;
+    } else {
+        hashInput = `${type}|${docPart}${offset}`;
+    }
+
+    const hash = C4Utils.generateHash(hashInput);
+
+    let prefix = 'element';
+    if (isRelationship(element) || isImplicitRelationship(element)) {
+        prefix = 'relationship';
+    } else if (element?.$type) {
+        prefix = type.toLowerCase();
+    }
+    return `${prefix}_${hash}`;
+}
+
+/**
+ * The element type a flat id is computed from. `GenericInstance` (the
+ * `instanceOf` form) and `ArchetypeInstance` nodes are materialised by the
+ * generator as a concrete base type, so their id must use that effective type;
+ * otherwise the enricher — which sees the original AST node — would compute a
+ * different id for the same emitted element.
+ */
+function canonicalElementType(element: any): string {
+    if (isGenericInstance(element)) {
+        const ref = element?.element?.ref;
+        if (isSoftwareSystem(ref)) return 'SoftwareSystemInstance';
+        if (isContainer(ref)) return 'ContainerInstance';
+    }
+    if (isArchetypeInstance(element)) {
+        const effective = archetypeInstanceType(element);
+        if (effective && effective !== 'Relationship') return effective;
+    }
+    return element?.$type || 'element';
+}
+
+/**
+ * Maps an archetype base keyword to the element type it creates.
+ */
+const ARCHETYPE_BASE_TYPES: Record<string, string> = {
+    person: 'Person',
+    softwaresystem: 'SoftwareSystem',
+    container: 'Container',
+    component: 'Component',
+    deploymentnode: 'DeploymentNode',
+    infrastructurenode: 'InfrastructureNode',
+    softwaresysteminstance: 'SoftwareSystemInstance',
+    containerinstance: 'ContainerInstance',
+    custom: 'CustomElement',
+    element: 'CustomElement',
+    group: 'Group',
+};
+
+/**
+ * Walks the archetype inheritance chain of a node, from the archetype it names
+ * to the most distant base, cutting cycles.
+ *
+ * @param node an ArchetypeInstance / RelationshipArrow node, or anything else
+ * @returns the archetypes in inheritance order (empty when none apply)
+ */
+export function archetypeChain(node: any): any[] {
+    const chain: any[] = [];
+    const ref = node?.archetype?.ref;
+    if (!ref) {
+        return chain;
+    }
+    const seen = new Set<any>();
+    let arch: any = ref;
+    while (arch && !seen.has(arch)) {
+        seen.add(arch);
+        chain.push(arch);
+        arch = arch.baseArchetype?.ref;
+    }
+    return chain;
+}
+
+/**
+ * Resolves the element type an archetype instance behaves as: the first concrete
+ * `baseType` (or relationship arrow) along the archetype chain.
+ *
+ * @param node an ArchetypeInstance node, or anything else
+ * @returns the effective element type name (e.g. 'SoftwareSystem'), or undefined
+ */
+export function archetypeInstanceType(node: any): string | undefined {
+    for (const arch of archetypeChain(node)) {
+        if (typeof arch.baseType === 'string' && arch.baseType) {
+            return ARCHETYPE_BASE_TYPES[arch.baseType.toLowerCase()];
+        }
+        if (arch.baseArrow) {
+            return 'Relationship';
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Same walk as archetypeChain(), resolving every name through `lookup` from the
+ * node's `$refText` instead of reading `.ref`.
+ *
+ * @param node an ArchetypeInstance / RelationshipArrow node, or anything else
+ * @param lookup resolves a `$refText` name to its ArchetypeDefinition node
+ * @returns the archetypes in inheritance order (empty when none apply)
+ */
+export function archetypeChainByRefText(node: any, lookup: (name: string | undefined) => any | undefined): any[] {
+    const chain: any[] = [];
+    const seen = new Set<any>();
+    let refText: string | undefined = node?.archetype?.$refText;
+    while (refText) {
+        const arch = lookup(refText);
+        if (!arch || seen.has(arch)) {
+            break;
+        }
+        seen.add(arch);
+        chain.push(arch);
+        refText = arch.baseArchetype?.$refText;
+    }
+    return chain;
+}
+
+/**
+ * Resolves the element type an archetype instance behaves as, using `$refText`
+ * lookups instead of `.ref` access.
+ *
+ * @param node an ArchetypeInstance node, or anything else
+ * @param lookup resolves a `$refText` name to its ArchetypeDefinition node
+ * @returns the effective element type name (e.g. 'SoftwareSystem'), or undefined
+ */
+export function archetypeInstanceTypeByRefText(node: any, lookup: (name: string | undefined) => any | undefined): string | undefined {
+    for (const arch of archetypeChainByRefText(node, lookup)) {
+        if (typeof arch.baseType === 'string' && arch.baseType) {
+            return ARCHETYPE_BASE_TYPES[arch.baseType.toLowerCase()];
+        }
+        if (arch.baseArrow) {
+            return 'Relationship';
+        }
+    }
+    return undefined;
+}
+
+/** Fallback source/target resolver: climbs the AST $container chain for C4 elements. */
+export function contextElement(rel: any): any | undefined {
+    let parent = rel?.$container;
+    while (parent) {
+        if (isSoftwareSystem(parent) || isContainer(parent) || isComponent(parent) ||
+            isDeploymentNode(parent) || isInfrastructureNode(parent) ||
+            isSoftwareSystemInstance(parent) || isContainerInstance(parent)) {
+            return parent;
+        }
+        parent = parent.$container;
+    }
+    return undefined;
+}
+
+/**
+ * The declared identifier of an element or relationship node. `ElementAssignment`
+ * carries the assignment terminal ("name = ..."), so only a trailing '=' and
+ * surrounding quotes are stripped. Returns undefined when no id is declared.
+ */
+export function declaredIdentifier(node: any): string | undefined {
+    const id = node?.id;
+    if (id === undefined || id === null) return undefined;
+    return String(id).replace(/^["']|["']$/g, '').replace(/=\s*$/, '').trim();
+}
+
+/** Human-readable AST type: `SoftwareSystem` -> `software system`. */
+export function describeType(type: string): string {
+    return type.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
+}

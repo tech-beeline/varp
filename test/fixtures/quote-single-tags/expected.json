@@ -1,0 +1,63 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "2",
+        "name" : "C0",
+        "properties" : {
+          "structurizr.dsl.identifier" : "s.c0"
+        },
+        "tags" : "Element,Container,tagA,'Tag1'"
+      }, {
+        "documentation" : { },
+        "id" : "3",
+        "name" : "C1",
+        "properties" : {
+          "structurizr.dsl.identifier" : "s.c1"
+        },
+        "tags" : "Element,Container,'tagA,Tag1'"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "S",
+      "properties" : {
+        "structurizr.dsl.identifier" : "s"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "16",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCiAgICAhaWRlbnRpZmllcnMgaGllcmFyY2hpY2FsDQogICAgbW9kZWwgew0KICAgICAgICBzID0gc29mdHdhcmVTeXN0ZW0gIlMiIHsNCiAgICAgICAgICAgIGMwID0gY29udGFpbmVyICJDMCIgew0KICAgICAgICAgICAgICAgIHRhZ3MgdGFnQSwgJ1RhZzEnDQogICAgICAgICAgICB9DQogICAgICAgICAgICBjMSA9IGNvbnRhaW5lciAiQzEiIHsNCiAgICAgICAgICAgICAgICB0YWdzICd0YWdBLCBUYWcxJw0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQogICAgfQ0KICAgIHZpZXdzIHsNCiAgICAgICAgY29udGFpbmVyIHMgew0KICAgICAgICAgICAgaW5jbHVkZSAiZWxlbWVudC50YWc9PVRhZzEiDQogICAgICAgICAgICBhdXRvTGF5b3V0DQogICAgICAgIH0NCiAgICB9DQp9",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Container-001",
+      "name" : "Container View: S",
+      "order" : 1,
+      "softwareSystemId" : "1"
+    } ]
+  }
+}

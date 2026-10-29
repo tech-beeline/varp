@@ -1,0 +1,68 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "2",
+        "name" : "C0",
+        "properties" : {
+          "structurizr.dsl.identifier" : "s.c0"
+        },
+        "tags" : "Element,Container,Tag1,Tag2"
+      }, {
+        "documentation" : { },
+        "id" : "3",
+        "name" : "C1",
+        "properties" : {
+          "structurizr.dsl.identifier" : "s.c1"
+        },
+        "tags" : "Element,Container,Tag3"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "S",
+      "properties" : {
+        "structurizr.dsl.identifier" : "s"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "14",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCiAgICAhaWRlbnRpZmllcnMgaGllcmFyY2hpY2FsDQogICAgbW9kZWwgew0KICAgICAgICBzID0gc29mdHdhcmVTeXN0ZW0gIlMiIHsNCiAgICAgICAgICAgIGMwID0gY29udGFpbmVyICJDMCIgew0KICAgICAgICAgICAgICAgIHRhZ3MgIlRhZzEsVGFnMiINCiAgICAgICAgICAgIH0NCiAgICAgICAgICAgIGMxID0gY29udGFpbmVyICJDMSIgew0KICAgICAgICAgICAgICAgIHRhZ3MgIlRhZzMiDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQogICAgdmlld3Mgew0KICAgICAgICBjb250YWluZXIgcyB7DQogICAgICAgICAgICBpbmNsdWRlICJlbGVtZW50LnRhZz09VGFnMSINCiAgICAgICAgICAgIGF1dG9MYXlvdXQNCiAgICAgICAgfQ0KICAgIH0NCn0=",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Container-001",
+      "name" : "Container View: S",
+      "order" : 1,
+      "softwareSystemId" : "1"
+    } ]
+  }
+}

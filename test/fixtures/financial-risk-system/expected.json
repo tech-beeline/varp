@@ -1,0 +1,267 @@
+{
+  "configuration" : { },
+  "description" : "This is a simple (incomplete) example C4 model based upon the financial risk system architecture kata, which can be found at http://bit.ly/sa4d-risksystem",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "people" : [ {
+      "description" : "A regular business user.",
+      "id" : "1",
+      "name" : "Business User",
+      "properties" : {
+        "structurizr.dsl.identifier" : "businessUser"
+      },
+      "relationships" : [ {
+        "description" : "Views reports using",
+        "destinationId" : "3",
+        "id" : "10",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Person"
+    }, {
+      "description" : "A regular business user who can also configure the parameters used in the risk calculations.",
+      "id" : "2",
+      "name" : "Configuration User",
+      "properties" : {
+        "structurizr.dsl.identifier" : "configurationUser"
+      },
+      "relationships" : [ {
+        "description" : "Configures parameters using",
+        "destinationId" : "3",
+        "id" : "14",
+        "sourceId" : "2",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "description" : "Calculates the bank's exposure to risk for product X.",
+      "documentation" : { },
+      "id" : "3",
+      "name" : "Financial Risk System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "financialRiskSystem"
+      },
+      "relationships" : [ {
+        "description" : "Gets trade data from",
+        "destinationId" : "4",
+        "id" : "11",
+        "sourceId" : "3",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Gets counterparty data from",
+        "destinationId" : "5",
+        "id" : "12",
+        "sourceId" : "3",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Gets counterparty data from",
+        "destinationId" : "6",
+        "id" : "13",
+        "sourceId" : "3",
+        "tags" : "Relationship,Future State"
+      }, {
+        "description" : "Sends a notification that a report is ready to",
+        "destinationId" : "7",
+        "id" : "15",
+        "sourceId" : "3",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Sends critical failure alerts to",
+        "destinationId" : "8",
+        "id" : "17",
+        "sourceId" : "3",
+        "tags" : "Relationship,Asynchronous,Alert",
+        "technology" : "SNMP"
+      }, {
+        "description" : "Uses for user authentication and authorisation",
+        "destinationId" : "9",
+        "id" : "18",
+        "sourceId" : "3",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System,Financial Risk System"
+    }, {
+      "description" : "The system of record for trades of type X.",
+      "documentation" : { },
+      "id" : "4",
+      "name" : "Trade Data System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "tradeDataSystem"
+      },
+      "tags" : "Element,Software System"
+    }, {
+      "description" : "Manages reference data for all counterparties the bank interacts with.",
+      "documentation" : { },
+      "id" : "5",
+      "name" : "Reference Data System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "referenceDataSystem"
+      },
+      "tags" : "Element,Software System"
+    }, {
+      "description" : "Manages reference data for all counterparties the bank interacts with.",
+      "documentation" : { },
+      "id" : "6",
+      "name" : "Reference Data System v2.0",
+      "properties" : {
+        "structurizr.dsl.identifier" : "referenceDataSystemV2"
+      },
+      "tags" : "Element,Software System,Future State"
+    }, {
+      "description" : "The bank's Microsoft Exchange system.",
+      "documentation" : { },
+      "id" : "7",
+      "name" : "E-mail system",
+      "properties" : {
+        "structurizr.dsl.identifier" : "emailSystem"
+      },
+      "relationships" : [ {
+        "description" : "Sends a notification that a report is ready to",
+        "destinationId" : "1",
+        "id" : "16",
+        "sourceId" : "7",
+        "tags" : "Relationship,Asynchronous",
+        "technology" : "E-mail message"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "description" : "The bank's central monitoring and alerting dashboard.",
+      "documentation" : { },
+      "id" : "8",
+      "name" : "Central Monitoring Service",
+      "properties" : {
+        "structurizr.dsl.identifier" : "centralMonitoringService"
+      },
+      "tags" : "Element,Software System"
+    }, {
+      "description" : "The bank's authentication and authorisation system.",
+      "documentation" : { },
+      "id" : "9",
+      "name" : "Active Directory",
+      "properties" : {
+        "structurizr.dsl.identifier" : "activeDirectory"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Financial Risk System",
+  "properties" : {
+    "structurizr.inspection.error" : "8",
+    "structurizr.dsl" : "d29ya3NwYWNlICJGaW5hbmNpYWwgUmlzayBTeXN0ZW0iICJUaGlzIGlzIGEgc2ltcGxlIChpbmNvbXBsZXRlKSBleGFtcGxlIEM0IG1vZGVsIGJhc2VkIHVwb24gdGhlIGZpbmFuY2lhbCByaXNrIHN5c3RlbSBhcmNoaXRlY3R1cmUga2F0YSwgd2hpY2ggY2FuIGJlIGZvdW5kIGF0IGh0dHA6Ly9iaXQubHkvc2E0ZC1yaXNrc3lzdGVtIiB7DQoNCiAgICBtb2RlbCB7DQogICAgICAgIGJ1c2luZXNzVXNlciA9IHBlcnNvbiAiQnVzaW5lc3MgVXNlciIgIkEgcmVndWxhciBidXNpbmVzcyB1c2VyLiINCiAgICAgICAgY29uZmlndXJhdGlvblVzZXIgPSBwZXJzb24gIkNvbmZpZ3VyYXRpb24gVXNlciIgIkEgcmVndWxhciBidXNpbmVzcyB1c2VyIHdobyBjYW4gYWxzbyBjb25maWd1cmUgdGhlIHBhcmFtZXRlcnMgdXNlZCBpbiB0aGUgcmlzayBjYWxjdWxhdGlvbnMuIg0KDQogICAgICAgIGZpbmFuY2lhbFJpc2tTeXN0ZW0gPSBzb2Z0d2FyZVN5c3RlbSAiRmluYW5jaWFsIFJpc2sgU3lzdGVtIiAiQ2FsY3VsYXRlcyB0aGUgYmFuaydzIGV4cG9zdXJlIHRvIHJpc2sgZm9yIHByb2R1Y3QgWC4iICJGaW5hbmNpYWwgUmlzayBTeXN0ZW0iDQogICAgICAgIHRyYWRlRGF0YVN5c3RlbSA9IHNvZnR3YXJlU3lzdGVtICJUcmFkZSBEYXRhIFN5c3RlbSIgIlRoZSBzeXN0ZW0gb2YgcmVjb3JkIGZvciB0cmFkZXMgb2YgdHlwZSBYLiINCiAgICAgICAgcmVmZXJlbmNlRGF0YVN5c3RlbSA9IHNvZnR3YXJlU3lzdGVtICJSZWZlcmVuY2UgRGF0YSBTeXN0ZW0iICJNYW5hZ2VzIHJlZmVyZW5jZSBkYXRhIGZvciBhbGwgY291bnRlcnBhcnRpZXMgdGhlIGJhbmsgaW50ZXJhY3RzIHdpdGguIg0KICAgICAgICByZWZlcmVuY2VEYXRhU3lzdGVtVjIgPSBzb2Z0d2FyZVN5c3RlbSAiUmVmZXJlbmNlIERhdGEgU3lzdGVtIHYyLjAiICJNYW5hZ2VzIHJlZmVyZW5jZSBkYXRhIGZvciBhbGwgY291bnRlcnBhcnRpZXMgdGhlIGJhbmsgaW50ZXJhY3RzIHdpdGguIiAiRnV0dXJlIFN0YXRlIg0KICAgICAgICBlbWFpbFN5c3RlbSA9IHNvZnR3YXJlU3lzdGVtICJFLW1haWwgc3lzdGVtIiAiVGhlIGJhbmsncyBNaWNyb3NvZnQgRXhjaGFuZ2Ugc3lzdGVtLiINCiAgICAgICAgY2VudHJhbE1vbml0b3JpbmdTZXJ2aWNlID0gc29mdHdhcmVTeXN0ZW0gIkNlbnRyYWwgTW9uaXRvcmluZyBTZXJ2aWNlIiAiVGhlIGJhbmsncyBjZW50cmFsIG1vbml0b3JpbmcgYW5kIGFsZXJ0aW5nIGRhc2hib2FyZC4iDQogICAgICAgIGFjdGl2ZURpcmVjdG9yeSA9IHNvZnR3YXJlU3lzdGVtICJBY3RpdmUgRGlyZWN0b3J5IiAiVGhlIGJhbmsncyBhdXRoZW50aWNhdGlvbiBhbmQgYXV0aG9yaXNhdGlvbiBzeXN0ZW0uIg0KDQogICAgICAgIGJ1c2luZXNzVXNlciAtPiBmaW5hbmNpYWxSaXNrU3lzdGVtICJWaWV3cyByZXBvcnRzIHVzaW5nIg0KICAgICAgICBmaW5hbmNpYWxSaXNrU3lzdGVtIC0+IHRyYWRlRGF0YVN5c3RlbSAiR2V0cyB0cmFkZSBkYXRhIGZyb20iDQogICAgICAgIGZpbmFuY2lhbFJpc2tTeXN0ZW0gLT4gcmVmZXJlbmNlRGF0YVN5c3RlbSAiR2V0cyBjb3VudGVycGFydHkgZGF0YSBmcm9tIg0KICAgICAgICBmaW5hbmNpYWxSaXNrU3lzdGVtIC0+IHJlZmVyZW5jZURhdGFTeXN0ZW1WMiAiR2V0cyBjb3VudGVycGFydHkgZGF0YSBmcm9tIiAiIiAiRnV0dXJlIFN0YXRlIg0KICAgICAgICBjb25maWd1cmF0aW9uVXNlciAtPiBmaW5hbmNpYWxSaXNrU3lzdGVtICJDb25maWd1cmVzIHBhcmFtZXRlcnMgdXNpbmciDQogICAgICAgIGZpbmFuY2lhbFJpc2tTeXN0ZW0gLT4gZW1haWxTeXN0ZW0gIlNlbmRzIGEgbm90aWZpY2F0aW9uIHRoYXQgYSByZXBvcnQgaXMgcmVhZHkgdG8iDQogICAgICAgIGVtYWlsU3lzdGVtIC0+IGJ1c2luZXNzVXNlciAiU2VuZHMgYSBub3RpZmljYXRpb24gdGhhdCBhIHJlcG9ydCBpcyByZWFkeSB0byIgIkUtbWFpbCBtZXNzYWdlIiAiQXN5bmNocm9ub3VzIg0KICAgICAgICBmaW5hbmNpYWxSaXNrU3lzdGVtIC0+IGNlbnRyYWxNb25pdG9yaW5nU2VydmljZSAiU2VuZHMgY3JpdGljYWwgZmFpbHVyZSBhbGVydHMgdG8iICJTTk1QIiAiQXN5bmNocm9ub3VzLCBBbGVydCINCiAgICAgICAgZmluYW5jaWFsUmlza1N5c3RlbSAtPiBhY3RpdmVEaXJlY3RvcnkgIlVzZXMgZm9yIHVzZXIgYXV0aGVudGljYXRpb24gYW5kIGF1dGhvcmlzYXRpb24iDQogICAgfQ0KICAgICAgICAgDQogICAgdmlld3Mgew0KDQogICAgICAgIHN5c3RlbUNvbnRleHQgZmluYW5jaWFsUmlza1N5c3RlbSAiQ29udGV4dCIgIkFuIGV4YW1wbGUgU3lzdGVtIENvbnRleHQgZGlhZ3JhbSBmb3IgdGhlIEZpbmFuY2lhbCBSaXNrIFN5c3RlbSBhcmNoaXRlY3R1cmUga2F0YS4iIHsNCiAgICAgICAgICAgIGluY2x1ZGUgKg0KICAgICAgICAgICAgYXV0b0xheW91dA0KICAgICAgICB9DQoNCiAgICAgICAgc3R5bGVzIHsNCiAgICAgICAgICAgIGVsZW1lbnQgIkVsZW1lbnQiIHsNCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmDQogICAgICAgICAgICB9DQogICAgICAgICAgICBlbGVtZW50ICJTb2Z0d2FyZSBTeXN0ZW0iIHsNCiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM4MDE1MTUNCiAgICAgICAgICAgICAgICBzaGFwZSBSb3VuZGVkQm94DQogICAgICAgICAgICB9DQogICAgICAgICAgICBlbGVtZW50ICJGaW5hbmNpYWwgUmlzayBTeXN0ZW0iIHsNCiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM1NTAwMDANCiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmDQogICAgICAgICAgICB9DQogICAgICAgICAgICBlbGVtZW50ICJGdXR1cmUgU3RhdGUiIHsNCiAgICAgICAgICAgICAgICBvcGFjaXR5IDMwDQogICAgICAgICAgICB9DQogICAgICAgICAgICBlbGVtZW50ICJQZXJzb24iIHsNCiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICNkNDZhNmENCiAgICAgICAgICAgICAgICBzaGFwZSBQZXJzb24NCiAgICAgICAgICAgIH0NCiAgICAgICAgICAgIHJlbGF0aW9uc2hpcCAiUmVsYXRpb25zaGlwIiB7DQogICAgICAgICAgICAgICAgZGFzaGVkIGZhbHNlDQogICAgICAgICAgICB9DQogICAgICAgICAgICByZWxhdGlvbnNoaXAgIkFzeW5jaHJvbm91cyIgew0KICAgICAgICAgICAgICAgIGRhc2hlZCB0cnVlDQogICAgICAgICAgICB9DQogICAgICAgICAgICByZWxhdGlvbnNoaXAgIkFsZXJ0IiB7DQogICAgICAgICAgICAgICAgY29sb3IgI2ZmMDAwMA0KICAgICAgICAgICAgfQ0KICAgICAgICAgICAgcmVsYXRpb25zaGlwICJGdXR1cmUgU3RhdGUiIHsNCiAgICAgICAgICAgICAgICBvcGFjaXR5IDMwDQogICAgICAgICAgICB9DQogICAgICAgfQ0KDQogICAgfQ0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : {
+        "elements" : [ {
+          "color" : "#ffffff",
+          "tag" : "Element"
+        }, {
+          "background" : "#550000",
+          "color" : "#ffffff",
+          "tag" : "Financial Risk System"
+        }, {
+          "opacity" : 30,
+          "tag" : "Future State"
+        }, {
+          "background" : "#d46a6a",
+          "shape" : "Person",
+          "tag" : "Person"
+        }, {
+          "background" : "#801515",
+          "shape" : "RoundedBox",
+          "tag" : "Software System"
+        } ],
+        "relationships" : [ {
+          "color" : "#ff0000",
+          "tag" : "Alert"
+        }, {
+          "dashed" : true,
+          "tag" : "Asynchronous"
+        }, {
+          "opacity" : 30,
+          "tag" : "Future State"
+        }, {
+          "dashed" : false,
+          "tag" : "Relationship"
+        } ]
+      },
+      "terminology" : { }
+    },
+    "systemContextViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "description" : "An example System Context diagram for the Financial Risk System architecture kata.",
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "8",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "9",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "Context",
+      "name" : "System Context View: Financial Risk System",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "10"
+      }, {
+        "id" : "11"
+      }, {
+        "id" : "12"
+      }, {
+        "id" : "13"
+      }, {
+        "id" : "14"
+      }, {
+        "id" : "15"
+      }, {
+        "id" : "16"
+      }, {
+        "id" : "17"
+      }, {
+        "id" : "18"
+      } ],
+      "softwareSystemId" : "3"
+    } ]
+  }
+}

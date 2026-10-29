@@ -1,0 +1,266 @@
+{
+  "name": "c4-varp",
+  "displayName": "C4 Architecture As A Code",
+  "description": "Extension for working with Architecture As A Code in the C4 model. Includes syntax highlighting, diagram preview, and tools for working with IaaC.",
+  "version": "2.1.1",
+  "publisher": "vimpelcom",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tech-beeline/varp"
+  },
+  "license": "Apache-2.0",
+  "icon": "images/logo.png",
+  "engines": {
+    "vscode": "^1.101.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "configurationDefaults": {
+      "[c4]": {
+        "editor.bracketPairColorization.enabled": true,
+        "editor.formatOnType": true
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "varp-sidebar",
+          "title": "C4 Architecture As A Code",
+          "icon": "images/logo.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "varp-fitness-panel",
+          "title": "Fitness Results",
+          "icon": "images/logo.svg"
+        }
+      ]
+    },
+    "views": {
+      "varp-fitness-panel": [
+        {
+          "id": "fitness-results",
+          "name": "Fitness Results",
+          "type": "webview",
+          "when": "extension:c4 && varp.archops"
+        }
+      ],
+      "varp-sidebar": [
+        {
+          "id": "patterns-catalogue",
+          "name": "Patterns Catalogue",
+          "when": "extension:c4 && varp.archops",
+          "icon": "$(book)"
+        },
+        {
+          "id": "capabilities-catalogue",
+          "name": "Capabilities Catalogue",
+          "when": "extension:c4 && varp.archops",
+          "icon": "$(book)"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "varp.refresh-patterns",
+          "when": "view == patterns-catalogue",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "varp.copy-capability-code",
+          "when": "view == capabilities-catalogue",
+          "group": "inline"
+        },
+        {
+          "command": "varp.get-pattern-dsl",
+          "when": "view == patterns-catalogue && viewItem == leaf",
+          "group": "inline"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "when": "activeWebviewPanelId == structurizrPreview",
+          "command": "varp.export-svg",
+          "group": "navigation"
+        },
+        {
+          "when": "activeWebviewPanelId == structurizrPreview",
+          "command": "varp.export-drawio",
+          "group": "navigation"
+        },
+        {
+          "when": "activeWebviewPanelId == structurizrPreview",
+          "command": "varp.import-drawio",
+          "group": "navigation"
+        }
+      ]
+    },
+    "semanticTokenColors": {
+      "[c4]": {
+        "macro": {
+          "foreground": "#C586C0",
+          "fontStyle": "bold"
+        },
+        "class": {
+          "foreground": "#4EC9B0"
+        },
+        "property": {
+          "foreground": "#9CDCFE",
+          "fontStyle": "italic"
+        },
+        "variable.declaration": {
+          "foreground": "#DCDCAA",
+          "fontStyle": "underline"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "varp.diagram-preview",
+        "title": "Show As Structurizr Diagram"
+      },
+      {
+        "command": "varp.copy-capability-code",
+        "title": "Copy capability code",
+        "shortTitle": "Copy capability code",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "varp.get-pattern-dsl",
+        "title": "Copy pattern C4 DSL",
+        "shortTitle": "Copy pattern C4 DSL",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "varp.refresh-patterns",
+        "title": "Refresh patterns catalogue",
+        "shortTitle": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "varp.export-drawio",
+        "title": "Export to DrawIO (.drawio)",
+        "shortTitle": "Export to DrawIO"
+      },
+      {
+        "command": "varp.import-drawio",
+        "title": "Import layout from DrawIO (.drawio)",
+        "shortTitle": "Import Layout"
+      },
+      {
+        "command": "varp.export-svg",
+        "title": "Export to SVG (.svg)",
+        "shortTitle": "Export to SVG"
+      },
+      {
+        "command": "varp.export-json",
+        "title": "Export Workspace JSON (.json)",
+        "shortTitle": "Export Workspace JSON"
+      }
+    ],
+    "languages": [
+      {
+        "id": "c4",
+        "aliases": [
+          "C4",
+          "c4"
+        ],
+        "extensions": [
+          ".dsl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "c4",
+        "scopeName": "source.c4",
+        "path": "./syntaxes/c4.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "properties": {
+        "archops.api.secret": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Workspace API Secret"
+        },
+        "archops.api.key": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Workspace API Key"
+        },
+        "archops.api.url": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Archops automation server URL"
+        },
+        "varp.diagram.autoRefresh": {
+          "type": "string",
+          "enum": [
+            "onChange",
+            "onSave"
+          ],
+          "default": "onChange",
+          "scope": "resource",
+          "description": "When to automatically refresh the diagram preview: on every change of the open document (onChange) or when the document is saved to disk (onSave)"
+        },
+        "varp.mcp.autoStart": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "description": "Automatically start the built-in MCP server (Model Context Protocol) on extension activation, so AI assistants can query the resolved C4 model via streamable HTTP on 127.0.0.1."
+        }
+      }
+    },
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "c4-varp.mcp",
+        "label": "C4 VARP MCP"
+      }
+    ]
+  },
+  "browser": "./dist/extension.browser.js",
+  "main": "./dist/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run build:graphviz && langium generate --mode production && tsc -b && node esbuild.mjs",
+    "build": "npm run build:graphviz && langium generate --mode production && tsc -b && node esbuild.mjs && vitest run",
+    "build:ci": "npm run build:graphviz && langium generate --mode production && tsc -b && node esbuild.mjs && vitest run && vsce package --no-dependencies",
+    "build:graphviz": "node native/graphviz/build.mjs",
+    "test": "vitest run",
+    "package": "vsce package --no-dependencies",
+    "dev": "npm run build && node -e \"require('http').createServer((req, res) => { res.writeHead(200, {'Content-Type': 'text/html'}); res.end('<h1>c4varp VS Code Extension</h1><p>This is a VS Code extension project.</p>'); }).listen(3000, '0.0.0.0');\""
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "@xmldom/xmldom": "^0.9.12",
+    "fflate": "^0.8.3",
+    "langium": "~4.4.0",
+    "marked": "~18.1.1",
+    "vscode-languageclient": "~10.1.0",
+    "vscode-languageserver": "~10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "1.101.0",
+    "@vscode/test-web": "^0.0.80",
+    "@vscode/vsce": "^3.0.0",
+    "crypto-browserify": "3.12.1",
+    "esbuild": "^0.28.0",
+    "events": "^3.3.0",
+    "langium-cli": "~4.4.0",
+    "ovsx": "^0.10.0",
+    "stream-browserify": "^3.0.0",
+    "typescript": "~5.5.4",
+    "vitest": "^4.1.10"
+  }
+}

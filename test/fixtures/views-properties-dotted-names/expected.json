@@ -1,0 +1,28 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : { },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "3",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCiAgICB2aWV3cyB7DQogICAgICAgIHByb3BlcnRpZXMgew0KICAgICAgICAgICAgcGxhbnR1bWwudXJsICAgICAgICAiaHR0cHM6Ly9wbGFudHVtbC5leGFtcGxlLmNvbSINCiAgICAgICAgICAgIGtyb2tpLnVybCAgICAgICAgICAgImh0dHBzOi8va3Jva2kuZXhhbXBsZS5jb20iDQogICAgICAgICAgICBwbGFudHVtbC5mb3JtYXQgICAgICJzdmciDQogICAgICAgICAgICBrcm9raS5mb3JtYXQgICAgICAgICJzdmciDQogICAgICAgICAgICBzdHJ1Y3R1cml6ci50b29sdGlwcyB0cnVlDQogICAgICAgIH0NCiAgICB9DQp9",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "properties" : {
+        "plantuml.format" : "svg",
+        "plantuml.url" : "https://plantuml.example.com",
+        "kroki.format" : "svg",
+        "structurizr.tooltips" : "true",
+        "kroki.url" : "https://kroki.example.com"
+      },
+      "styles" : { },
+      "terminology" : { }
+    }
+  }
+}

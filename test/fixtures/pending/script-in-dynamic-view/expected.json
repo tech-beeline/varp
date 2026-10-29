@@ -1,0 +1,45 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "people" : [ {
+      "id" : "1",
+      "name" : "User",
+      "properties" : {
+        "structurizr.dsl.identifier" : "user"
+      },
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "documentation" : { },
+      "id" : "2",
+      "name" : "Software System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "softwareSystem"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "8",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "dynamicViews" : [ {
+      "description" : "Groovy",
+      "externalBoundariesVisible" : false,
+      "key" : "key",
+      "name" : "Dynamic View",
+      "order" : 1
+    } ]
+  }
+}

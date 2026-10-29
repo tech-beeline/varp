@@ -1,0 +1,11 @@
+{
+  "projectName": "C4",
+  "languages": [
+    {
+      "id": "c4",
+      "fileExtensions": [".dsl"],
+      "grammar": "src/language/c4.langium"
+    }
+  ],
+  "out": "src/generated"
+}

@@ -1,0 +1,88 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "2",
+        "name" : "B",
+        "properties" : {
+          "structurizr.dsl.identifier" : "b",
+          "a" : "1",
+          "shared" : "fromSecond",
+          "b" : "2"
+        },
+        "tags" : "Element,Container"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "App",
+      "properties" : {
+        "structurizr.dsl.identifier" : "app"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "11",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCiAgICBtb2RlbCB7DQogICAgICAgIGFwcCA9IHNvZnR3YXJlU3lzdGVtICJBcHAiIHsNCiAgICAgICAgICAgIGIgPSBjb250YWluZXIgIkIiDQogICAgICAgICAgICAhZWxlbWVudCBiIHsNCiAgICAgICAgICAgICAgICBwcm9wZXJ0aWVzIHsNCiAgICAgICAgICAgICAgICAgICAgYSAxDQogICAgICAgICAgICAgICAgICAgIHNoYXJlZCBmcm9tRmlyc3QNCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgICAgIGIgMg0KICAgICAgICAgICAgICAgICAgICBzaGFyZWQgZnJvbVNlY29uZA0KICAgICAgICAgICAgICAgIH0NCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KICAgIH0NCn0=",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "TopBottom",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "generatedKey" : true,
+      "key" : "Container-001",
+      "name" : "Container View: App",
+      "order" : 3,
+      "softwareSystemId" : "1"
+    } ],
+    "systemContextViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemContext-001",
+      "name" : "System Context View: App",
+      "order" : 2,
+      "softwareSystemId" : "1"
+    } ],
+    "systemLandscapeViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemLandscape-001",
+      "name" : "System Landscape View",
+      "order" : 1
+    } ]
+  }
+}

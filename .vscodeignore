@@ -1,0 +1,17 @@
+src/**
+out/**
+tsconfig.json
+esbuild.mjs
+langium-config.json
+.gitignore
+.env.example
+.vscode/**
+.vscode-test/**
+.kilo/**
+*.vsix
+**/*.map
+test/**
+plans/**
+vitest.config.ts
+.github/**
+native/**

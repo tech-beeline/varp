@@ -1,0 +1,468 @@
+{
+  "configuration" : { },
+  "description" : "An example AWS deployment architecture.",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "deploymentNodes" : [ {
+      "children" : [ {
+        "children" : [ {
+          "children" : [ {
+            "containerInstances" : [ {
+              "containerId" : "2",
+              "environment" : "Live",
+              "id" : "11",
+              "instanceId" : 1,
+              "properties" : {
+                "structurizr.dsl.identifier" : "webApplicationInstance"
+              },
+              "relationships" : [ {
+                "description" : "Reads from and writes to",
+                "destinationId" : "14",
+                "id" : "15",
+                "linkedRelationshipId" : "4",
+                "sourceId" : "11",
+                "technology" : "MySQL Protocol/SSL"
+              } ],
+              "tags" : "Container Instance"
+            } ],
+            "environment" : "Live",
+            "id" : "10",
+            "instances" : "1",
+            "name" : "Amazon EC2",
+            "properties" : {
+              "structurizr.dsl.identifier" : "fbb44e5a-72b8-4c57-a201-83e86ac7d9d6"
+            },
+            "tags" : "Element,Deployment Node,Amazon Web Services - EC2"
+          } ],
+          "environment" : "Live",
+          "id" : "9",
+          "instances" : "1",
+          "name" : "Autoscaling group",
+          "properties" : {
+            "structurizr.dsl.identifier" : "b520b564-f54b-4b62-b747-21f8b9a60143"
+          },
+          "tags" : "Element,Deployment Node,Amazon Web Services - Auto Scaling"
+        }, {
+          "children" : [ {
+            "containerInstances" : [ {
+              "containerId" : "3",
+              "environment" : "Live",
+              "id" : "14",
+              "instanceId" : 1,
+              "properties" : {
+                "structurizr.dsl.identifier" : "databaseInstance"
+              },
+              "tags" : "Container Instance"
+            } ],
+            "environment" : "Live",
+            "id" : "13",
+            "instances" : "1",
+            "name" : "MySQL",
+            "properties" : {
+              "structurizr.dsl.identifier" : "6d23ef09-c0ad-4e67-aaa1-2dcf5d9a4165"
+            },
+            "tags" : "Element,Deployment Node,Amazon Web Services - RDS MySQL instance"
+          } ],
+          "environment" : "Live",
+          "id" : "12",
+          "instances" : "1",
+          "name" : "Amazon RDS",
+          "properties" : {
+            "structurizr.dsl.identifier" : "bc9d3ee0-87d1-4219-897c-07b7bfc2b31b"
+          },
+          "tags" : "Element,Deployment Node,Amazon Web Services - RDS"
+        }, {
+          "environment" : "Live",
+          "id" : "21",
+          "infrastructureNodes" : [ {
+            "environment" : "Live",
+            "id" : "22",
+            "name" : "New infrastructure node 1",
+            "properties" : {
+              "structurizr.dsl.identifier" : "c3aa6d32-4412-4ba7-a90b-0d0c8d4bbbfe"
+            },
+            "relationships" : [ {
+              "destinationId" : "7",
+              "id" : "23",
+              "sourceId" : "22",
+              "tags" : "Relationship"
+            } ],
+            "tags" : "Element,Infrastructure Node"
+          } ],
+          "instances" : "1",
+          "name" : "New deployment node 1",
+          "properties" : {
+            "structurizr.dsl.identifier" : "4e717e30-8df5-48b2-9e90-8a64bc740890"
+          },
+          "tags" : "Element,Deployment Node"
+        }, {
+          "environment" : "Live",
+          "id" : "24",
+          "infrastructureNodes" : [ {
+            "environment" : "Live",
+            "id" : "25",
+            "name" : "New infrastructure node 2",
+            "properties" : {
+              "structurizr.dsl.identifier" : "b97521a0-e69c-42a6-acaf-26dc4b7c117a"
+            },
+            "relationships" : [ {
+              "destinationId" : "7",
+              "id" : "26",
+              "sourceId" : "25",
+              "tags" : "Relationship"
+            } ],
+            "tags" : "Element,Infrastructure Node"
+          } ],
+          "instances" : "1",
+          "name" : "New deployment node 2",
+          "properties" : {
+            "structurizr.dsl.identifier" : "53db16ae-8026-4893-aff8-4ccf15c4d8c6"
+          },
+          "tags" : "Element,Deployment Node"
+        } ],
+        "environment" : "Live",
+        "id" : "6",
+        "infrastructureNodes" : [ {
+          "environment" : "Live",
+          "id" : "7",
+          "name" : "Route 53",
+          "properties" : {
+            "structurizr.dsl.identifier" : "route53"
+          },
+          "relationships" : [ {
+            "description" : "Forwards requests to",
+            "destinationId" : "8",
+            "id" : "16",
+            "sourceId" : "7",
+            "tags" : "Relationship",
+            "technology" : "HTTPS"
+          } ],
+          "tags" : "Element,Infrastructure Node,Amazon Web Services - Route 53"
+        }, {
+          "environment" : "Live",
+          "id" : "8",
+          "name" : "Elastic Load Balancer",
+          "properties" : {
+            "structurizr.dsl.identifier" : "elb"
+          },
+          "relationships" : [ {
+            "description" : "Forwards requests to",
+            "destinationId" : "11",
+            "id" : "17",
+            "sourceId" : "8",
+            "tags" : "Relationship",
+            "technology" : "HTTPS"
+          } ],
+          "tags" : "Element,Infrastructure Node,Amazon Web Services - Elastic Load Balancing"
+        } ],
+        "instances" : "1",
+        "name" : "US-East-1",
+        "properties" : {
+          "structurizr.dsl.identifier" : "region"
+        },
+        "tags" : "Element,Deployment Node,Amazon Web Services - Region"
+      }, {
+        "environment" : "Live",
+        "id" : "18",
+        "infrastructureNodes" : [ {
+          "environment" : "Live",
+          "id" : "19",
+          "name" : "New infrastructure node",
+          "properties" : {
+            "structurizr.dsl.identifier" : "c0aee23c-64d6-44e8-880d-40aa2e7e4f15"
+          },
+          "relationships" : [ {
+            "destinationId" : "7",
+            "id" : "20",
+            "sourceId" : "19",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Infrastructure Node"
+        } ],
+        "instances" : "1",
+        "name" : "New deployment node",
+        "properties" : {
+          "structurizr.dsl.identifier" : "24b4c21a-ff40-446a-b79a-dd557db074b4"
+        },
+        "tags" : "Element,Deployment Node"
+      } ],
+      "environment" : "Live",
+      "id" : "5",
+      "instances" : "1",
+      "name" : "Amazon Web Services",
+      "properties" : {
+        "structurizr.dsl.identifier" : "dfab2552-6520-4baf-b4d7-5d380a32f942"
+      },
+      "tags" : "Element,Deployment Node,Amazon Web Services - Cloud"
+    }, {
+      "environment" : "Live",
+      "id" : "27",
+      "infrastructureNodes" : [ {
+        "environment" : "Live",
+        "id" : "28",
+        "name" : "New infrastructure node 3",
+        "properties" : {
+          "structurizr.dsl.identifier" : "26b0bb4d-f9b3-434e-9d77-9b57e6b4e08b"
+        },
+        "relationships" : [ {
+          "destinationId" : "7",
+          "id" : "29",
+          "sourceId" : "28",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Infrastructure Node"
+      } ],
+      "instances" : "1",
+      "name" : "New deployment node 3",
+      "properties" : {
+        "structurizr.dsl.identifier" : "0997ed96-5ef4-45a3-9cf8-08d8e8944266"
+      },
+      "tags" : "Element,Deployment Node"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "description" : "Allows employees to view and manage information regarding the veterinarians, the clients, and their pets.",
+        "documentation" : { },
+        "id" : "2",
+        "name" : "Web Application",
+        "properties" : {
+          "structurizr.dsl.identifier" : "webApplication"
+        },
+        "relationships" : [ {
+          "description" : "Reads from and writes to",
+          "destinationId" : "3",
+          "id" : "4",
+          "sourceId" : "2",
+          "tags" : "Relationship",
+          "technology" : "MySQL Protocol/SSL"
+        } ],
+        "tags" : "Element,Container",
+        "technology" : "Java and Spring Boot"
+      }, {
+        "description" : "Stores information regarding the veterinarians, the clients, and their pets.",
+        "documentation" : { },
+        "id" : "3",
+        "name" : "Database",
+        "properties" : {
+          "structurizr.dsl.identifier" : "database"
+        },
+        "tags" : "Element,Container,Database",
+        "technology" : "Relational database schema"
+      } ],
+      "description" : "Allows employees to view and manage information regarding the veterinarians, the clients, and their pets.",
+      "documentation" : { },
+      "id" : "1",
+      "name" : "Spring PetClinic",
+      "properties" : {
+        "structurizr.dsl.identifier" : "springPetClinic"
+      },
+      "tags" : "Element,Software System,Spring Boot Application"
+    } ]
+  },
+  "name" : "Amazon Web Services Example",
+  "properties" : {
+    "structurizr.inspection.error" : "48",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : {
+        "elements" : [ {
+          "shape" : "Cylinder",
+          "tag" : "Database"
+        }, {
+          "background" : "#ffffff",
+          "shape" : "RoundedBox",
+          "tag" : "Element"
+        }, {
+          "shape" : "RoundedBox",
+          "tag" : "Infrastructure Node"
+        } ]
+      },
+      "terminology" : { },
+      "themes" : [ "https://static.structurizr.com/themes/amazon-web-services-2020.04.30/theme.json" ]
+    },
+    "deploymentViews" : [ {
+      "animations" : [ {
+        "elements" : [ "5", "6", "7" ],
+        "order" : 1
+      }, {
+        "elements" : [ "8" ],
+        "order" : 2,
+        "relationships" : [ "16" ]
+      }, {
+        "elements" : [ "10", "11", "9" ],
+        "order" : 3,
+        "relationships" : [ "17" ]
+      }, {
+        "elements" : [ "12", "13", "14" ],
+        "order" : 4,
+        "relationships" : [ "15" ]
+      } ],
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "8",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "9",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "10",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "11",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "12",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "13",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "14",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "Live",
+      "key" : "AmazonWebServicesDeployment",
+      "name" : "Deployment View: Spring PetClinic - Live",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "15"
+      }, {
+        "id" : "16"
+      }, {
+        "id" : "17"
+      } ],
+      "softwareSystemId" : "1"
+    }, {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "8",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "9",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "10",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "11",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "12",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "13",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "14",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "18",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "19",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "21",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "22",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "24",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "25",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "27",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "28",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "Live",
+      "generatedKey" : true,
+      "key" : "Deployment-001",
+      "name" : "Deployment View: Live",
+      "order" : 2,
+      "relationships" : [ {
+        "id" : "15"
+      }, {
+        "id" : "16"
+      }, {
+        "id" : "17"
+      }, {
+        "id" : "20"
+      }, {
+        "id" : "23"
+      }, {
+        "id" : "26"
+      }, {
+        "id" : "29"
+      } ]
+    } ]
+  }
+}

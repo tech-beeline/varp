@@ -1,0 +1,226 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "people" : [ {
+      "id" : "6",
+      "name" : "P",
+      "properties" : {
+        "structurizr.dsl.identifier" : "p"
+      },
+      "relationships" : [ {
+        "description" : "uses",
+        "destinationId" : "1",
+        "id" : "11",
+        "sourceId" : "6",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "2",
+        "name" : "C1",
+        "properties" : {
+          "structurizr.dsl.identifier" : "c1"
+        },
+        "tags" : "Element,Container"
+      }, {
+        "documentation" : { },
+        "id" : "3",
+        "name" : "C2",
+        "properties" : {
+          "structurizr.dsl.identifier" : "c2"
+        },
+        "tags" : "Element,Container"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "S",
+      "properties" : {
+        "structurizr.dsl.identifier" : "s"
+      },
+      "relationships" : [ {
+        "description" : "uses",
+        "destinationId" : "4",
+        "id" : "9",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "documentation" : { },
+      "id" : "4",
+      "name" : "A",
+      "properties" : {
+        "structurizr.dsl.identifier" : "a"
+      },
+      "relationships" : [ {
+        "description" : "uses",
+        "destinationId" : "5",
+        "id" : "10",
+        "sourceId" : "4",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "documentation" : { },
+      "id" : "5",
+      "name" : "B",
+      "properties" : {
+        "structurizr.dsl.identifier" : "b"
+      },
+      "tags" : "Element,Software System"
+    }, {
+      "documentation" : { },
+      "group" : "G",
+      "id" : "7",
+      "name" : "G1",
+      "properties" : {
+        "structurizr.dsl.identifier" : "g1"
+      },
+      "relationships" : [ {
+        "description" : "uses",
+        "destinationId" : "1",
+        "id" : "12",
+        "sourceId" : "7",
+        "tags" : "Relationship"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "documentation" : { },
+      "group" : "G",
+      "id" : "8",
+      "name" : "G2",
+      "properties" : {
+        "structurizr.dsl.identifier" : "g2"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "20",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCiAgICBtb2RlbCB7DQogICAgICAgIHMgPSBzb2Z0d2FyZVN5c3RlbSAiUyIgew0KICAgICAgICAgICAgYzEgPSBjb250YWluZXIgIkMxIg0KICAgICAgICAgICAgYzIgPSBjb250YWluZXIgIkMyIg0KICAgICAgICB9DQogICAgICAgIGEgPSBzb2Z0d2FyZVN5c3RlbSAiQSINCiAgICAgICAgYiA9IHNvZnR3YXJlU3lzdGVtICJCIg0KICAgICAgICBwID0gcGVyc29uICJQIg0KICAgICAgICBncm91cCAiRyIgew0KICAgICAgICAgICAgZzEgPSBzb2Z0d2FyZVN5c3RlbSAiRzEiDQogICAgICAgICAgICBnMiA9IHNvZnR3YXJlU3lzdGVtICJHMiINCiAgICAgICAgfQ0KICAgICAgICBzIC0+IGEgInVzZXMiDQogICAgICAgIGEgLT4gYiAidXNlcyINCiAgICAgICAgcCAtPiBzICJ1c2VzIg0KICAgICAgICBnMSAtPiBzICJ1c2VzIg0KICAgIH0NCiAgICB2aWV3cyB7DQogICAgICAgIHN5c3RlbUNvbnRleHQgcyAiZXEiIHsNCiAgICAgICAgICAgIGluY2x1ZGUgImVsZW1lbnQ9PWEiDQogICAgICAgIH0NCiAgICAgICAgc3lzdGVtQ29udGV4dCBzICJuZSIgew0KICAgICAgICAgICAgaW5jbHVkZSAiZWxlbWVudCE9YSINCiAgICAgICAgfQ0KICAgICAgICBzeXN0ZW1Db250ZXh0IHMgImVxX3Njb3BlIiB7DQogICAgICAgICAgICBpbmNsdWRlICJlbGVtZW50PT1zIg0KICAgICAgICB9DQogICAgICAgIGNvbnRhaW5lciBzICJjX2VxIiB7DQogICAgICAgICAgICBpbmNsdWRlICJlbGVtZW50PT1DMSINCiAgICAgICAgfQ0KICAgICAgICBjb250YWluZXIgcyAiY19uZSIgew0KICAgICAgICAgICAgaW5jbHVkZSAiZWxlbWVudCE9QzEiDQogICAgICAgIH0NCiAgICB9DQp9",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "elements" : [ {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "key" : "c_eq",
+      "name" : "Container View: S",
+      "order" : 4,
+      "softwareSystemId" : "1"
+    }, {
+      "elements" : [ {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "8",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "key" : "c_ne",
+      "name" : "Container View: S",
+      "order" : 5,
+      "relationships" : [ {
+        "id" : "10"
+      } ],
+      "softwareSystemId" : "1"
+    } ],
+    "systemContextViews" : [ {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "eq",
+      "name" : "System Context View: S",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "9"
+      } ],
+      "softwareSystemId" : "1"
+    }, {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "8",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "ne",
+      "name" : "System Context View: S",
+      "order" : 2,
+      "relationships" : [ {
+        "id" : "11"
+      }, {
+        "id" : "12"
+      } ],
+      "softwareSystemId" : "1"
+    }, {
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "eq_scope",
+      "name" : "System Context View: S",
+      "order" : 3,
+      "softwareSystemId" : "1"
+    } ]
+  }
+}

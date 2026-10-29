@@ -1,0 +1,245 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "deploymentNodes" : [ {
+      "containerInstances" : [ {
+        "containerId" : "2",
+        "environment" : "Live",
+        "id" : "6",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "webappInstance"
+        },
+        "relationships" : [ {
+          "destinationId" : "7",
+          "id" : "8",
+          "linkedRelationshipId" : "4",
+          "sourceId" : "6"
+        } ],
+        "tags" : "Container Instance"
+      }, {
+        "containerId" : "3",
+        "environment" : "Live",
+        "id" : "7",
+        "instanceId" : 1,
+        "properties" : {
+          "structurizr.dsl.identifier" : "dbInstance"
+        },
+        "tags" : "Container Instance"
+      } ],
+      "environment" : "Live",
+      "id" : "5",
+      "instances" : "1",
+      "name" : "Deployment Node",
+      "properties" : {
+        "structurizr.dsl.identifier" : "dn"
+      },
+      "tags" : "Element,Deployment Node"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "2",
+        "name" : "Web Application",
+        "properties" : {
+          "structurizr.dsl.identifier" : "webapp"
+        },
+        "relationships" : [ {
+          "destinationId" : "3",
+          "id" : "4",
+          "sourceId" : "2",
+          "tags" : "Relationship"
+        } ],
+        "tags" : "Element,Container,UI"
+      }, {
+        "documentation" : { },
+        "id" : "3",
+        "name" : "Database Schema",
+        "properties" : {
+          "structurizr.dsl.identifier" : "db"
+        },
+        "tags" : "Element,Container,DB"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "Software System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "ss"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "28",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgc3MgPSBzb2Z0d2FyZXN5c3RlbSAiU29mdHdhcmUgU3lzdGVtIiB7DQogICAgICAgICAgICB3ZWJhcHAgPSBjb250YWluZXIgIldlYiBBcHBsaWNhdGlvbiIgew0KICAgICAgICAgICAgICAgIHRhZyAiVUkiDQogICAgICAgICAgICB9DQogICAgICAgICAgICBkYiA9IGNvbnRhaW5lciAiRGF0YWJhc2UgU2NoZW1hIiB7DQogICAgICAgICAgICAgICAgdGFnICJEQiINCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KDQogICAgICAgIHdlYmFwcCAtPiBkYg0KDQogICAgICAgIGxpdmUgPSBkZXBsb3ltZW50RW52aXJvbm1lbnQgIkxpdmUiIHsNCiAgICAgICAgICAgIGRuID0gZGVwbG95bWVudE5vZGUgIkRlcGxveW1lbnQgTm9kZSIgew0KICAgICAgICAgICAgICAgIHdlYmFwcEluc3RhbmNlID0gY29udGFpbmVySW5zdGFuY2Ugd2ViYXBwDQogICAgICAgICAgICAgICAgZGJJbnN0YW5jZSA9IGNvbnRhaW5lckluc3RhbmNlIGRiDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQogICAgICAgICANCiAgICB2aWV3cyB7DQogICAgICAgIGRlcGxveW1lbnQgc3MgIkxpdmUiIHsNCiAgICAgICAgICAgIGluY2x1ZGUgKg0KDQogICAgICAgICAgICAvLyBhZGQgYW5pbWF0aW9uIHN0ZXBzIHZpYSBjb250YWluZXIgaW5zdGFuY2UgaWRlbnRpZmllcnMNCiAgICAgICAgICAgIGFuaW1hdGlvbiB7DQogICAgICAgICAgICAgICAgd2ViYXBwSW5zdGFuY2UNCiAgICAgICAgICAgICAgICBkYkluc3RhbmNlDQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICBkZXBsb3ltZW50IHNzICJMaXZlIiB7DQogICAgICAgICAgICBpbmNsdWRlICoNCg0KICAgICAgICAgICAgLy8gYWRkIGFuaW1hdGlvbiBzdGVwcyB2aWEgY29udGFpbmVyIGlkZW50aWZpZXJzDQogICAgICAgICAgICBhbmltYXRpb24gew0KICAgICAgICAgICAgICAgIHdlYmFwcA0KICAgICAgICAgICAgICAgIGRiDQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICBkZXBsb3ltZW50IHNzICJMaXZlIiB7DQogICAgICAgICAgICBpbmNsdWRlICoNCg0KICAgICAgICAgICAgLy8gYWRkIGFuaW1hdGlvbiBzdGVwcyB2aWEgZWxlbWVudCBleHByZXNzaW9ucw0KICAgICAgICAgICAgYW5pbWF0aW9uIHsNCiAgICAgICAgICAgICAgICB3ZWJhcHANCiAgICAgICAgICAgICAgICB3ZWJhcHAtPg0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQoNCiAgICAgICAgZGVwbG95bWVudCBzcyAiTGl2ZSIgew0KICAgICAgICAgICAgaW5jbHVkZSAqDQoNCiAgICAgICAgICAgIC8vIGFkZCBhbmltYXRpb24gc3RlcHMgdmlhIGVsZW1lbnQgZXhwcmVzc2lvbnMNCiAgICAgICAgICAgIGFuaW1hdGlvbiB7DQogICAgICAgICAgICAgICAgd2ViYXBwSW5zdGFuY2UNCiAgICAgICAgICAgICAgICB3ZWJhcHBJbnN0YW5jZS0+DQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICBkZXBsb3ltZW50IHNzICJMaXZlIiB7DQogICAgICAgICAgICBpbmNsdWRlICoNCg0KICAgICAgICAgICAgLy8gYWRkIGFuaW1hdGlvbiBzdGVwcyB2aWEgZWxlbWVudCBleHByZXNzaW9ucw0KICAgICAgICAgICAgYW5pbWF0aW9uIHsNCiAgICAgICAgICAgICAgICBlbGVtZW50LnRhZz09VUkNCiAgICAgICAgICAgICAgICBlbGVtZW50LnRhZz09REINCiAgICAgICAgICAgIH0NCiAgICAgICAgfQ0KICAgIH0NCg0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "deploymentViews" : [ {
+      "animations" : [ {
+        "elements" : [ "5", "6" ],
+        "order" : 1
+      }, {
+        "elements" : [ "7" ],
+        "order" : 2,
+        "relationships" : [ "8" ]
+      } ],
+      "elements" : [ {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "Live",
+      "generatedKey" : true,
+      "key" : "Deployment-001",
+      "name" : "Deployment View: Software System - Live",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "8"
+      } ],
+      "softwareSystemId" : "1"
+    }, {
+      "animations" : [ {
+        "elements" : [ "5", "6" ],
+        "order" : 1
+      }, {
+        "elements" : [ "7" ],
+        "order" : 2,
+        "relationships" : [ "8" ]
+      } ],
+      "elements" : [ {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "Live",
+      "generatedKey" : true,
+      "key" : "Deployment-002",
+      "name" : "Deployment View: Software System - Live",
+      "order" : 2,
+      "relationships" : [ {
+        "id" : "8"
+      } ],
+      "softwareSystemId" : "1"
+    }, {
+      "animations" : [ {
+        "elements" : [ "5", "6" ],
+        "order" : 1
+      }, {
+        "elements" : [ "7" ],
+        "order" : 2,
+        "relationships" : [ "8" ]
+      } ],
+      "elements" : [ {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "Live",
+      "generatedKey" : true,
+      "key" : "Deployment-003",
+      "name" : "Deployment View: Software System - Live",
+      "order" : 3,
+      "relationships" : [ {
+        "id" : "8"
+      } ],
+      "softwareSystemId" : "1"
+    }, {
+      "animations" : [ {
+        "elements" : [ "5", "6" ],
+        "order" : 1
+      }, {
+        "elements" : [ "7" ],
+        "order" : 2,
+        "relationships" : [ "8" ]
+      } ],
+      "elements" : [ {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "Live",
+      "generatedKey" : true,
+      "key" : "Deployment-004",
+      "name" : "Deployment View: Software System - Live",
+      "order" : 4,
+      "relationships" : [ {
+        "id" : "8"
+      } ],
+      "softwareSystemId" : "1"
+    }, {
+      "animations" : [ {
+        "elements" : [ "5", "6" ],
+        "order" : 1
+      }, {
+        "elements" : [ "7" ],
+        "order" : 2,
+        "relationships" : [ "8" ]
+      } ],
+      "elements" : [ {
+        "id" : "5",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "6",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "7",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "environment" : "Live",
+      "generatedKey" : true,
+      "key" : "Deployment-005",
+      "name" : "Deployment View: Software System - Live",
+      "order" : 5,
+      "relationships" : [ {
+        "id" : "8"
+      } ],
+      "softwareSystemId" : "1"
+    } ]
+  }
+}

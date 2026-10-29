@@ -1,0 +1,21 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : { },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "3",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCg0KICAgICFjb25zdCAiTkFNRSIgIk5hbWUiDQogICAgIXZhciAiREVTQ1JJUFRJT04iICJEZXNjcmlwdGlvbiINCg0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    }
+  }
+}

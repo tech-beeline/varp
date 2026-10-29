@@ -1,49 +1,39 @@
-name: Publish Extension to Marketpalce
+name: Publish Extension to Marketplace
 run-name: ${{ github.actor }} is running publish 🚀
 on:
   workflow_dispatch:
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./extension
+  publish:
+    runs-on: ubuntu-24.04
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Set Java 17.x
-        uses: actions/setup-java@v4
+      - name: Set Node.js 24.18.0
+        uses: actions/setup-node@v5
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          node-version: '24.18.0'
+          cache: 'npm'
 
-      - name: Set Node.js 20.x
-        uses: actions/setup-node@v4
+      - name: Cache Emscripten SDK
+        uses: actions/cache@v4
         with:
-          node-version: '20'
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Set Yarn version
-        run: yarn set version stable
+          path: native/graphviz/build-wasm/_deps
+          key: emsdk-${{ runner.os }}-${{ hashFiles('native/graphviz/cmake/emsdk.cmake') }}
 
       - name: Install dependencies
-        run: yarn install --immutable
+        run: npm ci
 
-      - name: Build
-        run: yarn package-github
-
-      - name: Install vsce
-        run: yarn dlx @yarnpkg/sdks vscode
+      - name: Build, test and package
+        run: npm run build:ci
 
       - name: Publish to VSCode Marketplace
         env:
           VSCODE_MARKETPLACE_TOKEN: ${{ secrets.VSCODE_MARKETPLACE_TOKEN }}
-        run: yarn vsce publish -p $VSCODE_MARKETPLACE_TOKEN --packagePath *.vsix
-        
+        run: npx vsce publish -p "$VSCODE_MARKETPLACE_TOKEN" --packagePath ./*.vsix
+
       - name: Publish to Open VSX
         env:
           OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
-        run: yarn dlx ovsx publish -p $OPEN_VSX_TOKEN  *.vsix
-        
+        run: npx ovsx publish -p "$OPEN_VSX_TOKEN" ./*.vsix

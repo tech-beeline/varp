@@ -1,0 +1,65 @@
+{
+  "configuration" : { },
+  "description" : "Precedence of archetype, own, and overlay properties",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "documentation" : { },
+        "id" : "2",
+        "name" : "Container",
+        "properties" : {
+          "structurizr.dsl.identifier" : "c",
+          "overlay" : "overlay-value",
+          "ownclash" : "own-ownclash",
+          "own" : "own-value",
+          "team" : "overlay-team",
+          "env" : "arch-env",
+          "relayed" : "overlay-relayed"
+        },
+        "tags" : "Element,Container"
+      } ],
+      "documentation" : { },
+      "id" : "1",
+      "name" : "System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "system"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Archetype Props",
+  "properties" : {
+    "structurizr.inspection.error" : "9",
+    "structurizr.dsl" : "d29ya3NwYWNlICJBcmNoZXR5cGUgUHJvcHMiICJQcmVjZWRlbmNlIG9mIGFyY2hldHlwZSwgb3duLCBhbmQgb3ZlcmxheSBwcm9wZXJ0aWVzIiB7DQoNCiAgICBtb2RlbCB7DQogICAgICAgIGFyY2hldHlwZXMgew0KICAgICAgICAgICAgYXBwID0gY29udGFpbmVyIHsNCiAgICAgICAgICAgICAgICBwcm9wZXJ0aWVzIHsNCiAgICAgICAgICAgICAgICAgICAgInRlYW0iICJhcmNoLXRlYW0iDQogICAgICAgICAgICAgICAgICAgICJlbnYiICJhcmNoLWVudiINCiAgICAgICAgICAgICAgICAgICAgIm93bmNsYXNoIiAiYXJjaC1vd25jbGFzaCINCiAgICAgICAgICAgICAgICAgICAgInJlbGF5ZWQiICJhcmNoLXJlbGF5ZWQiDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQoNCiAgICAgICAgc3lzdGVtID0gc29mdHdhcmVTeXN0ZW0gIlN5c3RlbSIgew0KICAgICAgICAgICAgYyA9IGFwcCAiQ29udGFpbmVyIiB7DQogICAgICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgICAgICJ0ZWFtIiAib3duLXRlYW0iDQogICAgICAgICAgICAgICAgICAgICJvd24iICJvd24tdmFsdWUiDQogICAgICAgICAgICAgICAgICAgICJvd25jbGFzaCIgIm93bi1vd25jbGFzaCINCiAgICAgICAgICAgICAgICB9DQogICAgICAgICAgICB9DQogICAgICAgIH0NCg0KICAgICAgICAhZWxlbWVudHMgZWxlbWVudC50eXBlPT1Db250YWluZXIgew0KICAgICAgICAgICAgcHJvcGVydGllcyB7DQogICAgICAgICAgICAgICAgInRlYW0iICJvdmVybGF5LXRlYW0iDQogICAgICAgICAgICAgICAgIm92ZXJsYXkiICJvdmVybGF5LXZhbHVlIg0KICAgICAgICAgICAgICAgICJyZWxheWVkIiAib3ZlcmxheS1yZWxheWVkIg0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQogICAgfQ0KDQogICAgdmlld3Mgew0KICAgICAgICBzeXN0ZW1jb250ZXh0IHN5c3RlbSAiT3ZlcnZpZXciIHsNCiAgICAgICAgICAgIGluY2x1ZGUgKg0KICAgICAgICAgICAgYXV0b2xheW91dA0KICAgICAgICB9DQogICAgfQ0KDQp9",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "systemContextViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "Overview",
+      "name" : "System Context View: System",
+      "order" : 1,
+      "softwareSystemId" : "1"
+    } ]
+  }
+}

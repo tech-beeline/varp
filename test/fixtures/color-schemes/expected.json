@@ -1,0 +1,46 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : { },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.inspection.error" : "3",
+    "structurizr.dsl" : "d29ya3NwYWNlIHsNCg0KICAgIHZpZXdzIHsNCiAgICAgICAgc3R5bGVzIHsNCiAgICAgICAgICAgIGVsZW1lbnQgIkVsZW1lbnQiIHsNCiAgICAgICAgICAgICAgICBzaGFwZSByb3VuZGVkYm94DQogICAgICAgICAgICB9DQogICAgICAgICAgICByZWxhdGlvbnNoaXAgIlJlbGF0aW9uc2hpcCIgew0KICAgICAgICAgICAgICAgIHN0eWxlIHNvbGlkDQogICAgICAgICAgICB9DQoNCiAgICAgICAgICAgIGxpZ2h0IHsNCiAgICAgICAgICAgICAgICBlbGVtZW50ICJFbGVtZW50IiB7DQogICAgICAgICAgICAgICAgICAgIGNvbG91ciAjMDAwMDAwDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgICAgIHJlbGF0aW9uc2hpcCAiUmVsYXRpb25zaGlwIiB7DQogICAgICAgICAgICAgICAgICAgIGNvbG91ciAjMDAwMDAwDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgfQ0KDQogICAgICAgICAgICBkYXJrIHsNCiAgICAgICAgICAgICAgICBlbGVtZW50ICJFbGVtZW50IiB7DQogICAgICAgICAgICAgICAgICAgIGNvbG91ciAjZmZmZmZmDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgICAgIHJlbGF0aW9uc2hpcCAiUmVsYXRpb25zaGlwIiB7DQogICAgICAgICAgICAgICAgICAgIGNvbG91ciAjZmZmZmZmDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQogICAgfQ0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : {
+        "elements" : [ {
+          "shape" : "RoundedBox",
+          "tag" : "Element"
+        }, {
+          "color" : "#ffffff",
+          "colorScheme" : "Dark",
+          "tag" : "Element"
+        }, {
+          "color" : "#000000",
+          "colorScheme" : "Light",
+          "tag" : "Element"
+        } ],
+        "relationships" : [ {
+          "style" : "Solid",
+          "tag" : "Relationship"
+        }, {
+          "color" : "#ffffff",
+          "colorScheme" : "Dark",
+          "tag" : "Relationship"
+        }, {
+          "color" : "#000000",
+          "colorScheme" : "Light",
+          "tag" : "Relationship"
+        } ]
+      },
+      "terminology" : { }
+    }
+  }
+}

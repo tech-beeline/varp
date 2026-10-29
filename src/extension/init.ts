@@ -1,0 +1,600 @@
+/*
+	Copyright 2026 VimpelCom PJSC
+
+	Licensed under the Apache License, Version 2.0 (the "License");
+	you may not use this file except in compliance with the License.
+	You may obtain a copy of the License at
+
+		http://www.apache.org/licenses/LICENSE-2.0
+
+	Unless required by applicable law or agreed to in writing, software
+	distributed under the License is distributed on an "AS IS" BASIS,
+	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+	See the License for the specific language governing permissions and
+	limitations under the License.
+*/
+
+import { commands, ExtensionContext, ViewColumn, workspace, window, Uri } from "vscode";
+import { createWorkspaceFileRequestHandlers } from "./workspace-file-requests";
+import { CapabilityProvider } from "./capabilities";
+import { DIAGRAM_PREVIEW, EXPORT_JSON } from "./config";
+import { DiagramPreview } from "./diagram-preview";
+import { PatternProvider } from "./patterns";
+import { registerFitnessChecks } from "./fitness-functions";
+import { FitnessResultsView } from "./fitness-results-view";
+import { ARCHOPS_CONFIGURED_CONTEXT, archopsConfigured } from "../shared/archops";
+import { resolveFreshViewKey } from "./view-keys";
+
+/**
+ * Minimal shape of the language client (node or browser) used by the extension.
+ * Both vscode-languageclient/node and vscode-languageclient/browser implement it.
+ */
+export interface C4LanguageClient {
+    onNotification(method: string, handler: (params: any) => void): void;
+    onRequest(method: string, handler: (params: any) => any): void;
+    sendRequest(method: string, params: any): Promise<any>;
+}
+
+// Holds the Language Client reference for backend communication
+let languageClient: C4LanguageClient | undefined;
+
+// Diagram preview panel instance, created in init() and used by the
+// auto-refresh notification handler registered in setLanguageClient().
+let diagramPreview: DiagramPreview | undefined;
+
+// Fitness check results shown in the panel view; created eagerly so the language
+// client can hand it results regardless of which of init/setLanguageClient runs first.
+const fitnessResultsView = new FitnessResultsView();
+
+// Guards against registering the notification handler more than once.
+let refreshNotificationRegistered = false;
+
+/**
+ * Sets the Language Client used for communicating with the language server backend.
+ * Called after the language server starts successfully.
+ */
+export function setLanguageClient(client: C4LanguageClient): void {
+    languageClient = client;
+    registerAutoRefreshNotification(client);
+    registerFitnessChecks(client, fitnessResultsView);
+}
+
+/**
+ * Serves the workspace reads requested by the web language server. In the browser
+ * the server has no file system of its own, so it forwards readFile/readDirectory/
+ * readBinary/stat/exists here, and this host is the only side with
+ * vscode.workspace.fs. Must be called before the server processes documents.
+ */
+export function registerWorkspaceFileRequests(client: C4LanguageClient): void {
+    const handlers = createWorkspaceFileRequestHandlers(workspace.fs, (value) => Uri.parse(value));
+    client.onRequest('c4/readFile', handlers.readFile);
+    client.onRequest('c4/readBinary', handlers.readBinary);
+    client.onRequest('c4/readDirectory', handlers.readDirectory);
+    client.onRequest('c4/stat', handlers.stat);
+    client.onRequest('c4/exists', handlers.exists);
+}
+
+/**
+ * Registers the LSP notification listener that refreshes the open diagram preview
+ * whenever the language server successfully generates fresh JSON (push model).
+ * The client only updates once the JSON is actually ready, which avoids the race
+ * of pulling on save before the server finishes generation.
+ *
+ * Refresh policy is controlled by the `varp.diagram.autoRefresh` setting:
+ *  - "onChange" — update on every generated JSON (live while editing);
+ *  - "onSave"   — update only once the document is clean (saved).
+ */
+function registerAutoRefreshNotification(client: C4LanguageClient): void {
+    if (refreshNotificationRegistered) {
+        return;
+    }
+    refreshNotificationRegistered = true;
+
+    client.onNotification('c4/contentUpdated', async (params: { uri: string; json: any; generation?: number; textMeasurements?: Record<string, any> }) => {
+        const uri = params?.uri;
+        const json = params?.json;
+        const generation = params?.generation;
+        const textMeasurements = params?.textMeasurements;
+        if (!uri || !json) {
+            return;
+        }
+        const preview = diagramPreview;
+        if (!preview || !preview.isOpen()) {
+            return;
+        }
+
+        if (preview.getCurrentDocUri() === uri) {
+            // Fast path: the notification belongs to the bound document.
+            renderPreviewIfApplicable(uri, json, generation, preview, textMeasurements);
+            return;
+        }
+
+        // The notification is for a different document (many dsl files, fragment
+        // edits). It is only relevant to this preview if the notified URI is the
+        // ROOT of the document the preview is bound to - then the payload is the
+        // fresh JSON for this preview. Check that with ONE cheap getRootUri call
+        // instead of fetching JSON on every unrelated generation event.
+        if (!languageClient) {
+            return;
+        }
+        try {
+            const res: any = await languageClient.sendRequest('c4/getRootUri', { uri: preview.getCurrentDocUri() });
+            if (res?.rootUri === uri) {
+                renderPreviewIfApplicable(uri, json, generation, preview, textMeasurements);
+            }
+        } catch {
+            // unrelated / transient failure - ignore the notification
+        }
+    });
+}
+
+/**
+ * Returns the configured auto-refresh mode (defaults to onChange) for the
+ * given resource. The setting is resource scoped, so a resource URI must be
+ * passed to resolve its effective value; without one, the value for any
+ * resource is used.
+ */
+function getAutoRefreshMode(uri?: string): 'onChange' | 'onSave' {
+    const resource = uri ? Uri.parse(uri) : null;
+    const value = workspace.getConfiguration('varp.diagram', resource).get<string>('autoRefresh', 'onChange');
+    return value === 'onChange' ? 'onChange' : 'onSave';
+}
+
+/** Whether the given document has unsaved changes (is dirty). */
+function isDocumentDirty(uri: string): boolean {
+    const doc = workspace.textDocuments.find(d => d.uri.toString() === uri);
+    return doc ? doc.isDirty : false;
+}
+
+/**
+ * Renders freshly generated JSON into the preview, honoring the auto-refresh
+ * mode: a pending preview always renders; otherwise onChange renders on every
+ * update while onSave only renders when the document is clean (saved). Renders
+ * are coalesced via scheduleRefresh so bursts produce one webview update.
+ */
+function renderPreviewIfApplicable(uri: string, json: any, generation: number | undefined, preview: DiagramPreview, textMeasurements?: Record<string, any>): void {
+    const mode = getAutoRefreshMode(uri);
+    const dirty = isDocumentDirty(uri);
+    const pending = preview.isPendingJson();
+    if (pending || mode === 'onChange' || !dirty) {
+        scheduleRefresh(uri, json, generation, textMeasurements);
+    }
+}
+
+// Coalesces auto-refresh renders to the latest JSON without adding latency: the
+// flush is scheduled on the next microtask, so notifications delivered within the
+// same tick (a burst of contentUpdated) only produce ONE postMessage + webview
+// re-render with the freshest payload - intermediate versions are skipped.
+let pendingRefresh: { uri: string; json: any; generation?: number; textMeasurements?: Record<string, any> } | undefined;
+let refreshQueued = false;
+
+function scheduleRefresh(uri: string, json: any, generation?: number, textMeasurements?: Record<string, any>): void {
+    pendingRefresh = { uri, json, generation, textMeasurements };
+    if (refreshQueued) {
+        return;
+    }
+    refreshQueued = true;
+    queueMicrotask(() => {
+        refreshQueued = false;
+        const pending = pendingRefresh;
+        pendingRefresh = undefined;
+        if (pending) {
+            void refreshDiagram(pending.uri, pending.json, pending.generation, pending.textMeasurements);
+        }
+    });
+}
+
+/** Opens a side panel with the raw workspace JSON for debugging. */
+async function openJsonDebugTab(json: any): Promise<void> {
+    const content = JSON.stringify(json, null, 2);
+    const doc = await workspace.openTextDocument({ content, language: 'json' });
+    await window.showTextDocument(doc, {
+        viewColumn: ViewColumn.Beside,
+        preview: true
+    });
+}
+
+/** Renders fresh JSON into the open preview bound to the given root document URI. */
+async function refreshDiagram(uri: string, json: any, generation?: number, textMeasurements?: Record<string, any>): Promise<void> {
+    const preview = diagramPreview;
+    if (!preview || !preview.isOpen()) {
+        return;
+    }
+    const currentKey = preview.getCurrentViewKey();
+    if (!currentKey) {
+        return;
+    }
+    // True when this is the first JSON the open preview receives: the JSON debug
+    // tab opens with it, mirroring the DIAGRAM_PREVIEW warm path.
+    const firstDelivery = preview.isPendingJson();
+    // View keys change when the source shifts, so resolve the matching key in the
+    // fresh JSON; updateWebView stores it for subsequent refreshes.
+    const viewKey = resolveFreshViewKey(json, currentKey, preview.getCurrentJson()) ?? currentKey;
+    // Themes are fetched once when the preview is opened and are already stored
+    // on the preview (included in every postMessage), so re-rendering the same
+    // diagram must not block on re-fetching theme files.
+    await preview.deliver(json, viewKey, uri, generation, textMeasurements, getThemesForPreview);
+    // if (firstDelivery) {
+    //     try {
+    //         await openJsonDebugTab(json);
+    //     } catch (err) {
+    //         console.warn('[C4 Preview] failed to open the JSON debug tab:', err);
+    //     }
+    // }
+}
+
+
+/**
+ * Returns the raw JSON content of the workspace's theme files. The language
+ * server already caches them (fetchCache), so this is a cheap cache-backed
+ * round-trip; the webview then renders without re-downloading the themes.
+ */
+async function getThemesForPreview(themeUrls: string[] | undefined): Promise<{ url: string; content: string }[] | undefined> {
+    const urls = (Array.isArray(themeUrls) ? themeUrls : []).filter(u => /^https?:\/\//i.test(u));
+    if (urls.length === 0 || !languageClient) {
+        return undefined; // no http(s) themes - nothing to inject
+    }
+    try {
+        const res: any = await languageClient.sendRequest('c4/getThemes', { themes: urls });
+        const fetched = (Array.isArray(res?.themes) ? res.themes : []) as any[];
+        // Returning undefined means "could not get themes" - the caller then
+        // leaves the preview's themes unset so the webview falls back to
+        // loadThemes() instead of rendering without any theme.
+        return fetched.length > 0 ? fetched : undefined;
+    } catch (err) {
+        console.warn('[C4 Preview] theme fetch failed:', err);
+        return undefined;
+    }
+}
+
+/**
+ * Initializes all VS Code extension components: views, commands, and event handlers.
+ * 
+ * Sets up:
+ * - Tree views (capabilities, patterns)
+ * - Diagram preview webview panel
+ * - Auto-refresh via c4/contentUpdated push notifications (onChange/onSave, see c4.autoRefresh)
+ * - DIAGRAM_PREVIEW command (opens diagram in webview)
+ * - Export commands (DrawIO, SVG)
+ */
+export function init(context: ExtensionContext): void {
+
+    // The archops views (patterns, capabilities and fitness results) only make sense
+    // when the server is configured; the context key drives their visibility clauses.
+    const updateArchopsContext = () => commands.executeCommand('setContext', ARCHOPS_CONFIGURED_CONTEXT, archopsConfigured(workspace.getConfiguration()));
+    void updateArchopsContext();
+    context.subscriptions.push(workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration('archops')) void updateArchopsContext();
+    }));
+
+    new CapabilityProvider(context);
+    new PatternProvider(context);
+
+    context.subscriptions.push(
+        window.registerWebviewViewProvider(FitnessResultsView.viewType, fitnessResultsView)
+    );
+
+    diagramPreview = new DiagramPreview(context);
+    // Second layout pass: the webview measures the frame texts it draws and reports
+    // the widths, the language server re-runs the auto-layout with that space
+    // reserved, and the webview re-renders the returned coordinates.
+    diagramPreview.requestRelayout = async (widths, measuredUri, measuredGeneration) => {
+        // Prefer the (uri, generation) the webview reported with the measurement:
+        // they identify the exact build the widths belong to, while the preview's
+        // stored values may not be updated yet on the very first render.
+        const uri = measuredUri ?? diagramPreview?.getCurrentDocUri();
+        const generation = measuredGeneration ?? diagramPreview?.getRenderedGeneration();
+        if (!languageClient || !diagramPreview || !uri || generation === undefined) {
+            return;
+        }
+        try {
+            const result: any = await languageClient.sendRequest('c4/applyTextMeasurements', { uri, generation, widths });
+            if (!result?.changed) {
+                return; // stale measurement, or the layout did not change: nothing to re-render
+            }
+
+            // The server saved the refined coordinates in the cached JSON, bumped its
+            // generation and returned the views it re-laid out. Only those views are
+            // patched in, instead of refetching the whole workspace JSON. No text
+            // measurements are passed, so the rebuild does not start another pass.
+            await diagramPreview.applyViewUpdates(result.views ?? [], uri, result.generation);
+        } catch (err) {
+            console.warn('[C4 Preview] Text measurement layout failed:', err);
+        }
+    };
+    // Local, non-undefined alias used by the command handlers below.
+    const preview = diagramPreview;
+
+    /**
+     * Auto-refresh (onSave mode): when a .c4/.dsl file is saved, render the latest
+     * generated JSON for the document the open preview is bound to. Live updates
+     * (onChange mode) arrive via the c4/contentUpdated notification and do not
+     * need the save event.
+     */
+    context.subscriptions.push(
+        workspace.onDidSaveTextDocument(async (document) => {
+            if (document.languageId !== 'c4') {
+                return;
+            }
+            const currentDocUri = preview.getCurrentDocUri();
+            if (!currentDocUri || document.uri.toString() !== currentDocUri) {
+                // The preview is bound to a different document; fragment edits are
+                // handled by the c4/contentUpdated push instead.
+                return;
+            }
+            const uri = document.uri.toString();
+
+            // Always pull the freshest JSON from the language server on save so
+            // the preview reflects the saved content even if no push has arrived.
+            try {
+                const response: any = await languageClient?.sendRequest('c4/getContentForUri', { uri });
+                if (response?.json) {
+                    await refreshDiagram(uri, response.json, response.generation, response.textMeasurements);
+                    return;
+                }
+            } catch (err) {
+                console.error(`[C4 AutoRefresh] Error fetching content on save:`, err);
+            }
+
+            // JSON not generated yet - keep the panel open; the push notification
+            // (c4/contentUpdated) delivers it once generation completes.
+        })
+    );
+
+    // Apply the auto-refresh setting live without restarting VS Code.
+    context.subscriptions.push(
+        workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('varp.diagram.autoRefresh')) {
+                console.log(`[C4 AutoRefresh] Refresh mode: ${getAutoRefreshMode()}`);
+            }
+        })
+    );
+
+    /**
+     * DIAGRAM_PREVIEW command handler.
+     * Opens the Structurizr diagram preview for a specific view.
+     * Triggered by the CodeLens "Show As Structurizr Diagram" button in the editor.
+     */
+    context.subscriptions.push(
+        commands.registerCommand(DIAGRAM_PREVIEW, async (viewKey: string, docUri?: string) => {
+            // Open the panel immediately so the webview can show the "Rendering"
+            // indicator while the JSON is still being generated.
+            preview.openPreview(viewKey, docUri);
+
+            // Fetch the latest generated JSON from the language server cache; if it
+            // is not ready yet, the panel stays open and the push notification
+            // (c4/contentUpdated) delivers the JSON once generation completes.
+            let payload: any;
+            let generation: number | undefined;
+            let textMeasurements: Record<string, any> | undefined;
+            if (languageClient) {
+                try {
+                    const res = await languageClient.sendRequest('c4/getContentForUri', { uri: docUri ?? '' });
+                    payload = res?.json;
+                    generation = res?.generation;
+                    textMeasurements = res?.textMeasurements;
+                } catch (err) {
+                    console.warn('[C4 Preview] fresh JSON fetch failed:', err);
+                }
+            }
+
+            if (payload) {
+                try {
+                    // Render immediately without styles, then apply the workspace's
+                    // themes in a second pass (see DiagramPreview.deliver).
+                    await preview.deliver(payload, viewKey, docUri, generation, textMeasurements, getThemesForPreview);
+
+                    // Open a side-panel with the raw JSON for debugging
+                    // await openJsonDebugTab(payload);
+                } catch (err) {
+                    console.error(`[C4 Preview] webview update FAILED for view ${viewKey}:`, err);
+                }
+                return;
+            }
+
+            // JSON is not ready yet - keep the panel open with the "Rendering"
+            // indicator; the push notification (c4/contentUpdated) delivers
+            // the JSON once generation completes.
+        })
+    );
+
+    // ===== Command: Export to DrawIO =====
+    context.subscriptions.push(
+        commands.registerCommand('varp.export-drawio', async () => {
+            const currentJson = preview.getCurrentJson();
+            const currentViewKey = preview.getCurrentViewKey();
+
+            if (!currentJson) {
+                window.showErrorMessage('No diagram data available. Please open a diagram preview first.');
+                return;
+            }
+
+            // Ensure webview is open
+            if (!preview.isOpen()) {
+                preview.updateWebView(currentJson, currentViewKey || '');
+            }
+
+            // Wait for the webview to export to DrawIO format via postMessage
+            const drawioResult = await new Promise<any>((resolve) => {
+                const panel = preview.getPanel();
+                if (!panel) {
+                    resolve(null);
+                    return;
+                }
+
+                const disposable = panel.webview.onDidReceiveMessage((message: any) => {
+                    if (message.command === 'drawio-result') {
+                        disposable.dispose();
+                        resolve(message.results);
+                    }
+                });
+
+                // Request DrawIO export from the webview
+                panel.webview.postMessage({ command: 'export-drawio' });
+            });
+
+            if (!drawioResult || drawioResult.length === 0) {
+                window.showErrorMessage('Failed to export diagrams to DrawIO format.');
+                return;
+            }
+
+            // Save as .drawio file
+            const uri = await window.showSaveDialog({
+                filters: { 'DrawIO Diagrams': ['drawio'] },
+                defaultUri: workspace.workspaceFolders?.[0]?.uri 
+                    ? Uri.joinPath(workspace.workspaceFolders[0].uri, 'export.drawio')
+                    : undefined
+            });
+
+            if (!uri) return; // user cancelled
+
+            const xml = drawioResult[0]?.xml;
+            if (!xml) {
+                window.showErrorMessage('Failed to generate DrawIO XML.');
+                return;
+            }
+            
+            const buffer = new TextEncoder().encode(xml);
+            await workspace.fs.writeFile(uri, buffer);
+            
+            window.showInformationMessage(`Exported diagram to DrawIO format.`);
+        })
+    );
+
+    // ===== Command: Import layout from DrawIO =====
+    context.subscriptions.push(
+        commands.registerCommand('varp.import-drawio', async () => {
+            const currentViewKey = preview.getCurrentViewKey();
+            const docUri = preview.getCurrentDocUri();
+
+            if (!currentViewKey || !docUri || !languageClient) {
+                window.showErrorMessage('No diagram data available. Please open a diagram preview first.');
+                return;
+            }
+
+            const selected = await window.showOpenDialog({
+                canSelectMany: false,
+                filters: { 'DrawIO Diagrams': ['drawio'] },
+                defaultUri: defaultDrawioUri(docUri, currentViewKey)
+            });
+            if (!selected || selected.length === 0) {
+                return; // user cancelled
+            }
+
+            const xml = new TextDecoder().decode(await workspace.fs.readFile(selected[0]));
+
+            // The language server changes the coordinates in the cached JSON and bumps
+            // its generation; the preview is then rebuilt from that cache, so every
+            // consumer (preview, export) sees the imported layout.
+            const result: any = await languageClient.sendRequest('c4/importDrawioLayout', { uri: docUri, viewKey: currentViewKey, xml });
+            if (!result?.view) {
+                window.showErrorMessage('Failed to import the DrawIO layout.');
+                return;
+            }
+
+            const content: any = await languageClient.sendRequest('c4/getContentForUri', { uri: docUri });
+            if (!content?.json) {
+                window.showErrorMessage('Failed to import the DrawIO layout.');
+                return;
+            }
+
+            // No text measurements: the rebuild must keep the imported coordinates
+            // instead of re-running the auto-layout pass.
+            await preview.updateWebView(content.json, currentViewKey, docUri, undefined, content.generation, undefined);
+            window.showInformationMessage('Imported diagram layout from DrawIO.');
+        })
+    );
+
+    // ===== Command: Export to SVG =====
+    context.subscriptions.push(
+        commands.registerCommand('varp.export-svg', async () => {
+            const currentJson = preview.getCurrentJson();
+            const currentViewKey = preview.getCurrentViewKey();
+
+            if (!currentJson) {
+                window.showErrorMessage('No diagram data available. Please open a diagram preview first.');
+                return;
+            }
+
+            if (!preview.isOpen()) {
+                preview.updateWebView(currentJson, currentViewKey || '');
+            }
+
+            // Wait for the webview to render and export SVG via postMessage
+            const svgResult = await new Promise<string | null>((resolve) => {
+                const panel = preview.getPanel();
+                if (!panel) { resolve(null); return; }
+
+                const disposable = panel.webview.onDidReceiveMessage((message: any) => {
+                    if (message.command === 'svg-result') {
+                        disposable.dispose();
+                        resolve(message.svg);
+                    }
+                });
+
+                // Request SVG export from the webview
+                panel.webview.postMessage({ command: 'export-svg' });
+            });
+
+            if (!svgResult) {
+                window.showErrorMessage('Failed to export diagram to SVG.');
+                return;
+            }
+
+            const uri = await window.showSaveDialog({
+                filters: { 'SVG Images': ['svg'] },
+                defaultUri: workspace.workspaceFolders?.[0]?.uri 
+                    ? Uri.joinPath(workspace.workspaceFolders[0].uri, 'export.svg')
+                    : undefined
+            });
+
+            if (!uri) return;
+
+            const buffer = new TextEncoder().encode(svgResult);
+            await workspace.fs.writeFile(uri, buffer);
+
+            window.showInformationMessage('Exported diagram to SVG format.');
+        })
+    );
+
+    // ===== Command: Export the workspace to the full (enriched) JSON =====
+    context.subscriptions.push(
+        commands.registerCommand(EXPORT_JSON, async (docUri?: string) => {
+            const uri = docUri ?? window.activeTextEditor?.document.uri.toString();
+            if (!uri || !languageClient) {
+                window.showErrorMessage('No workspace to export.');
+                return;
+            }
+
+            // The full JSON is the render JSON enriched with the fields the render
+            // pipeline drops (documentation, element url/properties/perspectives,
+            // health checks, DSL identifiers).
+            const res: any = await languageClient.sendRequest('c4/getFullContentForUri', { uri });
+            if (!res?.json) {
+                window.showErrorMessage('Failed to build the workspace JSON.');
+                return;
+            }
+
+            const saveUri = await window.showSaveDialog({
+                filters: { 'JSON': ['json'] },
+                defaultUri: workspace.workspaceFolders?.[0]?.uri
+                    ? Uri.joinPath(workspace.workspaceFolders[0].uri, 'workspace.json')
+                    : undefined
+            });
+
+            if (!saveUri) return;
+
+            await workspace.fs.writeFile(saveUri, new TextEncoder().encode(JSON.stringify(res.json, null, 2)));
+            window.showInformationMessage('Exported workspace JSON.');
+        })
+    );
+}
+
+/** Defaults the .drawio file picker to the folder of the previewed document. */
+function defaultDrawioUri(docUri: string, viewKey: string): Uri | undefined {
+    const documentUri = Uri.parse(docUri);
+    if (documentUri.scheme !== 'file') {
+        return undefined;
+    }
+    return Uri.joinPath(documentUri, '..', `${viewKey}.drawio`);
+}

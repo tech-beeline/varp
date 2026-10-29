@@ -1,0 +1,3 @@
+# Test fixtures are asserted byte-for-byte (image bytes are base64-encoded and
+# compared), so keep their checkout identical on every platform.
+test/fixtures/** -text

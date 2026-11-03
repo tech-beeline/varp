@@ -37,8 +37,8 @@ const BODY = JSON.stringify({ workspace: 'demo', results: [{ rule: 'no-cycles', 
 const CONTENT_TYPE = 'application/json';
 
 /** Recomputes the signature the server is expected to verify. */
-function expectedAuthorization(headers: Record<string, string>, method: string, path: string, body: string, contentType: string, gzip: boolean): string {
-    const digest = createHash('md5').update(gzip ? gzipBody(body) : body).digest('hex');
+function expectedAuthorization(headers: Record<string, string>, method: string, path: string, body: string, contentType: string): string {
+    const digest = createHash('md5').update(body).digest('hex');
     const message = [method, path, digest, contentType, headers['Nonce']].join('\n') + '\n';
     return 'the-key:' + createHmac('sha256', 'the-secret').update(message).digest('base64');
 }
@@ -47,21 +47,21 @@ describe('generateHmac', () => {
     it('signs the plain body without a content encoding', () => {
         const headers = generateHmac('POST', '/api/results', BODY, CONTENT_TYPE);
         expect(headers['Content-Encoding']).toBeUndefined();
-        expect(headers['X-Authorization']).toBe(expectedAuthorization(headers, 'POST', '/api/results', BODY, CONTENT_TYPE, false));
+        expect(headers['X-Authorization']).toBe(expectedAuthorization(headers, 'POST', '/api/results', BODY, CONTENT_TYPE));
     }, 30000);
 
-    it('signs the compressed body and announces gzip', () => {
+    it('signs the raw body and announces gzip', () => {
         const headers = generateHmac('POST', '/api/results', BODY, CONTENT_TYPE, true);
         expect(headers['Content-Encoding']).toBe('gzip');
-        expect(headers['X-Authorization']).toBe(expectedAuthorization(headers, 'POST', '/api/results', BODY, CONTENT_TYPE, true));
+        expect(headers['X-Authorization']).toBe(expectedAuthorization(headers, 'POST', '/api/results', BODY, CONTENT_TYPE));
     }, 30000);
 
-    it('signs a compressed body differently from the same plain body', () => {
-        const plain = generateHmac('POST', '/api/results', BODY, CONTENT_TYPE);
-        const compressed = generateHmac('POST', '/api/results', BODY, CONTENT_TYPE, true);
-        const plainDigest = plain['X-Authorization']!.split(':')[1];
-        const compressedDigest = compressed['X-Authorization']!.split(':')[1];
-        expect(compressedDigest).not.toBe(plainDigest);
+    it('does not sign the compressed bytes', () => {
+        const headers = generateHmac('POST', '/api/results', BODY, CONTENT_TYPE, true);
+        const compressedDigest = createHash('md5').update(gzipBody(BODY)).digest('hex');
+        const message = ['POST', '/api/results', compressedDigest, CONTENT_TYPE, headers['Nonce']].join('\n') + '\n';
+        const compressedSignature = 'the-key:' + createHmac('sha256', 'the-secret').update(message).digest('base64');
+        expect(headers['X-Authorization']).not.toBe(compressedSignature);
     }, 30000);
 
     it('announces gzip even without configured credentials', () => {

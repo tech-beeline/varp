@@ -15,7 +15,7 @@
 */
 
 import { window, workspace } from 'vscode';
-import { generateHmac } from './hmac';
+import { generateHmac, gzipBody } from './hmac';
 import type { C4LanguageClient } from './init';
 import type { FitnessResult, FitnessResultsView } from './fitness-results-view';
 
@@ -92,13 +92,13 @@ export async function runFitnessChecks(json: any, signal?: AbortSignal): Promise
     }
     const body = JSON.stringify(json);
     const headers: Record<string, string> = {
-        ...generateHmac('POST', target.path, body, 'application/json'),
+        ...generateHmac('POST', target.path, body, 'application/json', true),
         'Content-Type': 'application/json'
     };
     const response = await fetch(target.url, {
         method: 'POST',
         headers,
-        body,
+        body: gzipBody(body),
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]) : AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
     const text = await response.text();

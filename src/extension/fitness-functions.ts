@@ -18,6 +18,7 @@ import { window, workspace } from 'vscode';
 import { generateHmac, gzipBody } from './hmac';
 import type { C4LanguageClient } from './init';
 import type { FitnessResult, FitnessResultsView } from './fitness-results-view';
+import { archopsConfigured } from '../shared/archops';
 
 /** Path of the ff-manager method on the gateway. */
 const RUN_ALL_WORKSPACE_PATH = '/ff/api/v1/run-all-workspace';
@@ -139,6 +140,11 @@ export class FitnessChecks {
     }
 
     private async execute(uri: string, controller: AbortController, sequence: number): Promise<void> {
+        // The full workspace JSON is generated lazily, so do not request it when
+        // the checks cannot run at all.
+        if (!archopsConfigured(workspace.getConfiguration())) {
+            return;
+        }
         try {
             const json = await this.load(uri);
             if (!json || controller.signal.aborted) return;

@@ -95,13 +95,14 @@ const { shared, C4 } = createC4Services({
     fileSystemProvider: () => baseProvider
 });
 
-// ─── JSON Generated Notification ───────────────────────────────────────────
-// When a workspace's JSON is successfully generated and cached, notify the
-// client (extension host) so it can refresh the open diagram preview. This
-// avoids the race where the client pulls JSON on save before the language
-// server has finished rebuilding/generating.
-C4.generation.C4GeneratorHandler.onJsonGenerated = (uri, json, generation) => {
-    connection.sendNotification('c4/contentUpdated', { uri, json, generation });
+// ─── Workspace Updated Notification ────────────────────────────────────────
+// After a build, notify the client with the workspace's view list so it can
+// refresh the open diagram preview. The full JSON is not generated here: the
+// preview fetches the per-view payload on demand.
+C4.generation.C4GeneratorHandler.onViewsUpdated = (uri, views) => {
+    // The notification only carries the view list: the preview fetches the small
+    // per-view payload on demand instead of receiving the whole workspace JSON.
+    connection.sendNotification('c4/contentUpdated', { uri, views });
 };
 
 // ─── Custom LSP Request Handler ────────────────────────────────────────────
@@ -115,10 +116,31 @@ connection.onRequest('c4/getContentForUri', async (params: { uri: string }) => {
     return content ? { json: content.json, generation: content.generation } : null;
 });
 
+// Returns the JSON limited to one view, so the preview renders a small payload
+// instead of the whole workspace. Null when the workspace or the view key is
+// unknown; the caller then keeps the current render.
+connection.onRequest('c4/getViewContent', async (params: { uri: string; viewKey: string }) => {
+    const content = await C4.generation.C4GeneratorHandler.getViewContentForUri(params.uri, params.viewKey);
+    return content
+        ? { json: content.json, generation: content.generation, textMeasurements: C4.generation.C4GeneratorHandler.getViewTextMeasurements(params.uri, params.viewKey) }
+        : null;
+});
+
+// Returns the view list of the workspace without generating the JSON. The save
+// path uses it to resolve the displayed view key without pulling the full JSON.
+connection.onRequest('c4/getViewRefs', (params: { uri: string }) => {
+    return {
+        rootUri: C4.generation.C4GeneratorHandler.getRootUri(params.uri),
+        views: C4.generation.C4GeneratorHandler.getViewRefs(params.uri)
+    };
+});
+
 // Applies a drawio file's layout to the cached view (drawio layout import). The
 // cached JSON is changed in place and its generation bumped, so a subsequent
 // getContentForUri returns the imported coordinates for a full workspace rebuild.
-connection.onRequest('c4/importDrawioLayout', (params: { uri: string; viewKey: string; xml: string }) => {
+connection.onRequest('c4/importDrawioLayout', async (params: { uri: string; viewKey: string; xml: string }) => {
+    // The full JSON is generated lazily; the import edits it in place.
+    await C4.generation.C4GeneratorHandler.ensureContentForUri(params.uri);
     return C4.generation.C4GeneratorHandler.applyDrawioLayout(params.uri, params.viewKey, params.xml) ?? null;
 });
 

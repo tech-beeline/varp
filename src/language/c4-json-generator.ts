@@ -81,8 +81,9 @@ import {
     RelationshipExtension,
     ElementExtension,
     isElementExtension,
-    isStringLiteralExpression} from '../generated/ast';
+    isStringLiteralExpression, View} from '../generated/ast';
 import { C4Services } from './c4-module';
+import type { ViewRef } from '../shared/view-refs';
 import * as includeResolver from './c4-include-resolver';
 import { SHAPE_NORMALIZE, BORDER_NORMALIZE, ROUTING_NORMALIZE, ICON_POSITION_NORMALIZE } from './c4-validator';
 
@@ -328,6 +329,22 @@ class JsonGenerator {
     private readonly impliedRangesByDoc: Map<string, Array<{ from: number; to: number; enabled: boolean }>> = new Map();
     /** Group separator character, defaults to "/". Can be configured via structurizr.groupSeparator property */
     private groupSeparator: string = '/';
+    /** View keys a per-view payload builds; undefined builds every view. */
+    private payloadViewKeys?: Set<string>;
+    /** Element ids a per-view payload keeps; undefined keeps the whole model. */
+    private payloadElements?: Set<string>;
+    /** Relationship ids a per-view payload keeps; undefined keeps every relationship. */
+    private payloadRelationships?: Set<string>;
+    /** Linked base relationships to attach to a kept element in a payload, by owner id. */
+    private readonly payloadExtraRelationships = new Map<string, any[]>();
+    private readonly payloadExtraRelationshipIds = new Set<string>();
+    /**
+     * Memoized {@link getViewRefs} result: the refs depend only on the workspace
+     * and the version of the document it came from. Building the refs walks every
+     * !include fragment, and they are requested on every build, so the walk runs
+     * once per document version instead of once per call.
+     */
+    private viewRefsCache?: { doc: any; version: number; refs: ViewRef[] };
     /** Maps element ID (via getId) → group path string. Replaces mutation of AST $cstNode.groupPath */
     private readonly groupPathMap: Map<string, string> = new Map();
     /** ArchetypeInstance AST node → the base-type element materialised from it. */
@@ -464,6 +481,16 @@ class JsonGenerator {
 
         const themesArray = Array.from(this.themes);
 
+        // Number views in creation order across every view type (1-based).
+        this.assignViewOrder(workspace);
+
+        // Extract the views before the model: a per-view payload uses the views to
+        // decide which elements and relationships the model has to contain.
+        const views = this.extractViews(workspace);
+        if (this.payloadViewKeys !== undefined) {
+            this.limitToPayload(views);
+        }
+
         const model = {
             properties: Object.keys(this.propertiesModel).length > 0 ? this.propertiesModel : undefined,
             customElements: this.extractCustomElements(),
@@ -471,9 +498,9 @@ class JsonGenerator {
             softwareSystems: this.extractSystems(),
             deploymentNodes: this.extractAllRootDeploymentNodes()
         };
-
-        // Number views in creation order across every view type (1-based).
-        this.assignViewOrder(workspace);
+        if (this.payloadViewKeys !== undefined) {
+            this.injectExtraRelationships(model);
+        }
 
         // Assemble the final JSON output object in Structurizr-compatible format
         const jsonOutput = {
@@ -492,15 +519,7 @@ class JsonGenerator {
             // is the only side that can read the file timestamp in the web build too.
             model: model,
             views: {
-                systemLandscapeViews: this.extractSystemLandscapeViews(workspace, model),
-                systemContextViews: this.extractSystemContextViews(workspace, model),
-                containerViews: this.extractContainerViews(workspace, model),
-                componentViews: this.extractComponentViews(workspace, model),
-                deploymentViews: this.extractDeploymentViews(workspace, model),
-                dynamicViews: this.extractDynamicViews(workspace),
-                filteredViews: this.extractFilteredViews(workspace),
-                customViews:  this.extractCustomViews(workspace),
-                imageViews: this.extractImageViews(workspace),
+                ...views,
                 configuration: {
                     properties: Object.keys(this.propertiesViews).length > 0 ? this.propertiesViews : undefined,
                     themes: themesArray.length > 0 ? themesArray : undefined,
@@ -523,6 +542,214 @@ class JsonGenerator {
         await this.applyGraphvizAutoLayouts(jsonOutput);
 
         return jsonOutput;
+    }
+
+    /**
+     * Generates the workspace JSON limited to one view. A filtered view also keeps
+     * its base view, because the filtered content is resolved through the base.
+     */
+    public async generateView(workspace: Workspace, viewKey: string): Promise<any> {
+        const keys = this.payloadViewKeysFor(workspace, viewKey);
+        if (keys === undefined) return undefined;
+        this.payloadViewKeys = keys;
+        try {
+            return await this.generate(workspace);
+        } finally {
+            this.payloadViewKeys = undefined;
+            this.payloadElements = undefined;
+            this.payloadRelationships = undefined;
+            this.payloadExtraRelationships.clear();
+            this.payloadExtraRelationshipIds.clear();
+        }
+    }
+
+    /** Keys of the requested view plus, for a filtered view, its base view. */
+    private payloadViewKeysFor(workspace: Workspace, viewKey: string): Set<string> | undefined {
+        const view = this.workspaceViews(workspace).find(candidate =>
+            this.substitute(this.services.workspace.ViewKeyProvider.getKey(candidate)) === viewKey);
+        if (view === undefined) return undefined;
+        const keys = new Set([viewKey]);
+        if (isFilteredView(view)) {
+            const baseKey = this.substitute(view.baseKey);
+            if (baseKey !== undefined) keys.add(baseKey);
+        }
+        return keys;
+    }
+
+    /** Extracts every view type; the result feeds `views` in the workspace JSON. */
+    private extractViews(workspace: Workspace) {
+        return {
+            systemLandscapeViews: this.extractSystemLandscapeViews(workspace),
+            systemContextViews: this.extractSystemContextViews(workspace),
+            containerViews: this.extractContainerViews(workspace),
+            componentViews: this.extractComponentViews(workspace),
+            deploymentViews: this.extractDeploymentViews(workspace),
+            dynamicViews: this.extractDynamicViews(workspace),
+            filteredViews: this.extractFilteredViews(workspace),
+            customViews: this.extractCustomViews(workspace),
+            imageViews: this.extractImageViews(workspace)
+        };
+    }
+
+    /**
+     * Restricts the model to the elements and relationships the extracted views
+     * reference. Ancestors are kept because nested elements render inside them.
+     */
+    private limitToPayload(views: Record<string, any>): void {
+        const elements = new Set<string>();
+        const relationships = new Set<string>();
+        for (const list of Object.values(views)) {
+            if (!Array.isArray(list)) continue;
+            for (const view of list) {
+                for (const element of view.elements ?? []) {
+                    if (element?.id !== undefined) elements.add(String(element.id));
+                }
+                for (const relationship of view.relationships ?? []) {
+                    if (relationship?.id !== undefined) relationships.add(String(relationship.id));
+                }
+                for (const scope of ['elementId', 'softwareSystemId', 'containerId', 'componentId']) {
+                    if (view[scope] !== undefined) elements.add(String(view[scope]));
+                }
+            }
+        }
+
+        // Deployment view model closure: a kept deployment node's containerInstances /
+        // softwareSystemInstances reference base containers and software systems by id,
+        // and the renderer resolves them via findElementById to name the instances.
+        // Keeping the instances without their referenced base element would crash the
+        // renderer (Cannot read properties of undefined (reading 'name')). This closure
+        // only matters when the payload contains a deployment view (the full deployment
+        // tree is emitted only for deployment views), so it is a no-op otherwise.
+        const hasDeploymentView = Object.values(views).some(list =>
+            Array.isArray(list) && list.some(view => (view as any)?.environment !== undefined)
+        );
+        if (hasDeploymentView) {
+            for (const el of this.elements) {
+                if (!this.keepsElement(el)) continue;
+                if (isSoftwareSystemInstance(el) && el.softwareSystem?.ref) {
+                    elements.add(this.getId(el.softwareSystem.ref));
+                } else if (isContainerInstance(el) && el.container?.ref) {
+                    elements.add(this.getId(el.container.ref));
+                }
+            }
+        }
+
+        // View relationships can be implied: their linkedRelationshipId points to
+        // the relationship they were derived from, and the renderer reads tags,
+        // properties, url and perspectives through that link. The linked
+        // relationship is attached to the view relationship's source (a kept
+        // element) instead of pulling its own source tree into the payload.
+        const impliedById = new Map(this.collectAllRelationships().map(rel => [this.getId(rel.relationship), rel]));
+        for (const id of Array.from(relationships)) {
+            const entry = impliedById.get(id);
+            if (!entry?.linked) continue;
+            const ownerId = this.getId(entry.source);
+            let linkedEntry: ImpliedRelationship | undefined = entry;
+            const seen = new Set<string>();
+            while (linkedEntry?.linked) {
+                const linkedId = this.getId(linkedEntry.linked);
+                if (seen.has(linkedId)) break;
+                seen.add(linkedId);
+                const source = this.resolveSource(linkedEntry.linked);
+                const target = this.resolveTarget(linkedEntry.linked);
+                if (!source || !target) break;
+                const next: ImpliedRelationship = impliedById.get(linkedId) ?? {
+                    relationship: linkedEntry.linked,
+                    linked: undefined,
+                    source,
+                    target
+                };
+                if (!this.payloadExtraRelationshipIds.has(linkedId)) {
+                    this.payloadExtraRelationshipIds.add(linkedId);
+                    const list = this.payloadExtraRelationships.get(ownerId) ?? [];
+                    list.push(this.relationshipToJson(next));
+                    this.payloadExtraRelationships.set(ownerId, list);
+                }
+                linkedEntry = next;
+            }
+        }
+
+        const parents = new Map<string, NamedElement | undefined>();
+        for (const element of this.elements) {
+            parents.set(this.getId(element), this.parentElement(element));
+        }
+        for (const id of Array.from(elements)) {
+            let parent = parents.get(id);
+            while (parent !== undefined) {
+                const parentId = this.getId(parent);
+                elements.add(parentId);
+                parent = parents.get(parentId);
+            }
+        }
+
+        this.payloadElements = elements;
+        this.payloadRelationships = relationships;
+    }
+
+    /**
+     * Attaches linked base relationships to their owner element in a payload, so
+     * the renderer resolves linkedRelationshipId without the base relationship's
+     * own source element being present.
+     */
+    private injectExtraRelationships(model: any): void {
+        if (this.payloadExtraRelationships.size === 0) {
+            return;
+        }
+        const elements = new Map<string, any>();
+        const relationshipIds = new Set<string>();
+        const walk = (nodes: any[]) => {
+            for (const node of nodes ?? []) {
+                elements.set(String(node.id), node);
+                for (const relationship of node.relationships ?? []) {
+                    relationshipIds.add(String(relationship.id));
+                }
+                for (const key of ['containers', 'components', 'children', 'infrastructureNodes', 'softwareSystemInstances', 'containerInstances']) {
+                    if (Array.isArray(node[key])) walk(node[key]);
+                }
+            }
+        };
+        walk(model.customElements);
+        walk(model.people);
+        walk(model.softwareSystems);
+        walk(model.deploymentNodes);
+
+        for (const [ownerId, extras] of this.payloadExtraRelationships) {
+            const owner = elements.get(ownerId);
+            if (!owner) continue;
+            for (const extra of extras) {
+                if (relationshipIds.has(String(extra.id))) continue;
+                relationshipIds.add(String(extra.id));
+                (owner.relationships ??= []).push(extra);
+            }
+        }
+    }
+
+    /** Parent of an element in the model hierarchy, or undefined at the root. */
+    private parentElement(element: NamedElement): NamedElement | undefined {
+        if (isContainer(element)) return this.resolveContainerParent(element);
+        if (isComponent(element)) return this.resolveComponentParent(element);
+        if (isDeploymentNode(element) || isInfrastructureNode(element) ||
+            isSoftwareSystemInstance(element) || isContainerInstance(element) || isGenericInstance(element)) {
+            return this.resolveDeploymentNodeParent(element);
+        }
+        return undefined;
+    }
+
+    /** True when the current payload keeps the view. */
+    private keepsView(view: View): boolean {
+        if (this.payloadViewKeys === undefined) return true;
+        const key = this.substitute(this.services.workspace.ViewKeyProvider.getKey(view));
+        return key !== undefined && this.payloadViewKeys.has(key);
+    }
+
+    /** True when the current payload keeps the element. */
+    private keepsElement(element: NamedElement): boolean {
+        return this.payloadElements === undefined || this.payloadElements.has(this.getId(element));
+    }
+
+    /** True when the current payload keeps the relationship. */
+    private keepsRelationship(relationship: ImpliedRelationship): boolean {
+        return this.payloadRelationships === undefined || this.payloadRelationships.has(this.getId(relationship.relationship));
     }
 
     /**
@@ -2078,7 +2305,7 @@ class JsonGenerator {
     /** Extracts all Person elements from the collected elements list into JSON format. */
     private extractPeople() {
         const peoples = this.elements
-            .filter(isPerson)
+            .filter(isPerson).filter(p => this.keepsElement(p))
             .map(p => {
                 const result: any = {
                     id: this.getId(p),
@@ -2087,7 +2314,7 @@ class JsonGenerator {
                     description: this.description(p),
                     tags: this.extractTags(p, 'Element', 'Person'),
                     url: this.url(p),
-                    relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(p).map(el => this.relationshipToJson(el)))
+                    relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(p).filter(rel => this.keepsRelationship(rel)).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(result, p);
                 this.applyElementExtensions(result, p);
@@ -3432,6 +3659,49 @@ class JsonGenerator {
     }
 
     /**
+     * Keys and titles of every view visible to the workspace, in declaration
+     * order. Used to notify clients about view changes without generating the
+     * workspace JSON.
+     */
+    public getViewRefs(workspace: Workspace): ViewRef[] {
+        const doc = AstUtils.getDocument(workspace);
+        // The LSP TextDocument version increments on every content change, so it is
+        // a stable, cheap invalidation key for the refs built from this document.
+        const version = doc?.textDocument.version ?? 0;
+        if (this.viewRefsCache && this.viewRefsCache.doc === doc && this.viewRefsCache.version === version) {
+            return this.viewRefsCache.refs;
+        }
+        const views = this.workspaceViews(workspace);
+        // Same bucket order as collectViewRefs() over the generated JSON. Titles
+        // keep unresolved ${constants}: both the previous and the fresh list come
+        // from this method, so the comparison stays consistent.
+        const buckets: Array<(view: any) => boolean> = [
+            isSystemLandscapeView, isSystemContextView, isContainerView, isComponentView,
+            isDeploymentView, isDynamicView, isFilteredView, isCustomView, isImageView
+        ];
+        const refs: ViewRef[] = [];
+        for (const isBucket of buckets) {
+            for (const view of views) {
+                if (!isBucket(view)) {
+                    continue;
+                }
+                const key = this.substitute(this.services.workspace.ViewKeyProvider.getKey(view));
+                if (key === undefined) {
+                    continue;
+                }
+                const ref: ViewRef = { key };
+                const title = this.substitute(view.titleProps?.at(0)?.value);
+                if (title !== undefined) {
+                    ref.title = title;
+                }
+                refs.push(ref);
+            }
+        }
+        this.viewRefsCache = { doc, version, refs };
+        return refs;
+    }
+
+    /**
      * Views contributed by `!include` directives in a views block. A fragment is
      * parsed as its own root document, so its views arrive either as a nested
      * `views { }` block or as bare view declarations (a fragment is spliced into
@@ -3900,7 +4170,7 @@ class JsonGenerator {
                 tags: this.extractTags(container, 'Element', 'Container'),
                 technology: this.technology(container),
                 url: this.url(container),
-            components: this.onlyIfNotEmpty(this.collectNested(container, isComponent)?.map(comp => {
+            components: this.onlyIfNotEmpty(this.collectNested(container, isComponent)?.filter(comp => this.keepsElement(comp)).map(comp => {
                 // Get base group path (e.g., "a-api.jar")
                 let compGroup = this.extractGroup(comp);
                 // Extract inline GroupProperty from grammar
@@ -3921,13 +4191,13 @@ class JsonGenerator {
                     group: compGroup || undefined,
                     tags: this.extractTags(comp, 'Element', 'Component'),
                     url: this.url(comp),
-                    relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(comp).map(el => this.relationshipToJson(el)))
+                    relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(comp).filter(rel => this.keepsRelationship(rel)).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(compResult, comp);
                 this.applyElementExtensions(compResult, comp);
                 return compResult;
             })),
-            relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(container).map(el => this.relationshipToJson(el)))
+            relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(container).filter(rel => this.keepsRelationship(rel)).map(el => this.relationshipToJson(el)))
         };
         this.applyElementOverlay(result, container);
         this.applyElementExtensions(result, container);
@@ -3937,7 +4207,7 @@ class JsonGenerator {
     /** Extracts CustomElement nodes into JSON format with their relationships. */
     private extractCustomElements() {
         const customElements = this.elements
-            .filter(isCustomElement)
+            .filter(isCustomElement).filter(ce => this.keepsElement(ce))
             .map(ce => {
                 const result: any = {
                     id: this.getId(ce),
@@ -3945,7 +4215,7 @@ class JsonGenerator {
                     group: this.extractGroup(ce),
                     description: this.description(ce),
                     metadata: this.metadata(ce),
-                    relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(ce).map(el => this.relationshipToJson(el))),
+                    relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(ce).filter(rel => this.keepsRelationship(rel)).map(el => this.relationshipToJson(el))),
                     tags: this.extractTags(ce, 'Element'),
                     url: this.url(ce)
                 };
@@ -3964,7 +4234,7 @@ class JsonGenerator {
      * - All relationships (direct + implied) extracted via extractRelationshipsForSoftwareSystem
      */
     private extractSystems() {
-        const systems = this.elements.filter(isSoftwareSystem)
+        const systems = this.elements.filter(isSoftwareSystem).filter(s => this.keepsElement(s))
             .map(s => {
                 const result: any = {
                     id: this.getId(s),
@@ -3974,8 +4244,8 @@ class JsonGenerator {
                     group: this.extractGroup(s),
                     tags: this.extractTags(s, 'Element', 'Software System'),
                     url: this.url(s),
-                    containers: this.onlyIfNotEmpty(this.collectNested(s, isContainer)?.map(c => this.transformContainer(c))),
-                    relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(s).map(el => this.relationshipToJson(el)))
+                    containers: this.onlyIfNotEmpty(this.collectNested(s, isContainer)?.filter(c => this.keepsElement(c)).map(c => this.transformContainer(c))),
+                    relationships: this.onlyIfNotEmpty(this.relationshipsOwnedBy(s).filter(rel => this.keepsRelationship(rel)).map(el => this.relationshipToJson(el)))
                 };
                 this.applyElementOverlay(result, s);
                 this.applyElementExtensions(result, s);
@@ -4093,23 +4363,23 @@ class JsonGenerator {
             instances: String(node.instances || "1"),
             deploymentGroups: this.deploymentGroupNames(node),
             // Find nested child deployment nodes (traversing through groups)
-            children: this.onlyIfNotEmpty(this.collectNested(node, isDeploymentNode)?.map(child => {
+            children: this.onlyIfNotEmpty(this.collectNested(node, isDeploymentNode)?.filter(child => this.keepsElement(child)).map(child => {
                 const childJson = this.transformDeploymentNode(child);
                 this.applyElementOverlay(childJson, child);
                 return childJson;
             })),
             // Find infrastructure nodes (traversing through groups)
-            infrastructureNodes: this.onlyIfNotEmpty(this.collectNested(node, isInfrastructureNode)?.map(infra => this.infrastructureNodeToJson(infra))),
+            infrastructureNodes: this.onlyIfNotEmpty(this.collectNested(node, isInfrastructureNode)?.filter(infra => this.keepsElement(infra)).map(infra => this.infrastructureNodeToJson(infra))),
             // Find software system instances (traversing through groups)
             softwareSystemInstances: this.onlyIfNotEmpty(this.collectNested(node, isSoftwareSystemInstance)?.
-            filter((ssi): ssi is typeof ssi & { softwareSystem: { ref: NonNullable<typeof ssi.softwareSystem.ref> } } => ssi.softwareSystem.ref !== undefined).
+            filter((ssi): ssi is typeof ssi & { softwareSystem: { ref: NonNullable<typeof ssi.softwareSystem.ref> } } => ssi.softwareSystem.ref !== undefined).filter(ssi => this.keepsElement(ssi)).
             map(ssi => this.softwareSystemInstanceToJson(ssi))),
             
             // Find container instances (traversing through groups)
             containerInstances: this.onlyIfNotEmpty(this.collectNested(node, isContainerInstance)?.
-            filter((ci): ci is typeof ci & { container: { ref: NonNullable<typeof ci.container.ref> } } => ci.container.ref !== undefined).map(ci => this.containerInstanceToJson(ci))),
+            filter((ci): ci is typeof ci & { container: { ref: NonNullable<typeof ci.container.ref> } } => ci.container.ref !== undefined).filter(ci => this.keepsElement(ci)).map(ci => this.containerInstanceToJson(ci))),
             
-            relationships: this.onlyIfNotEmpty(this.extractRelationshipsForDeploymentNode(node).map(el => this.relationshipToJson(el)))
+            relationships: this.onlyIfNotEmpty(this.extractRelationshipsForDeploymentNode(node).filter(rel => this.keepsRelationship(rel)).map(el => this.relationshipToJson(el)))
         };
         this.applyElementOverlay(jsonNode, node);
         this.applyElementExtensions(jsonNode, node);
@@ -4127,7 +4397,7 @@ class JsonGenerator {
             technology: this.technology(infra),
             url: this.url(infra),
             environment: this.getEnvironment(infra),
-            relationships: this.onlyIfNotEmpty(this.extractRelationshipsForInfrastructureNode(infra).map(el => this.relationshipToJson(el)))
+            relationships: this.onlyIfNotEmpty(this.extractRelationshipsForInfrastructureNode(infra).filter(rel => this.keepsRelationship(rel)).map(el => this.relationshipToJson(el)))
         };
         this.applyElementOverlay(infraJson, infra);
         this.applyElementExtensions(infraJson, infra);
@@ -4145,7 +4415,7 @@ class JsonGenerator {
             deploymentGroups: this.onlyIfNotEmpty(this.directDeploymentGroupNames(ssi)),
             softwareSystemId: this.getId(ssi.softwareSystem.ref),
             environment: this.getEnvironment(ssi),
-            relationships: this.onlyIfNotEmpty(this.extractRelationshipsForSoftwareSystemInstance(ssi).map(el => this.relationshipToJson(el)))
+            relationships: this.onlyIfNotEmpty(this.extractRelationshipsForSoftwareSystemInstance(ssi).filter(rel => this.keepsRelationship(rel)).map(el => this.relationshipToJson(el)))
         };
         this.applyElementOverlay(ssiJson, ssi);
         this.applyElementExtensions(ssiJson, ssi);
@@ -4163,7 +4433,7 @@ class JsonGenerator {
             tags: this.extractTags(ci, 'Container Instance'),
             url: this.url(ci),
             deploymentGroups: this.onlyIfNotEmpty(this.directDeploymentGroupNames(ci)),
-            relationships: this.onlyIfNotEmpty(this.extractRelationshipsForContainerInstance(ci).map(el => this.relationshipToJson(el))),
+            relationships: this.onlyIfNotEmpty(this.extractRelationshipsForContainerInstance(ci).filter(rel => this.keepsRelationship(rel)).map(el => this.relationshipToJson(el))),
             parentId: this.getId(this.resolveDeploymentNodeParent(ci))
         };
         this.applyElementOverlay(ciJson, ci);
@@ -4290,7 +4560,7 @@ class JsonGenerator {
      */
     private extractAllRootDeploymentNodes(): any[] | undefined{
         const deploymentNodes = this.elements
-            .filter((el): el is DeploymentNode => isDeploymentNode(el) && this.isRootDeploymentNode(el))
+            .filter((el): el is DeploymentNode => isDeploymentNode(el) && this.isRootDeploymentNode(el)).filter(node => this.keepsElement(node))
             .map(rootNode => {
                 const jsonNode = this.transformDeploymentNode(rootNode);
                 jsonNode.environment = this.getEnvironment(rootNode);
@@ -4307,7 +4577,7 @@ class JsonGenerator {
      * scheme blocks populate `contentLight`/`contentDark`.
      */
     private extractImageViews(workspace: Workspace) {
-        const views = this.workspaceViews(workspace).filter(isImageView);
+        const views = this.workspaceViews(workspace).filter(isImageView).filter(view => this.keepsView(view));
         if (views.length === 0) return undefined;
 
         const list = views.map(view => {
@@ -4433,7 +4703,7 @@ class JsonGenerator {
      * and automatic layout settings.
      */
     private extractCustomViews(workspace: Workspace) {
-        const views = this.workspaceViews(workspace).filter(view => isCustomView(view))
+        const views = this.workspaceViews(workspace).filter(view => isCustomView(view)).filter(view => this.keepsView(view))
             .map(view => {
                 const elements = new Set<RelationshipMember>();
                 const relationships = new Set<Relationship>();
@@ -4460,8 +4730,8 @@ class JsonGenerator {
      * Extracts System Landscape views from the workspace, resolving all elements
      * and relationships visible at the landscape level (all elements in the model).
      */
-    private extractSystemLandscapeViews(workspace: Workspace, model: any) {
-        const views = this.workspaceViews(workspace).filter(view => isSystemLandscapeView(view))
+    private extractSystemLandscapeViews(workspace: Workspace) {
+        const views = this.workspaceViews(workspace).filter(view => isSystemLandscapeView(view)).filter(view => this.keepsView(view))
             .map(view => {
                 const elements = new Set<RelationshipMember>();
                 const relationships = new Set<Relationship>();
@@ -8448,8 +8718,8 @@ class JsonGenerator {
      * Extracts System Context views from the workspace. Each view is scoped to a SoftwareSystem
      * and includes that system, its direct relationships, and related people/systems.
      */
-    private extractSystemContextViews(workspace: Workspace, model: any) {
-        const views = this.workspaceViews(workspace).filter(isSystemContextView)
+    private extractSystemContextViews(workspace: Workspace) {
+        const views = this.workspaceViews(workspace).filter(isSystemContextView).filter(view => this.keepsView(view))
         .map(view => {
             // Normalise the scope to the materialised element.
             const scopeSystem = this.el(view.softwareSystem?.ref);
@@ -8481,8 +8751,8 @@ class JsonGenerator {
      * Extracts Container views from the workspace for a given SoftwareSystem scope.
      * Resolves all container-level elements and their relationships within the system.
      */
-    private extractContainerViews(workspace: Workspace, model: any) {
-        const views = this.workspaceViews(workspace).filter(isContainerView)
+    private extractContainerViews(workspace: Workspace) {
+        const views = this.workspaceViews(workspace).filter(isContainerView).filter(view => this.keepsView(view))
             .map(view => {
                 const scopeSystem = this.el(view.softwareSystem?.ref);
                 if(scopeSystem === undefined) return undefined;
@@ -8513,8 +8783,8 @@ class JsonGenerator {
      * Extracts Component views from the workspace, scoped to a specific Container.
      * Shows the components within a container, their relationships, and related people/systems.
      */
-    private extractComponentViews(workspace: Workspace, model: any) {
-        const views = this.workspaceViews(workspace).filter(isComponentView)
+    private extractComponentViews(workspace: Workspace) {
+        const views = this.workspaceViews(workspace).filter(isComponentView).filter(view => this.keepsView(view))
             .map(view => {
                 const scopeContainer = this.el(view.container?.ref);
                 if(scopeContainer === undefined) return undefined;
@@ -8596,8 +8866,8 @@ class JsonGenerator {
      * (nodes, infrastructure, instances) within a given environment.
      * Optionally scoped to a SoftwareSystem for targeted deployment visualization.
      */
-    private extractDeploymentViews(workspace: Workspace, model: any) {
-        const views = this.workspaceViews(workspace).filter(isDeploymentView)
+    private extractDeploymentViews(workspace: Workspace) {
+        const views = this.workspaceViews(workspace).filter(isDeploymentView).filter(view => this.keepsView(view))
             .map(view => {
                 const scopeSystem = this.el(view.softwareSystem?.ref);
                 const environment = view.environment?.ref ? C4Utils.stripQuotes(view.environment.ref.name) : undefined;
@@ -8632,7 +8902,7 @@ class JsonGenerator {
         const viewsList = this.workspaceViews(workspace);
         if (!Array.isArray(viewsList)) return undefined;
         const views = viewsList
-            .filter(isDynamicView)
+            .filter(isDynamicView).filter(view => this.keepsView(view))
             .map(view => {
                 const scopeElement = this.el(view.element?.ref);
                 const content = this.resolveDynamic(view);
@@ -8671,7 +8941,7 @@ class JsonGenerator {
      */
     private extractFilteredViews(workspace: Workspace) {
         const allViews = this.workspaceViews(workspace);
-        const views = allViews.filter(isFilteredView)
+        const views = allViews.filter(isFilteredView).filter(view => this.keepsView(view))
             .map(view => {
                 const baseKey = this.substitute(view.baseKey);
                 const baseView = allViews.find(candidate =>
@@ -8854,9 +9124,17 @@ export class C4JsonGenerator {
     private readonly generators = new Map<string, JsonGenerator>();
     /** Shared by every generate() call so an unchanged DOT is laid out once. */
     private readonly layoutCache = new GraphvizLayoutCache();
+    /** Last per-view generator of a root URI, for text-measurement relayouts. */
+    private readonly viewGenerators = new Map<string, { viewKey: string; generator: JsonGenerator }>();
+    /**
+     * Reused for getViewRefs() calls: the walk it performs spans every !include
+     * fragment, so it must not happen on a freshly built generator on each call.
+     */
+    private readonly viewRefGenerator: JsonGenerator;
 
     constructor(services: C4Services) {
         this.services = services;
+        this.viewRefGenerator = new JsonGenerator(this.services, this.layoutCache);
     }
 
     /**
@@ -8868,7 +9146,27 @@ export class C4JsonGenerator {
     public async generate(workspace: Workspace, uri?: string): Promise<any> {
         const jsonGenerator : JsonGenerator = new JsonGenerator(this.services, this.layoutCache);
         this.generators.set(uri ?? '', jsonGenerator);
+        // A full build supersedes any view payload built from the previous AST.
+        this.viewGenerators.delete(uri ?? '');
         return await jsonGenerator.generate(workspace);
+    }
+
+    /**
+     * Generates the workspace JSON limited to one view. A filtered view also keeps
+     * its base view, because the filtered content is resolved through the base.
+     * @param workspace The workspace AST node to generate JSON for
+     * @param viewKey Key of the view to build
+     * @param uri Root workspace URI, used to keep the layout state per workspace
+     */
+    public async generateView(workspace: Workspace, viewKey: string, uri?: string): Promise<any> {
+        const jsonGenerator : JsonGenerator = new JsonGenerator(this.services, this.layoutCache);
+        this.viewGenerators.set(uri ?? '', { viewKey, generator: jsonGenerator });
+        return await jsonGenerator.generateView(workspace, viewKey);
+    }
+
+    /** Keys and titles of every view of the workspace, without generating the JSON. */
+    public getViewRefs(workspace: Workspace): ViewRef[] {
+        return this.viewRefGenerator.getViewRefs(workspace);
     }
 
     /**
@@ -8886,6 +9184,26 @@ export class C4JsonGenerator {
     public async applyTextMeasurements(uri: string | undefined, json: any, widths: Record<string, number>): Promise<{ views: any[]; changed: boolean }> {
         const generator = this.generators.get(uri ?? '');
         return generator ? await generator.applyTextMeasurements(json, widths) : { views: [], changed: false };
+    }
+
+    /** Texts to measure for a per-view payload of the given workspace and view. */
+    public getViewTextMeasurements(uri: string | undefined, viewKey: string): Record<string, ViewTextMeasurements> {
+        const entry = this.viewGenerators.get(uri ?? '');
+        if (!entry || entry.viewKey !== viewKey) return {};
+        // The payload carries the requested view only: its base view of a filtered
+        // payload is not rendered, so measuring its texts would waste the pass.
+        const measurements = entry.generator.getTextMeasurements();
+        const view = measurements[viewKey];
+        return view !== undefined ? { [viewKey]: view } : {};
+    }
+
+    /** Re-runs the auto-layout of a per-view payload with the measured text widths. */
+    public async applyViewTextMeasurements(uri: string | undefined, viewKey: string, json: any, widths: Record<string, number>): Promise<{ views: any[]; changed: boolean }> {
+        const entry = this.viewGenerators.get(uri ?? '');
+        if (!entry || entry.viewKey !== viewKey) {
+            return { views: [], changed: false };
+        }
+        return await entry.generator.applyTextMeasurements(json, widths);
     }
 
     /**

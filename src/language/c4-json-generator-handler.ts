@@ -21,6 +21,7 @@ import * as includeResolver from './c4-include-resolver';
 import type { C4Services } from './c4-module';
 import { C4JsonEnricher } from './c4-json-enricher';
 import { applyDrawioLayoutToView } from './c4-drawio-layout';
+import type { ViewRef } from '../shared/view-refs';
 
 /**
  * A generated workspace JSON together with the generation of the build it was
@@ -87,6 +88,8 @@ export class C4GeneratorHandler {
      *  fragment document), so a root workspace is generated exactly once and its
      *  external themes are fetched once - not once per fragment. */
     private readonly pendingGenerate = new Map<string, Promise<void>>();
+    /** Last per-view payload generated for a root URI, for text-measurement relayouts. */
+    private readonly lastViewPayload = new Map<string, GeneratedJson & { viewKey: string }>();
     /**
      * Newest workspace node that arrived for a URI whose generation was still in
      * flight. The in-flight build may have started from an older AST, so this one
@@ -95,13 +98,18 @@ export class C4GeneratorHandler {
     private readonly queuedWorkspaces = new Map<string, any>();
 
     /**
-     * Optional callback invoked after a workspace's JSON has been successfully
-     * generated and cached. Used by the language server entry points to notify
-     * the client (e.g., c4/contentUpdated) so the diagram preview refreshes
-     * only once fresh JSON is actually available. The generation identifies the
-     * build this (uri, json) pair came from (it is not mutated into the json).
+     * Optional callback invoked after a workspace's JSON has been generated and
+     * cached on demand. The generation identifies the build this (uri, json) pair
+     * came from (it is not mutated into the json).
      */
     public onJsonGenerated?: (uri: string, json: any, generation: number) => void;
+
+    /**
+     * Optional callback invoked after each build with the workspace's view list.
+     * The client uses it to refresh the preview without generating the workspace
+     * JSON; the per-view payload is generated on demand.
+     */
+    public onViewsUpdated?: (uri: string, views: ViewRef[]) => void;
 
     constructor(services: C4Services) {
         this.services = services;
@@ -118,6 +126,9 @@ export class C4GeneratorHandler {
         services.shared.workspace.DocumentBuilder.onUpdate(() => {
             this.cachedUris.clear();
             this.pendingReset = true;
+            // A view payload belongs to the AST it was built from; a document
+            // update makes it stale for text-measurement relayouts.
+            this.lastViewPayload.clear();
         });
 
         // Regenerate JSON once documents are validated. The state is referenced by
@@ -131,20 +142,20 @@ export class C4GeneratorHandler {
 
     /**
      * Called after each build cycle. Collects the UNIQUE root workspace documents
-     * reachable from the validated `documents` and generates/caches JSON for each
-     * root exactly once.
+     * reachable from the validated `documents` and notifies the client about their
+     * views. The full workspace JSON is generated lazily, only when a consumer
+     * (export, MCP, fitness checks) asks for it, so an edit does not pay for it.
      *
      * A build cycle passes every changed document (the workspace file AND each
-     * !include fragment). Without dedup, a root workspace would be regenerated
-     * once per fragment (1 + N fragments), and each generation would re-fetch the
-     * same external themes - producing the theme-download spam. Here each root is
-     * generated once: documents that ARE workspaces map to themselves, fragments
-     * resolve to their owning root via findRootWorkspace(), and duplicate roots
-     * are collapsed by the Map key (and by the in-flight guard in generateAndCache).
+     * !include fragment). Without dedup, the client would be notified once per
+     * fragment (1 + N fragments) for the same root. Here each root is notified
+     * once: documents that ARE workspaces map to themselves, fragments resolve to
+     * their owning root via findRootWorkspace(), and duplicate roots collapse by
+     * the Map key.
      *
-     * When the preceding update invalidated the JSON cache (pendingReset), the
-     * list of known roots is rebuilt from the currently loaded documents and all
-     * still-live roots are regenerated, not just the ones this cycle touched.
+     * When the preceding update invalidated the JSON cache (pendingReset), every
+     * loaded root is checked for a broken AST so a project that stops parsing is
+     * reported even when the build cycle does not touch it.
      */
     private updateMemoryCache(documents: LangiumDocument[]) {
         const roots = new Map<string, any>();
@@ -164,18 +175,10 @@ export class C4GeneratorHandler {
         }
 
         if (this.pendingReset) {
-            // The preceding update wiped jsonCache for every root, while the build
-            // cycle only covers the documents it touched. Schedule every root that is
-            // still loaded for regeneration, so a change in one project does not drop
-            // the cached JSON (and the diagram) of the other open projects. cachedUris
-            // was already cleared in the onUpdate hook and is repopulated by
-            // doGenerateAndCache as each generation succeeds, so it never advertises
-            // a project whose JSON failed to build.
             this.pendingReset = false;
             for (const doc of this.services.shared.workspace.LangiumDocuments.all.toArray()) {
-                const workspaceNode = this.getWorkspaceNode(doc);
                 const uri = doc.uri.toString();
-                if (!workspaceNode) {
+                if (!this.getWorkspaceNode(doc)) {
                     // A loaded document that declares no workspace cannot be
                     // generated: its AST is not a parsed workspace (syntax error, an
                     // empty/unreadable file, or several workspace blocks). Reported
@@ -185,14 +188,11 @@ export class C4GeneratorHandler {
                     continue;
                 }
                 this.clearUngeneratableRoot(uri);
-                if (!roots.has(uri)) {
-                    roots.set(uri, workspaceNode);
-                }
             }
         }
 
         for (const [uri, workspaceNode] of roots) {
-            this.generateAndCache(uri, workspaceNode);
+            this.onViewsUpdated?.(uri, this.services.generation.C4JsonGenerator.getViewRefs(workspaceNode));
         }
     }
 
@@ -418,6 +418,44 @@ export class C4GeneratorHandler {
     }
 
     /**
+     * Generates the JSON limited to one view for the root workspace of the given
+     * URI. The payload is remembered as the last view payload of that root, so a
+     * text-measurement pass can re-lay it out, while the full workspace JSON in
+     * the cache stays untouched. Returns null when the URI has no generatable
+     * workspace or the view key is unknown.
+     */
+    public async getViewContentForUri(uri: string, viewKey: string): Promise<GeneratedJson | null> {
+        const rootDoc = this.findRootWorkspace(uri);
+        const workspaceNode = rootDoc ? this.getWorkspaceNode(rootDoc) : undefined;
+        if (!rootDoc || !workspaceNode) {
+            return null;
+        }
+        const rootUri = rootDoc.uri.toString();
+        const json = await this.services.generation.C4JsonGenerator.generateView(workspaceNode, viewKey, rootUri);
+        if (!json) {
+            return null;
+        }
+        jsonGeneration += 1;
+        const generation = jsonGeneration;
+        this.everGenerated.add(rootUri);
+        this.lastViewPayload.set(rootUri, { json, generation, viewKey });
+        return { json, generation };
+    }
+
+    /** Texts the renderer measures to size frames for a per-view payload. */
+    public getViewTextMeasurements(uri: string, viewKey: string): Record<string, any> {
+        const rootUri = this.getRootUri(uri);
+        return this.services.generation.C4JsonGenerator.getViewTextMeasurements(rootUri, viewKey);
+    }
+
+    /** Keys and titles of every view of the root workspace, in declaration order. */
+    public getViewRefs(uri: string): ViewRef[] {
+        const rootDoc = this.findRootWorkspace(uri);
+        const workspace = rootDoc ? this.getWorkspaceNode(rootDoc) : undefined;
+        return workspace ? this.services.generation.C4JsonGenerator.getViewRefs(workspace) : [];
+    }
+
+    /**
      * Returns the cached generated JSON for the root workspace of the given URI,
      * or undefined when no JSON has been generated yet. Unlike getContentForUri,
      * this performs no logging - it is intended for read-only inspections such as
@@ -449,6 +487,20 @@ export class C4GeneratorHandler {
      */
     public async applyTextMeasurements(uri: string, generation: number, widths: Record<string, number>): Promise<{ views: any[]; changed: boolean; generation: number } | undefined> {
         const rootUri = this.getRootUri(uri);
+        // The preview renders one view at a time: when a view payload was generated
+        // last, its measurements apply to that payload, not to the full workspace
+        // JSON in the cache. A view payload of a different generation is stale and
+        // must not fall through to the full JSON.
+        const view = this.lastViewPayload.get(rootUri);
+        if (view) {
+            if (view.generation !== generation) return undefined;
+            const { views, changed } = await this.services.generation.C4JsonGenerator.applyViewTextMeasurements(rootUri, view.viewKey, view.json, widths ?? {});
+            if (changed) {
+                jsonGeneration += 1;
+                view.generation = jsonGeneration;
+            }
+            return { views, changed, generation: view.generation };
+        }
         const entry = this.jsonCache.get(rootUri);
         if (!entry || entry.generation !== generation) return undefined;
         const { views, changed } = await this.services.generation.C4JsonGenerator.applyTextMeasurements(rootUri, entry.json, widths ?? {});

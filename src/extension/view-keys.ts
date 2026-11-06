@@ -14,20 +14,10 @@
 	limitations under the License.
 */
 
-/** View categories of the generated Structurizr JSON. */
-const VIEW_GROUPS = [
-    'systemLandscapeViews',
-    'systemContextViews',
-    'containerViews',
-    'componentViews',
-    'dynamicViews',
-    'deploymentViews',
-    'filteredViews',
-    'customViews',
-];
+import type { ViewRef } from '../shared/view-refs';
 
 /**
- * Finds the view in freshly generated JSON that corresponds to the currently
+ * Finds the view in the fresh view list that corresponds to the currently
  * displayed view. View keys embed a CST-offset hash that changes when the source
  * is edited, so the exact key can go stale. Views of the same target and type share
  * the `<TargetName>-<ViewType>` prefix, so the match uses the title first and the
@@ -37,74 +27,45 @@ const VIEW_GROUPS = [
  * Returns undefined when the view cannot be identified; the caller then keeps the
  * displayed view instead of switching to a sibling.
  */
-export function resolveFreshViewKey(json: any, currentKey: string | undefined, previousJson?: any): string | undefined {
+export function resolveFreshViewKey(fresh: ViewRef[] | undefined, currentKey: string | undefined, previous?: ViewRef[]): string | undefined {
     if (!currentKey) {
         return undefined;
     }
-    if (findViewByKey(json, currentKey)) {
+    const views = fresh ?? [];
+    if (views.some(view => view.key === currentKey)) {
         return currentKey;
     }
 
     const dash = currentKey.lastIndexOf('-');
     const prefix = dash > 0 ? currentKey.substring(0, dash) : currentKey;
-    const fresh = viewsWithPrefix(json, prefix);
-    if (fresh.length === 0) {
+    const freshGroup = viewsWithPrefix(views, prefix);
+    if (freshGroup.length === 0) {
         return undefined;
     }
 
-    const previous = viewsWithPrefix(previousJson, prefix);
-    const index = previous.findIndex(view => view.key === currentKey);
+    const previousGroup = viewsWithPrefix(previous ?? [], prefix);
+    const index = previousGroup.findIndex(view => view.key === currentKey);
     if (index < 0) {
         return undefined;
     }
 
-    const previousTitle = previous[index]?.title;
+    const previousTitle = previousGroup[index]?.title;
     if (previousTitle) {
-        const sameTitle = fresh.filter(view => view.title === previousTitle);
+        const sameTitle = freshGroup.filter(view => view.title === previousTitle);
         return sameTitle.length === 1 ? sameTitle[0].key : undefined;
     }
     // Untitled views keep their declaration order; a different count means the view
     // itself disappeared (for example while its expression does not parse yet).
-    if (fresh.length !== previous.length) {
+    if (freshGroup.length !== previousGroup.length) {
         return undefined;
     }
-    return (fresh[index] ?? fresh[0]).key;
+    return (freshGroup[index] ?? freshGroup[0]).key;
 }
 
-/** Views whose key starts with the stable `<TargetName>-<ViewType>` prefix, in JSON order. */
-function viewsWithPrefix(json: any, prefix: string): any[] {
-    const views: any[] = [];
+/** Views whose key starts with the stable `<TargetName>-<ViewType>` prefix, in list order. */
+function viewsWithPrefix(views: ViewRef[], prefix: string): ViewRef[] {
     if (!prefix) {
-        return views;
+        return [];
     }
-    for (const bucket of Object.values((json?.views ?? {}) as Record<string, unknown>)) {
-        if (!Array.isArray(bucket)) {
-            continue;
-        }
-        for (const view of bucket as any[]) {
-            if (view && typeof view.key === 'string' && view.key.startsWith(prefix + '-')) {
-                views.push(view);
-            }
-        }
-    }
-    return views;
-}
-
-/** Finds a view by its exact key in any view bucket. */
-function findViewByKey(json: any, key: string): any | undefined {
-    const views = json?.views;
-    if (!views) {
-        return undefined;
-    }
-    for (const group of VIEW_GROUPS) {
-        const list = views[group];
-        if (!Array.isArray(list)) {
-            continue;
-        }
-        const found = list.find((view: any) => view?.key === key);
-        if (found) {
-            return found;
-        }
-    }
-    return undefined;
+    return views.filter(view => view.key.startsWith(prefix + '-'));
 }

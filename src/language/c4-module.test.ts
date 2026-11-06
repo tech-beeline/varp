@@ -72,18 +72,22 @@ class SingleFileSystem implements FileSystemProvider {
 }
 
 describe('createC4Services initial workspace build', () => {
-    it('generates JSON for loaded workspaces without opening a file', async () => {
+    it('reports loaded workspaces and generates their JSON on demand', async () => {
         const services = createC4Services({ connection: undefined as any, fileSystemProvider: () => new SingleFileSystem() });
-        const generated = new Promise<void>((resolve) => {
-            services.C4.generation.C4GeneratorHandler.onJsonGenerated = (uri) => {
+        const updated = new Promise<void>((resolve) => {
+            services.C4.generation.C4GeneratorHandler.onViewsUpdated = (uri) => {
                 if (uri === WORKSPACE_URI) resolve();
             };
         });
 
         services.shared.workspace.WorkspaceManager.initialize({ workspaceFolders: [{ uri: FOLDER, name: 'ws' }] } as any);
         await services.shared.workspace.WorkspaceManager.initialized({} as any);
-        await generated;
+        await updated;
 
+        // The build notifies about the workspace; the JSON is generated on demand.
+        expect(services.C4.generation.C4GeneratorHandler.getCachedUris()).not.toContain(WORKSPACE_URI);
+        const entry = await services.C4.generation.C4GeneratorHandler.ensureContentForUri(WORKSPACE_URI);
+        expect(entry).not.toBeNull();
         expect(services.C4.generation.C4GeneratorHandler.getCachedUris()).toContain(WORKSPACE_URI);
     }, 30_000);
 });

@@ -24,6 +24,7 @@ import { registerFitnessChecks } from "./fitness-functions";
 import { FitnessResultsView } from "./fitness-results-view";
 import { ARCHOPS_CONFIGURED_CONTEXT, archopsConfigured } from "../shared/archops";
 import { resolveFreshViewKey } from "./view-keys";
+import type { ViewRef } from "../shared/view-refs";
 
 /**
  * Minimal shape of the language client (node or browser) used by the extension.
@@ -90,37 +91,37 @@ function registerAutoRefreshNotification(client: C4LanguageClient): void {
     }
     refreshNotificationRegistered = true;
 
-    client.onNotification('c4/contentUpdated', async (params: { uri: string; json: any; generation?: number; textMeasurements?: Record<string, any> }) => {
+    client.onNotification('c4/contentUpdated', async (params: { uri: string; views?: ViewRef[] }) => {
         const uri = params?.uri;
-        const json = params?.json;
-        const generation = params?.generation;
-        const textMeasurements = params?.textMeasurements;
-        if (!uri || !json) {
+        const views = params?.views;
+        if (!uri) {
             return;
         }
         const preview = diagramPreview;
         if (!preview || !preview.isOpen()) {
             return;
         }
+        // The list of the build the preview currently shows, used to keep the
+        // displayed view selected when an edit changes its key hash.
+        const previousViews = lastViewRefs.get(uri);
 
         if (preview.getCurrentDocUri() === uri) {
             // Fast path: the notification belongs to the bound document.
-            renderPreviewIfApplicable(uri, json, generation, preview, textMeasurements);
+            renderPreviewIfApplicable(uri, views, previousViews, preview);
             return;
         }
 
         // The notification is for a different document (many dsl files, fragment
         // edits). It is only relevant to this preview if the notified URI is the
-        // ROOT of the document the preview is bound to - then the payload is the
-        // fresh JSON for this preview. Check that with ONE cheap getRootUri call
-        // instead of fetching JSON on every unrelated generation event.
+        // ROOT of the document the preview is bound to. Check that with ONE cheap
+        // getRootUri call instead of fetching on every unrelated generation event.
         if (!languageClient) {
             return;
         }
         try {
             const res: any = await languageClient.sendRequest('c4/getRootUri', { uri: preview.getCurrentDocUri() });
             if (res?.rootUri === uri) {
-                renderPreviewIfApplicable(uri, json, generation, preview, textMeasurements);
+                renderPreviewIfApplicable(uri, views, previousViews, preview);
             }
         } catch {
             // unrelated / transient failure - ignore the notification
@@ -152,24 +153,30 @@ function isDocumentDirty(uri: string): boolean {
  * update while onSave only renders when the document is clean (saved). Renders
  * are coalesced via scheduleRefresh so bursts produce one webview update.
  */
-function renderPreviewIfApplicable(uri: string, json: any, generation: number | undefined, preview: DiagramPreview, textMeasurements?: Record<string, any>): void {
+function renderPreviewIfApplicable(uri: string, views: ViewRef[] | undefined, previousViews: ViewRef[] | undefined, preview: DiagramPreview): void {
     const mode = getAutoRefreshMode(uri);
     const dirty = isDocumentDirty(uri);
     const pending = preview.isPendingJson();
     if (pending || mode === 'onChange' || !dirty) {
-        scheduleRefresh(uri, json, generation, textMeasurements);
+        scheduleRefresh(uri, views, previousViews);
     }
 }
 
-// Coalesces auto-refresh renders to the latest JSON without adding latency: the
-// flush is scheduled on the next microtask, so notifications delivered within the
-// same tick (a burst of contentUpdated) only produce ONE postMessage + webview
-// re-render with the freshest payload - intermediate versions are skipped.
-let pendingRefresh: { uri: string; json: any; generation?: number; textMeasurements?: Record<string, any> } | undefined;
+// Coalesces auto-refresh renders to the latest view list without adding latency:
+// the flush is scheduled on the next microtask, so notifications delivered within
+// the same tick (a burst of contentUpdated) only produce ONE payload fetch and
+// webview re-render with the freshest views - intermediate versions are skipped.
+let pendingRefresh: { uri: string; views?: ViewRef[]; previousViews?: ViewRef[] } | undefined;
 let refreshQueued = false;
+// Monotonic refresh counter: a per-view payload is fetched asynchronously, so a
+// slower earlier refresh must not overwrite the render of a newer one.
+let refreshSequence = 0;
+// View list of the build the preview shows, per root URI: the baseline for
+// resolving the displayed view key after an edit changes its hash.
+const lastViewRefs = new Map<string, ViewRef[]>();
 
-function scheduleRefresh(uri: string, json: any, generation?: number, textMeasurements?: Record<string, any>): void {
-    pendingRefresh = { uri, json, generation, textMeasurements };
+function scheduleRefresh(uri: string, views?: ViewRef[], previousViews?: ViewRef[]): void {
+    pendingRefresh = { uri, views, previousViews };
     if (refreshQueued) {
         return;
     }
@@ -179,7 +186,7 @@ function scheduleRefresh(uri: string, json: any, generation?: number, textMeasur
         const pending = pendingRefresh;
         pendingRefresh = undefined;
         if (pending) {
-            void refreshDiagram(pending.uri, pending.json, pending.generation, pending.textMeasurements);
+            void refreshDiagram(pending.uri, pending.views, pending.previousViews);
         }
     });
 }
@@ -194,8 +201,19 @@ async function openJsonDebugTab(json: any): Promise<void> {
     });
 }
 
-/** Renders fresh JSON into the open preview bound to the given root document URI. */
-async function refreshDiagram(uri: string, json: any, generation?: number, textMeasurements?: Record<string, any>): Promise<void> {
+/**
+ * Renders the fresh view into the open preview bound to the given root document URI.
+ *
+ * `initial` is an already-fetched per-view payload (the `c4/getViewContent` response of a
+ * caller that must know the root URI / view list up front, e.g. the save handler). When
+ * provided it is delivered directly, so the handler's single round-trip is not repeated.
+ */
+async function refreshDiagram(
+    uri: string,
+    views?: ViewRef[],
+    previousViews?: ViewRef[],
+    initial?: { json: any; generation: number; textMeasurements?: Record<string, any>; viewKey: string }
+): Promise<void> {
     const preview = diagramPreview;
     if (!preview || !preview.isOpen()) {
         return;
@@ -204,23 +222,48 @@ async function refreshDiagram(uri: string, json: any, generation?: number, textM
     if (!currentKey) {
         return;
     }
-    // True when this is the first JSON the open preview receives: the JSON debug
-    // tab opens with it, mirroring the DIAGRAM_PREVIEW warm path.
-    const firstDelivery = preview.isPendingJson();
+    const sequence = ++refreshSequence;
     // View keys change when the source shifts, so resolve the matching key in the
-    // fresh JSON; updateWebView stores it for subsequent refreshes.
-    const viewKey = resolveFreshViewKey(json, currentKey, preview.getCurrentJson()) ?? currentKey;
+    // fresh view list; updateWebView stores it for subsequent refreshes.
+    const viewKey = initial?.viewKey ?? resolveFreshViewKey(views, currentKey, previousViews) ?? currentKey;
+    // Render the per-view payload instead of the full workspace JSON. The full
+    // payload is fetched only when the view cannot be built.
+    let payload: any = initial?.json;
+    let payloadGeneration: number | undefined = initial?.generation;
+    let payloadMeasurements: Record<string, any> | undefined = initial?.textMeasurements;
+    if (payload === undefined && languageClient) {
+        try {
+            const res: any = await languageClient.sendRequest('c4/getViewContent', { uri, viewKey });
+            payload = res?.json;
+            payloadGeneration = res?.generation;
+            payloadMeasurements = res?.textMeasurements;
+            if (!payload) {
+                // The view is unknown (for example its expression does not parse
+                // yet): the full workspace JSON still carries it.
+                const full: any = await languageClient.sendRequest('c4/getContentForUri', { uri });
+                payload = full?.json;
+                payloadGeneration = full?.generation;
+                payloadMeasurements = full?.textMeasurements;
+            }
+        } catch (err) {
+            console.warn('[C4 Preview] per-view payload fetch failed:', err);
+        }
+    }
+    // A newer refresh may have started while the payload was being built.
+    if (sequence !== refreshSequence) {
+        return;
+    }
+    if (!payload) {
+        return;
+    }
     // Themes are fetched once when the preview is opened and are already stored
     // on the preview (included in every postMessage), so re-rendering the same
     // diagram must not block on re-fetching theme files.
-    await preview.deliver(json, viewKey, uri, generation, textMeasurements, getThemesForPreview);
-    // if (firstDelivery) {
-    //     try {
-    //         await openJsonDebugTab(json);
-    //     } catch (err) {
-    //         console.warn('[C4 Preview] failed to open the JSON debug tab:', err);
-    //     }
-    // }
+    await preview.deliver(payload, viewKey, uri, payloadGeneration, payloadMeasurements, getThemesForPreview);
+    // The delivered build is the baseline for resolving the next view key.
+    if (views !== undefined) {
+        lastViewRefs.set(uri, views);
+    }
 }
 
 
@@ -244,6 +287,23 @@ async function getThemesForPreview(themeUrls: string[] | undefined): Promise<{ u
     } catch (err) {
         console.warn('[C4 Preview] theme fetch failed:', err);
         return undefined;
+    }
+}
+
+/** Replaces the view with the same key in a generated workspace payload. */
+function replaceViewInPayload(json: any, view: any): void {
+    if (!json?.views || typeof view?.key !== 'string') {
+        return;
+    }
+    for (const bucket of Object.values(json.views as Record<string, unknown>)) {
+        if (!Array.isArray(bucket)) {
+            continue;
+        }
+        const index = bucket.findIndex((candidate: any) => candidate?.key === view.key);
+        if (index >= 0) {
+            bucket[index] = view;
+            return;
+        }
     }
 }
 
@@ -323,14 +383,44 @@ export function init(context: ExtensionContext): void {
                 return;
             }
             const uri = document.uri.toString();
+            const currentKey = preview.getCurrentViewKey();
 
-            // Always pull the freshest JSON from the language server on save so
-            // the preview reflects the saved content even if no push has arrived.
+            // Pull the freshest per-view payload from the language server on save so the
+            // preview reflects the saved content even if no push has arrived. One
+            // c4/getViewContent round-trip serves both the payload and the view list the
+            // key is resolved against (no separate c4/getViewRefs call).
             try {
-                const response: any = await languageClient?.sendRequest('c4/getContentForUri', { uri });
-                if (response?.json) {
-                    await refreshDiagram(uri, response.json, response.generation, response.textMeasurements);
+                if (!languageClient || !currentKey) {
                     return;
+                }
+                const res: any = await languageClient.sendRequest('c4/getViewContent', { uri, viewKey: currentKey });
+                if (res?.rootUri && Array.isArray(res.views)) {
+                    const rootUri: string = res.rootUri;
+                    const views: ViewRef[] = res.views;
+                    const previousViews = lastViewRefs.get(rootUri);
+                    const viewKey = resolveFreshViewKey(views, currentKey, previousViews) ?? currentKey;
+                    const payload: any = res.json;
+                    if (payload) {
+                        await refreshDiagram(rootUri, views, previousViews, {
+                            json: payload,
+                            generation: res.generation,
+                            textMeasurements: res.textMeasurements,
+                            viewKey
+                        });
+                        return;
+                    }
+                    // The view cannot be built yet (for example its expression does not
+                    // parse): fall back to the full workspace JSON, which still carries it.
+                    const full: any = await languageClient.sendRequest('c4/getContentForUri', { uri });
+                    if (full?.json) {
+                        await refreshDiagram(rootUri, views, previousViews, {
+                            json: full.json,
+                            generation: full.generation,
+                            textMeasurements: full.textMeasurements,
+                            viewKey
+                        });
+                        return;
+                    }
                 }
             } catch (err) {
                 console.error(`[C4 AutoRefresh] Error fetching content on save:`, err);
@@ -369,10 +459,22 @@ export function init(context: ExtensionContext): void {
             let textMeasurements: Record<string, any> | undefined;
             if (languageClient) {
                 try {
-                    const res = await languageClient.sendRequest('c4/getContentForUri', { uri: docUri ?? '' });
+                    const res = await languageClient.sendRequest('c4/getViewContent', { uri: docUri ?? '', viewKey });
                     payload = res?.json;
                     generation = res?.generation;
                     textMeasurements = res?.textMeasurements;
+                    if (res?.rootUri && Array.isArray(res.views) && res.views.length > 0) {
+                        // Baseline for resolving this view's key after an edit.
+                        lastViewRefs.set(res.rootUri, res.views);
+                    }
+                    if (!payload) {
+                        // The view is unknown (for example its expression does not
+                        // parse yet): the full workspace JSON still carries it.
+                        const full = await languageClient.sendRequest('c4/getContentForUri', { uri: docUri ?? '' });
+                        payload = full?.json;
+                        generation = full?.generation;
+                        textMeasurements = full?.textMeasurements;
+                    }
                 } catch (err) {
                     console.warn('[C4 Preview] fresh JSON fetch failed:', err);
                 }
@@ -492,11 +594,14 @@ export function init(context: ExtensionContext): void {
                 return;
             }
 
-            const content: any = await languageClient.sendRequest('c4/getContentForUri', { uri: docUri });
+            // The preview renders a per-view payload: take that payload and put the
+            // imported coordinates in place of its auto-laid-out view.
+            const content: any = await languageClient.sendRequest('c4/getViewContent', { uri: docUri, viewKey: currentViewKey });
             if (!content?.json) {
                 window.showErrorMessage('Failed to import the DrawIO layout.');
                 return;
             }
+            replaceViewInPayload(content.json, result.view);
 
             // No text measurements: the rebuild must keep the imported coordinates
             // instead of re-running the auto-layout pass.

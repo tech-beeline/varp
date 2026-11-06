@@ -18,6 +18,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { EmptyFileSystem } from 'langium';
 import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
+import { collectViewRefs } from '../shared/view-refs';
 import { fitViewToContent } from './c4-json-generator';
 
 const workspaceDsl = (systemName: string): string => `
@@ -29,25 +30,24 @@ workspace {
 `;
 
 /**
- * Builds a document and resolves once the handler has generated and cached JSON
- * for it, returning the generation reported by onJsonGenerated.
+ * Builds a document and generates its JSON on demand, returning the cached
+ * (json, generation) pair. The build itself only notifies about the view list.
  */
 async function buildAndGenerate(services: any, uri: string, content: string): Promise<{ json: any; generation: number }> {
     const handler = services.generation.C4GeneratorHandler;
-    const generated = new Promise<{ json: any; generation: number }>((resolve) => {
-        handler.onJsonGenerated = (generatedUri: string, json: any, generation: number) => {
-            if (generatedUri === uri) {
-                resolve({ json, generation });
-            }
-        };
-    });
 
     const doc = services.shared.workspace.LangiumDocumentFactory.fromString(content, URI.parse(uri));
     services.shared.workspace.LangiumDocuments.addDocument(doc);
     // Explicit options: the build only reaches the Validated phase (and thus
-    // triggers generation) when validation is requested.
+    // notifies about the views) when validation is requested.
     await services.shared.workspace.DocumentBuilder.build([doc], { validation: true });
-    return generated;
+
+    const entry = await handler.ensureContentForUri(uri);
+    if (!entry) {
+        throw new Error(`no JSON generated for ${uri}`);
+    }
+    // Snapshot: later generations mutate the cached entry's generation in place.
+    return { json: entry.json, generation: entry.generation };
 }
 
 const newServices = () => createC4Services({ connection: undefined as any, ...EmptyFileSystem }).C4;
@@ -91,6 +91,58 @@ describe('generation contract', () => {
         const built = await buildAndGenerate(services, uri, workspaceDsl('C'));
 
         expect(handler.getContentForUri(uri)?.generation).toBe(built.generation);
+    });
+});
+
+const lazyDsl = `
+workspace {
+    model {
+        a = softwareSystem "A"
+        b = softwareSystem "B"
+        a -> b "calls"
+    }
+    views {
+        systemContext a "ctx" {
+            include *
+        }
+        systemLandscape "land" {
+            include *
+        }
+    }
+}
+`;
+
+describe('lazy workspace JSON', () => {
+    it('notifies about views on build and generates the JSON only on demand', async () => {
+        const services = newServices();
+        const handler: any = services.generation.C4GeneratorHandler;
+        const uri = 'file:///lazy.dsl';
+        const generated: string[] = [];
+        handler.onJsonGenerated = (generatedUri: string) => generated.push(generatedUri);
+        const updates: Array<{ uri: string; views: any[] }> = [];
+        handler.onViewsUpdated = (updatedUri: string, views: any[]) => updates.push({ uri: updatedUri, views });
+
+        const doc = services.shared.workspace.LangiumDocumentFactory.fromString(lazyDsl, URI.parse(uri));
+        services.shared.workspace.LangiumDocuments.addDocument(doc);
+        await services.shared.workspace.DocumentBuilder.build([doc], { validation: true });
+
+        const update = updates.find(entry => entry.uri === uri);
+        expect(update).toBeDefined();
+        expect(update!.views.map(view => view.key)).toEqual(['land', 'ctx']);
+        expect(generated).toEqual([]);
+
+        const entry = await handler.ensureContentForUri(uri);
+        expect(entry).not.toBeNull();
+        expect(generated).toContain(uri);
+    });
+
+    it('derives the same view refs from the AST as from the generated JSON', async () => {
+        const services = newServices();
+        const handler: any = services.generation.C4GeneratorHandler;
+        const uri = 'file:///view-refs.dsl';
+        const built = await buildAndGenerate(services, uri, lazyDsl);
+
+        expect(handler.getViewRefs(uri)).toEqual(collectViewRefs(built.json));
     });
 });
 
@@ -444,5 +496,70 @@ describe('text measurement relayout', () => {
         const built = await buildAndGenerate(services, uri, workspaceDsl('S'));
 
         expect(await handler.applyTextMeasurements(uri, built.generation + 999, {})).toBeUndefined();
+    });
+});
+
+describe('per-view payload', () => {
+    const viewDsl = (systemName: string): string => `
+workspace {
+    model {
+        a = softwareSystem "${systemName}"
+        b = softwareSystem "Other"
+        a -> b "calls"
+    }
+    views {
+        systemContext a "ctx" {
+            include *
+        }
+        systemLandscape "land" {
+            include *
+        }
+    }
+}
+`;
+
+    it('builds only the requested view and leaves the full cache intact', async () => {
+        const services = newServices();
+        const handler: any = services.generation.C4GeneratorHandler;
+        const uri = 'file:///view-payload.dsl';
+        const built = await buildAndGenerate(services, uri, viewDsl('A'));
+
+        const payload = await handler.getViewContentForUri(uri, 'ctx');
+
+        expect(payload).not.toBeNull();
+        expect(payload.json.views.systemContextViews).toHaveLength(1);
+        expect(payload.json.views.systemContextViews[0].key).toBe('ctx');
+        expect(payload.json.views.systemLandscapeViews).toBeUndefined();
+        expect(payload.generation).toBeGreaterThan(built.generation);
+
+        // The full workspace JSON and its generation are untouched.
+        const full = handler.getContentForUri(uri);
+        expect(full?.generation).toBe(built.generation);
+        expect(full?.json.views.systemLandscapeViews).toHaveLength(1);
+    });
+
+    it('returns null for an unknown view', async () => {
+        const services = newServices();
+        const handler: any = services.generation.C4GeneratorHandler;
+        const uri = 'file:///view-payload-missing.dsl';
+        await buildAndGenerate(services, uri, viewDsl('B'));
+
+        expect(await handler.getViewContentForUri(uri, 'missing')).toBeNull();
+    });
+
+    it('applies text measurements to the view payload, not to the full cache', async () => {
+        const services = newServices();
+        const handler: any = services.generation.C4GeneratorHandler;
+        const uri = 'file:///view-payload-measure.dsl';
+        const built = await buildAndGenerate(services, uri, viewDsl('C'));
+        const payload = await handler.getViewContentForUri(uri, 'ctx');
+
+        const result = await handler.applyTextMeasurements(uri, payload.generation, {});
+        expect(result).toEqual({ views: [], changed: false, generation: payload.generation });
+
+        // A view payload generation that is no longer current is stale, even
+        // though the full cache still has its own generation.
+        expect(await handler.applyTextMeasurements(uri, payload.generation + 999, {})).toBeUndefined();
+        expect(handler.getContentForUri(uri)?.generation).toBe(built.generation);
     });
 });

@@ -18,7 +18,7 @@ import { describe, it, expect } from 'vitest';
 import { AstUtils, EmptyFileSystem, type LangiumDocument } from 'langium';
 import { URI, Utils } from 'vscode-uri';
 import { createC4Services } from './c4-module';
-import { isDeploymentView, isRelationship } from '../generated/ast';
+import { isDeploymentView, isRelationship, isSoftwareSystemInstance } from '../generated/ast';
 
 const PROJECT = URI.parse('file:///name-resolution/');
 
@@ -69,6 +69,34 @@ describe('element references resolve by identifier only', () => {
         expect(resolveEndpoint(main, '"sysName"')).toBeUndefined();
         // The identifier still resolves.
         expect(resolveEndpoint(main, 'other')?.$type).toBe('SoftwareSystem');
+    });
+});
+
+describe('quoted identifiers resolve like unquoted ones', () => {
+    it('resolves elements referenced in quotes by their identifier', async () => {
+        const docs = await buildProject({
+            'main.dsl': `workspace {
+    model {
+        sys = softwareSystem "Sys"
+        other = softwareSystem "Other"
+        sys -> "other" "quoted identifier"
+        env = deploymentEnvironment "Live" {
+            node = deploymentNode "Node" {
+                softwareSystemInstance "sys"
+            }
+        }
+    }
+}
+`,
+        });
+        const main = docs.get('main.dsl')!;
+
+        expect(main.parseResult.parserErrors).toHaveLength(0);
+        // The reference library tokenizes quoted values without their quotes, so a
+        // quoted identifier is the same reference as the bare one.
+        expect(resolveEndpoint(main, '"other"')?.$type).toBe('SoftwareSystem');
+        const instance = AstUtils.streamAllContents(main.parseResult.value).filter(isSoftwareSystemInstance).head()!;
+        expect(instance.softwareSystem.ref?.$type).toBe('SoftwareSystem');
     });
 });
 

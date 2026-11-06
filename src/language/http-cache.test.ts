@@ -130,7 +130,7 @@ describe('HttpCache.readRemoteWithCache', () => {
 		await expect(cache.readRemoteWithCache('https://x.example/theme.json', validateTheme)).rejects.toThrow();
 		expect(fetchSpy).toHaveBeenCalledTimes(1);
 
-		// TTL expired -> re-download + re-validate (still broken)
+		// TTL expired -> re-download + re-validate (the invalid theme is still rejected)
 		vi.advanceTimersByTime(HTTP_CACHE_TTL + 1);
 		await expect(cache.readRemoteWithCache('https://x.example/theme.json', validateTheme)).rejects.toThrow();
 		expect(fetchSpy).toHaveBeenCalledTimes(2);

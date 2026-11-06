@@ -127,27 +127,33 @@ const ELEMENT_REFERENCE_TYPES = new Set([
 class CaseInsensitiveIdentifierScope implements Scope {
     private readonly wrapped: Scope;
     private readonly identifierDescriptions: AstNodeDescription[];
+    /** Lowercased, unquoted identifier names, parallel to `identifierDescriptions`. */
+    private readonly identifierKeys: string[];
 
     constructor(wrapped: Scope, taggedDescriptions: Iterable<AstNodeDescription>) {
         this.wrapped = wrapped;
         this.identifierDescriptions = Array.from(taggedDescriptions);
+        this.identifierKeys = this.identifierDescriptions.map(desc => unquoteIdentifier(desc.name).toLowerCase());
     }
 
     getElement(name: string): AstNodeDescription | undefined {
-        const exact = this.wrapped.getElement(name);
+        // A quoted reference is written the way the reference library tokenizes it:
+        // quotes are syntax, not part of the identifier, so `"Example"` must find
+        // the `Example` description. Names/identifiers are registered with their
+        // raw DSL text (the JSON generator strips the quotes when it needs to), so
+        // the quoted form of a description name is tried as well.
+        const unquoted = unquoteIdentifier(name);
+        const exact = this.wrapped.getElement(name)
+            ?? (unquoted === name ? undefined : this.wrapped.getElement(unquoted));
         if (exact) {
             return exact;
         }
-        const lower = name.toLowerCase();
+        const lower = unquoted.toLowerCase();
         // Fallback restricted to identifier descriptions (exact match also
         // missed, so a lowercased description name or a case-insensitive match
         // would hit here).
-        for (const desc of this.identifierDescriptions) {
-            if (desc.name.toLowerCase() === lower) {
-                return desc;
-            }
-        }
-        return undefined;
+        const index = this.identifierKeys.indexOf(lower);
+        return index < 0 ? undefined : this.identifierDescriptions[index];
     }
 
     getElements(name: string): Stream<AstNodeDescription> {
@@ -155,14 +161,36 @@ class CaseInsensitiveIdentifierScope implements Scope {
         if (exacts.length > 0) {
             return stream(exacts);
         }
-        const lower = name.toLowerCase();
-        const matches = this.identifierDescriptions.filter((d) => d.name.toLowerCase() === lower);
+        const unquoted = unquoteIdentifier(name);
+        if (unquoted !== name) {
+            const bare = this.wrapped.getElements(unquoted).toArray();
+            if (bare.length > 0) {
+                return stream(bare);
+            }
+        }
+        const lower = unquoted.toLowerCase();
+        const matches = this.identifierDescriptions.filter(
+            (_desc, index) => this.identifierKeys[index] === lower);
         return stream(matches);
     }
 
     getAllElements(): Stream<AstNodeDescription> {
         return this.wrapped.getAllElements();
     }
+}
+
+/**
+ * Removes the surrounding double quotes of a quoted reference.
+ *
+ * The reference library's tokenizer treats quotes as syntax and keeps the bare
+ * token, so `softwareSystemInstance "Example"` and `softwareSystemInstance
+ * Example` are the same reference. Langium keeps the raw token text in
+ * `$refText`, while identifiers are registered without quotes.
+ */
+function unquoteIdentifier(name: string): string {
+    return name.length >= 2 && name.startsWith('"') && name.endsWith('"')
+        ? name.slice(1, -1)
+        : name;
 }
 
 export class C4ScopeProvider extends DefaultScopeProvider {
@@ -235,8 +263,8 @@ export class C4ScopeProvider extends DefaultScopeProvider {
     /**
      * Returns true when `node` sits inside an `!element` (ElementExtension)
      * container chain. Elements contributed via an ElementExtension body are
-     * namespaced by the extension's own id (e.g. `ENS` inside `!element ENSEMBLE`
-     * resolves as `ENSEMBLE.ENS`), so they must be exposed with that FQN prefix.
+     * namespaced by the extension's own id (e.g. `CHILD` inside `!element EXT`
+     * resolves as `EXT.CHILD`), so they must be exposed with that FQN prefix.
      */
     private hasElementExtensionAncestor(node: AstNode | undefined): boolean {
         return !!node && this.hierarchicalAncestors(node).some(isElementExtension);
@@ -311,9 +339,9 @@ export class C4ScopeProvider extends DefaultScopeProvider {
 
                 // Elements nested inside an `!element` (ElementExtension) are
                 // additionally registered under their FULL hierarchical path
-                // (e.g. ENSEMBLE.ENS) because the !element id acts as a
+                // (e.g. EXT.CHILD) because the !element id acts as a
                 // namespace prefix that must resolve even in flat mode.
-                // This makes `ENSEMBLE.ENS -> CCBO` (added via a !element)
+                // This makes `EXT.CHILD -> OTHER` (added via a !element)
                 // resolvable regardless of the document's identifier style.
                 if (this.hasElementExtensionAncestor(element)) {
                     const parts = this.calculateHierarchicalParts(element, elementId);
@@ -528,8 +556,8 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             // If the reference sits inside an !include fragment (no workspace of
             // its own), its scope must also contain the ROOT workspace that
             // includes it. Otherwise a `!element` declared in the fragment cannot
-            // resolve the element it extends (e.g. `!element ENSEMBLE { ... }` in
-            // a fragment, where `ENSEMBLE` is declared in the parent file). Climb
+            // resolve the element it extends (e.g. `!element EXT { ... }` in
+            // a fragment, where `EXT` is declared in the parent file). Climb
             // the include/extends ancestor chain and use the owning workspace as
             // the scope root, so its local elements become visible here.
             if (root && !workspace) {
@@ -627,7 +655,7 @@ export class C4ScopeProvider extends DefaultScopeProvider {
                 // concrete type (`softwareSystem=[SoftwareSystem]`) must only see
                 // descriptions that are subtypes of that type; otherwise a name shared
                 // with another element kind resolves to the wrong node - e.g.
-                // `!element ENSEMBLE` shadowing the real `softwareSystem ENSEMBLE`,
+                // `!element EXT` shadowing the real `softwareSystem EXT`,
                 // which emitted a dangling `elementextension_*` id that no model
                 // element carries. Filtering happens here, per call, because the cached
                 // package is type-agnostic and shared by every reference type.

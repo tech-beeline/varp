@@ -32,6 +32,8 @@ import { C4JsonGenerator } from './c4-json-generator';
 import { C4GeneratorHandler } from './c4-json-generator-handler';
 import { ViewKeyProvider } from './c4-viewkey-provider';
 import { C4ParserErrorMessageProvider } from './c4-parser-error-handler';
+import { C4Lexer } from './c4-lexer';
+import { createC4CompletionParser } from './c4-completion-parser';
 
 export type C4AddedServices = {
     workspace: {
@@ -73,6 +75,10 @@ export const C4Module: Module<C4Services, PartialLangiumServices & C4AddedServic
          ViewKeyProvider: () => new ViewKeyProvider()
     },
     parser: {
+        Lexer: (services: C4Services) => new C4Lexer(services),
+        // Completion parses unfinished text on every keystroke; see the factory for
+        // why its error messages are stubbed out.
+        CompletionParser: (services: C4Services) => createC4CompletionParser(services),
         ParserErrorMessageProvider: () => new C4ParserErrorMessageProvider(),
         ValueConverter: () => new C4ValueConverter()
     },

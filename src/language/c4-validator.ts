@@ -1224,6 +1224,10 @@ export class C4Validator {
      */
     checkRootContentOutsideWorkspace(doc: C4Document, accept: ValidationAcceptor): void {
         if (doc.workspaces.length === 0) return;
+        // Error recovery closes the workspace at the first syntax error, so the rest of
+        // the file is parsed as root content. Skip this check then: the parse error is
+        // already reported on its own.
+        if (AstUtils.getDocument(doc)?.parseResult?.parserErrors?.length) return;
         const record = doc as unknown as Record<string, readonly AstNode[] | undefined>;
         for (const key of Object.keys(doc)) {
             if (ROOT_ALLOWED_KEYS.has(key) || key.startsWith('$')) continue;

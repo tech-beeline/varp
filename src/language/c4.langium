@@ -1213,11 +1213,13 @@ ElementExtension:
     )
     |
     (_ELEMENT_KW id=Identifier
-    '{'
-        (
-            ElementExtensionBody
-        )*
-    NL+ '}');
+    (
+        '{'
+            (
+                ElementExtensionBody
+            )*
+        NL+ '}'
+    )?);
 
 // !elements <expression> { tags, url, properties, perspectives, technology, relationships }
 // Applies overlay modifications to all elements matching the expression
@@ -1248,6 +1250,7 @@ fragment ElementExtensionBody:
         | NL+ genericInstances+=GenericInstance
         | NL+ containers+=Container
         | NL+ components+=Component
+        | NL+ archetypeInstances+=ArchetypeInstance
         | NL+ groups+=Group
         | NL+ relationships+=(Relationship | ImplicitRelationship)
         | NL+ docs+=DocsDirective
@@ -1439,7 +1442,8 @@ Group:
             NL+ DocumentableElementDirectives
             | NL+ identifiers+=IdentifiersProperty
             | NL+ EverywhereFeatures
-            | NL+ elements+=(Person | SoftwareSystem | CustomElement | Container | Component | DeploymentNode | ContainerInstance | SoftwareSystemInstance | GenericInstance | Group)
+            | NL+ elementExtensions+=ElementExtension
+            | NL+ elements+=(Person | SoftwareSystem | CustomElement | Container | Component | DeploymentNode | ContainerInstance | SoftwareSystemInstance | GenericInstance | ArchetypeInstance | Group)
             | NL+ relationships+=(Relationship | ImplicitRelationship)
         )*
     NL+ '}';

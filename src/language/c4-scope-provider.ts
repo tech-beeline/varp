@@ -1150,6 +1150,9 @@ export class C4ScopeProvider extends DefaultScopeProvider {
      *
      * A path without an extension matches the loaded ".dsl" document the document
      * builder falls back to; the exact path is used when neither candidate is loaded.
+     * The returned URI is the one the target document was actually loaded under, so
+     * exact lookups in the document index work even when the file name on disk uses
+     * a different Unicode normalisation than the directive.
      */
     private resolveTargetUri(rawPath: string, contextNode: AstNode): URI | undefined {
         // Single shared resolution pipeline (quotes, ${CONST}, http(s), relative
@@ -1159,7 +1162,8 @@ export class C4ScopeProvider extends DefaultScopeProvider {
             constants: (path, node) => includeResolver.substituteConstants(this.services.shared, path, node),
         });
         for (const uri of candidates) {
-            if (this.services.shared.workspace.LangiumDocuments.getDocument(uri)) return uri;
+            const doc = includeResolver.findDocument(this.services.shared, uri);
+            if (doc) return doc.uri;
         }
         return candidates[0];
     }

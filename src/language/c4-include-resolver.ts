@@ -61,6 +61,36 @@ function documentOf(node: AstNode): LangiumDocument | undefined {
 }
 
 /**
+ * Identity of a URI for path comparisons: percent-decoded and Unicode-normalised
+ * to NFC. File names checked out from macOS are NFD, while !include/extendsUri
+ * paths are usually NFC, so the two forms must compare equal on every platform.
+ */
+export function normalizedUriKey(uri: URI): string {
+    const value = uri.toString();
+    try {
+        return decodeURIComponent(value).normalize('NFC');
+    } catch {
+        return value.normalize('NFC');
+    }
+}
+
+/**
+ * Finds a document by URI, tolerating a Unicode normalisation difference between
+ * the requested path and the URI the document was loaded under.
+ */
+export function findDocument(shared: LangiumSharedCoreServices, uri: URI): LangiumDocument | undefined {
+    const documents = shared.workspace.LangiumDocuments;
+    const exact = documents.getDocument(uri);
+    if (exact) return exact;
+
+    const wanted = normalizedUriKey(uri);
+    for (const doc of documents.all) {
+        if (normalizedUriKey(doc.uri) === wanted) return doc;
+    }
+    return undefined;
+}
+
+/**
  * Resolves a raw path (relative path or http(s) URL) to an absolute URI, relative
  * to the directory of the document that contains `contextNode`. When `contextNode`
  * is a URI itself (document builder), the path is resolved against that URI.
@@ -118,9 +148,8 @@ export function resolveIncludedDocument(
     contextNode: AstNode | URI,
     options?: ResolveOptions,
 ): LangiumDocument | undefined {
-    const documents = shared.workspace.LangiumDocuments;
     for (const uri of resolveTargetUris(rawPath, contextNode, options)) {
-        const doc = documents.getDocument(uri);
+        const doc = findDocument(shared, uri);
         if (!doc) continue;
         if (options?.skipParseErrors && doc.parseResult.parserErrors.length > 0) continue;
         return doc;
@@ -225,7 +254,8 @@ function getParentIndex(shared: LangiumSharedCoreServices): Map<string, Referenc
         const loadedTargetUri = (rawPath: string, node: AstNode): string | undefined => {
             const candidates = resolveTargetUris(rawPath, node, { withDslFallback: true, constants: constantsHook });
             for (const uri of candidates) {
-                if (shared.workspace.LangiumDocuments.getDocument(uri)) return uri.toString();
+                const doc = findDocument(shared, uri);
+                if (doc) return doc.uri.toString();
             }
             return candidates[0]?.toString();
         };
@@ -254,7 +284,7 @@ function getParentIndex(shared: LangiumSharedCoreServices): Map<string, Referenc
 export function findParentDocument(shared: LangiumSharedCoreServices, childUri: string): LangiumDocument | undefined {
     const edge = getParentIndex(shared).get(childUri);
     if (!edge) return undefined;
-    return shared.workspace.LangiumDocuments.getDocument(URI.parse(edge.parentUri));
+    return findDocument(shared, URI.parse(edge.parentUri));
 }
 
 /**

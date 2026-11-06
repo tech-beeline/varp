@@ -165,6 +165,31 @@ describe('resolveIncludedDocument', () => {
         expect(mainRoot).toBeDefined();
         expect(resolveIncludedDocument(services.shared, 'missing/file', mainRoot!)).toBeUndefined();
     });
+
+    it('finds a document whose file name is stored in decomposed Unicode (NFD)', async () => {
+        // Workspaces checked out from macOS keep NFD file names, while the path in
+        // !include is usually composed (NFC). The same file must be found either way.
+        const nfcPath = 'тестовый_каталог/model.dsl';
+        const nfdPath = nfcPath.normalize('NFD');
+        expect(nfdPath).not.toBe(nfcPath);
+
+        const { services } = await createProject({
+            'main.dsl': `workspace {\n    !include "${nfcPath}"\n}\n`,
+            [nfdPath]: 'person "User"\n',
+        });
+        const mainRoot = rootOf(services, 'main.dsl');
+        expect(mainRoot).toBeDefined();
+
+        const doc = resolveIncludedDocument(services.shared, nfcPath, mainRoot!, { withDslFallback: true });
+        expect(doc).toBeDefined();
+        expect(decodeURIComponent(doc!.uri.toString()).normalize('NFC'))
+            .toBe(decodeURIComponent(Utils.resolvePath(PROJECT, nfdPath).toString()).normalize('NFC'));
+
+        // The include edge also points at the loaded document, so the ancestor chain works.
+        const loadedUri = doc!.uri.toString();
+        expect(findParentDocument(services.shared, loadedUri)?.uri.toString())
+            .toBe(Utils.resolvePath(PROJECT, 'main.dsl').toString());
+    });
 });
 
 describe('workspace graph & constant scoping', () => {

@@ -208,8 +208,10 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
         // different parent directories never collides.
         const loadedKey = targetUri.toString();
 
-        // Skip if the document was already loaded into the index (success earlier)
-        if (this.langiumDocuments?.hasDocument(targetUri)) {
+        // Skip if the document was already loaded into the index (success earlier).
+        // The lookup tolerates a Unicode normalisation difference between the
+        // path written here and the file name reported by the file system.
+        if (includeResolver.findDocument(this.shared, targetUri)) {
             return undefined;
         }
         // Skip if this resolved URI was loaded successfully earlier in the session
@@ -308,7 +310,7 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
         if (!targetUri) return undefined;
 
         // Skip if already loaded or visited
-        if (this.langiumDocuments?.hasDocument(targetUri)) return undefined;
+        if (includeResolver.findDocument(this.shared, targetUri)) return undefined;
 
         const visitedKey = `extends:${targetUri.toString()}`;
         if (this.loadedIncludes.has(visitedKey)) return undefined;

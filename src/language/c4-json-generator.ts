@@ -1695,7 +1695,7 @@ class JsonGenerator {
             for (const collection of [
                 ext.containers, ext.components, ext.nodes, ext.infrastructureNodes,
                 ext.softwareSystemInstances, ext.containerInstances, ext.genericInstances,
-                ext.groups, ext.relationships
+                ext.archetypeInstances, ext.groups, ext.relationships
             ]) {
                 if (Array.isArray(collection)) extEntries.push(...collection);
             }
@@ -7396,6 +7396,13 @@ class JsonGenerator {
         const visitedDocs = new Set<string>();
 
         const push = (item: any): void => {
+            // An archetype instance is a child element of its base type, so it is
+            // materialised first and then classified like any other child.
+            if (isArchetypeInstance(item)) {
+                const element = this.materializeArchetypeInstance(item);
+                if (element) push(element);
+                return;
+            }
             if (isContainer(item)) out.containers.push(item);
             else if (isComponent(item)) out.components.push(item);
             else if (isDeploymentNode(item)) out.nodes.push(item);
@@ -7416,6 +7423,7 @@ class JsonGenerator {
             (host.containerInstances ?? []).forEach(push);
             (host.softwareSystemInstances ?? []).forEach(push);
             (host.genericInstances ?? []).forEach(push);
+            (host.archetypeInstances ?? []).forEach(push);
             // Groups carry their children in the mixed `elements` collection.
             (host.elements ?? []).forEach(push);
         };

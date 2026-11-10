@@ -478,13 +478,13 @@ StyleDescriptionProperty:
 TerminologyBlock:
     TERMINOLOGY_KW '{'
         (
-            NL+ PERSON_KW person+=(UNQUOTED_STRING | STRING)
-            | NL+ SOFTWARE_SYSTEM_KW softwareSystem+=(UNQUOTED_STRING | STRING)
-            | NL+ CONTAINER_KW container+=(UNQUOTED_STRING | STRING)
-            | NL+ COMPONENT_KW component+=(UNQUOTED_STRING | STRING)
-            | NL+ DEPLOYMENT_NODE_KW deploymentNode+=(UNQUOTED_STRING | STRING)
-            | NL+ INFRASTRUCTURE_NODE_KW infrastructureNode+=(UNQUOTED_STRING | STRING)
-            | NL+ RELATIONSHIP_KW relationship+=(UNQUOTED_STRING | STRING)
+            NL+ PERSON_KW person+=StringValue
+            | NL+ SOFTWARE_SYSTEM_KW softwareSystem+=StringValue
+            | NL+ CONTAINER_KW container+=StringValue
+            | NL+ COMPONENT_KW component+=StringValue
+            | NL+ DEPLOYMENT_NODE_KW deploymentNode+=StringValue
+            | NL+ INFRASTRUCTURE_NODE_KW infrastructureNode+=StringValue
+            | NL+ RELATIONSHIP_KW relationship+=StringValue
             | NL+ METADATA_KW metadata+=(UNQUOTED_STRING | NONE_KW)
             | NL+ includes+=Include
         )*
@@ -553,11 +553,9 @@ ArchetypeNamed:
 CustomMetadataProperty:
     METADATA_KW value=STRING;
 
-// Base keywords for archetypes: person, softwaresystem, container, component, etc.
+// Base keywords for archetypes: the element types plus element and group.
 ArchetypeBaseKeywords returns string:
-    PERSON_KW | SOFTWARE_SYSTEM_KW | CONTAINER_KW | COMPONENT_KW | 
-    DEPLOYMENT_NODE_KW | INFRASTRUCTURE_NODE_KW | SOFTWARE_SYSTEM_INSTANCE_KW | 
-    CONTAINER_INSTANCE_KW | CUSTOM_KW | ELEMENT_KW | GROUP_KW;
+    ElementTypeValue | ELEMENT_KW | GROUP_KW;
 
 ArchetypeIdentifier returns string:
     UNQUOTED_STRING | STRING | CUSTOM_KW;
@@ -577,7 +575,7 @@ ArchetypeInstance:
                 | NL+ properties+=PropertiesBlock
                 | NL+ perspectivesBlocks+=PerspectivesBlock
                 | NL+ archetypeInstances+=ArchetypeInstance
-                | NL+ relationships+=(Relationship | ImplicitRelationship)
+                | NL+ relationships+=Relationships
                 | NL+ components+=Component
                 | NL+ containers+=Container
                 | NL+ groups+=Group
@@ -640,13 +638,13 @@ ThicknessProperty:
     THICKNESS_KW     value=UNQUOTED_STRING;
 
 FontSizeProperty:
-    FONTSIZE_KW     value=(UNQUOTED_STRING | STRING);
+    FONTSIZE_KW     value=StringValue;
 
 WidthProperty:
-    WIDTH_KW     value=(UNQUOTED_STRING | STRING);
+    WIDTH_KW     value=StringValue;
 
 HeightProperty:
-    HEIGHT_KW     value=(UNQUOTED_STRING | STRING);
+    HEIGHT_KW     value=StringValue;
 
 OpacityProperty:
     OPACITY_KW     value=UNQUOTED_STRING;
@@ -658,7 +656,7 @@ BackgroundProperty:
     BACKGROUND_KW value=(COLOR_HEX | STRING | UNQUOTED_STRING | AnyKeyword);
 
 StrokeWidthProperty:
-    STROKE_WIDTH_KW     value=(UNQUOTED_STRING | STRING);
+    STROKE_WIDTH_KW     value=StringValue;
 
 StrokeProperty:
     STROKE_KW value=(COLOR_HEX | STRING | UNQUOTED_STRING | AnyKeyword);
@@ -671,7 +669,7 @@ IconProperty:
 
 // iconPosition top|bottom|left
 IconPositionProperty:
-    ICON_POSITION_KW value=(UNQUOTED_STRING | STRING);
+    ICON_POSITION_KW value=StringValue;
 
 DashedProperty:
     DASHED_KW value=(TRUE_KW | FALSE_KW | STRING);
@@ -727,13 +725,18 @@ RenderedView:
 View:
     RenderedView | ImageView;
 
+// A value that is quoted or a bare token. A bare token may contain dots, slashes
+// and hyphens, so this covers names, descriptions, tags, technologies and keys.
+StringValue returns string:
+    STRING | UNQUOTED_STRING;
+
 // View key fragment — used for explicit view keys
 fragment Key:
-    key=(STRING | UNQUOTED_STRING);
+    key=StringValue;
 
 // Base key fragment — used for FilteredView to reference a parent view
 fragment BaseKey:
-    baseKey=(STRING | UNQUOTED_STRING);
+    baseKey=StringValue;
 
 // Custom view — user-defined view with include/exclude expressions
 CustomView:
@@ -758,7 +761,7 @@ FilteredView:
     FILTERED_KW
     BaseKey
     mode=(INCLUDE_KW | EXCLUDE_KW)
-    tagsProp=(STRING | UNQUOTED_STRING)
+    tagsProp=StringValue
     (Key (description=STRING)?)? 
     (
         '{'
@@ -823,7 +826,7 @@ MermaidSource:
     MERMAID_KW value=(Path | TEXT_BLOCK);
 
 KrokiSource:
-    KROKI_KW format=(UNQUOTED_STRING | STRING) value=(Path | TEXT_BLOCK);
+    KROKI_KW format=StringValue value=(Path | TEXT_BLOCK);
 
 ImageSource:
     IMAGE_KW value=(Path | TEXT_BLOCK);
@@ -871,7 +874,7 @@ DeploymentView:
 
 // Dynamic view — sequenced interaction steps between elements
 DynamicView:
-    DYNAMIC_KW (element=[NamedElement:QualifiedName] | all='*') (Key (description=STRING)?)? '{'
+    DYNAMIC_KW (element=[NamedElement:Identifier] | all='*') (Key (description=STRING)?)? '{'
         (
             NL+ members+=DynamicMember
             | NL+ autoLayoutProps+=AutoLayoutProperty
@@ -898,9 +901,9 @@ ParallelStepBlock:
 // Single dynamic step: <order>: <source> -> <target> "description"
 DynamicStep:
     (order=STEP_ORDER)? 
-    from=[NamedElement:QualifiedName]
+    from=[NamedElement:Identifier]
     (
-        ARROW target=[NamedElement:QualifiedName] (description=STRING (technology=STRING)?)?
+        ARROW target=[NamedElement:Identifier] (description=STRING (technology=STRING)?)?
         |
         (description=STRING)?
     )
@@ -1204,7 +1207,7 @@ TitleProperty:
 // !element <id> { ... } or <id> = !element <target> { ... }
 // Extends an existing element with additional children (containers, components, etc.)
 ElementExtension:
-    ((id=ElementAssignment) _ELEMENT_KW target=[NamedElement:QualifiedName]
+    ((id=ElementAssignment) _ELEMENT_KW target=[NamedElement:Identifier]
     '{'
         (
             ElementExtensionBody
@@ -1232,7 +1235,7 @@ ElementsDirective:
             | NL+ properties+=PropertiesBlock
             | NL+ perspectivesBlocks+=PerspectivesBlock
             | NL+ techProps+=TechnologyProperty
-            | NL+ relationships+=(Relationship | ImplicitRelationship)
+            | NL+ relationships+=Relationships
         )*
     NL+ '}';
 
@@ -1252,7 +1255,7 @@ fragment ElementExtensionBody:
         | NL+ components+=Component
         | NL+ archetypeInstances+=ArchetypeInstance
         | NL+ groups+=Group
-        | NL+ relationships+=(Relationship | ImplicitRelationship)
+        | NL+ relationships+=Relationships
         | NL+ docs+=DocsDirective
         | NL+ adrs+=AdrsDirective
         | NL+ EverywhereFeatures;
@@ -1260,7 +1263,7 @@ fragment ElementExtensionBody:
 // !relationship <target> { tags, url, properties, ... }
 // Applies overlay modifications to a specific relationship
 RelationshipExtension:
-    _RELATIONSHIP_KW target=[Relationship:QualifiedName] '{'
+    _RELATIONSHIP_KW target=[Relationship:Identifier] '{'
         (
             NL+ tagsProps+=TagProperty
             | NL+ urlProps+=UrlProperty
@@ -1330,7 +1333,7 @@ type RelationshipMember = Person | SoftwareSystem | Container | Component | Depl
 // ═════════════════════════════════════════════════════════════════════════════
 
 TagProperty:
-    (TAG_KW | TAGS_KW) values+=(STRING | UNQUOTED_STRING) (','? values+=(STRING | UNQUOTED_STRING))*;
+    (TAG_KW | TAGS_KW) values+=StringValue (','? values+=StringValue)*;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // DIRECTIVES — !include, !docs, !adrs, !script, !plugin, !identifiers, etc.
@@ -1342,7 +1345,7 @@ Include:
 
 // !docs <path> [<importer>] { include/exclude <patterns> }
 DocsDirective:
-    _DOCS_KW path=Path (importer=(STRING | UNQUOTED_STRING))?
+    _DOCS_KW path=Path (importer=StringValue)?
     (
         '{'
             (NL+ filters+=AdrsFilter)*
@@ -1351,7 +1354,7 @@ DocsDirective:
 
 // !adrs <path> [<importer>] — or !decisions <path>
 AdrsDirective:
-    (_ADRS_KW | _DECISIONS_KW) path=Path (importer=(STRING | UNQUOTED_STRING))?
+    (_ADRS_KW | _DECISIONS_KW) path=Path (importer=StringValue)?
     (
         '{'
             (NL+ filters+=AdrsFilter)*
@@ -1360,7 +1363,7 @@ AdrsDirective:
 
 // ADRS filter: include/exclude with pattern matching
 AdrsFilter:
-    mode=(INCLUDE_KW | EXCLUDE_KW) patterns+=(STRING | UNQUOTED_STRING) (','? patterns+=(STRING | UNQUOTED_STRING))*;
+    mode=(INCLUDE_KW | EXCLUDE_KW) patterns+=StringValue (','? patterns+=StringValue)*;
 
 // !script <path> or !script <language> { ... } — inline or external script
 ScriptDirective:
@@ -1398,7 +1401,7 @@ IgnoredScriptBody returns string:
 
 // !plugin <name> { ... } — external plugin declaration
 PluginDirective returns string:
-    _PLUGIN_KW (STRING | UNQUOTED_STRING)
+    _PLUGIN_KW StringValue
     (
         '{' 
             IgnoredScriptBody*
@@ -1444,7 +1447,7 @@ Group:
             | NL+ EverywhereFeatures
             | NL+ elementExtensions+=ElementExtension
             | NL+ elements+=(Person | SoftwareSystem | CustomElement | Container | Component | DeploymentNode | ContainerInstance | SoftwareSystemInstance | GenericInstance | ArchetypeInstance | Group)
-            | NL+ relationships+=(Relationship | ImplicitRelationship)
+            | NL+ relationships+=Relationships
         )*
     NL+ '}';
 
@@ -1456,24 +1459,28 @@ Group:
 // The body is mandatory, as in Structurizr, where the directive is only recognised
 // together with the context start token, and it may nest further -/> directives.
 NoRelationship:
-    (source=[NamedElement:QualifiedName] | sourceThis?=THIS_KW)
+    (source=[NamedElement:Identifier] | sourceThis?=THIS_KW)
     NO_ARROW
-    (target=[NamedElement:QualifiedName] | targetThis?=THIS_KW)
+    (target=[NamedElement:Identifier] | targetThis?=THIS_KW)
     (description=STRING)?
     '{'
         (
-            NL+ relationships+=(Relationship | ImplicitRelationship)
+            NL+ relationships+=Relationships
             | NL+ noRelationships+=NoRelationship
         )*
     NL+ '}';
+
+// A relationship written with or without a source, as the context allows.
+Relationships:
+    Relationship | ImplicitRelationship;
 
 // Explicit relationship: source -> target "description" { tags, url, ... }
 Relationship:
     Id?
     (
-        (source=[RelationshipMember:QualifiedName] | sourceThis?=THIS_KW)
+        (source=[RelationshipMember:Identifier] | sourceThis?=THIS_KW)
         (arrow=ARROW | ('--' archetype=[ArchetypeDefinition:Identifier] ARROW))
-        (target=[RelationshipMember:QualifiedName] | targetThis?=THIS_KW)
+        (target=[RelationshipMember:Identifier] | targetThis?=THIS_KW)
     )
     Meta?
     (
@@ -1495,7 +1502,7 @@ ImplicitRelationship:
         ARROW |
         ('--' archetype=[ArchetypeDefinition:Identifier] ARROW)
     )
-    (target=[RelationshipMember:QualifiedName] | targetThis?=THIS_KW)
+    (target=[RelationshipMember:Identifier] | targetThis?=THIS_KW)
     Meta?
     (
         '{'
@@ -1519,20 +1526,20 @@ ImplicitRelationship:
 // Positional like the reference: the token after the name is the description, the
 // next one is the tags; either may be a literal (unquoted) token.
 fragment PersonMeta:
-    (description=(STRING | UNQUOTED_STRING) QuotedTag)
+    (description=StringValue QuotedTag)
     |
-    (description=(STRING | UNQUOTED_STRING) UnquotedTag)
+    (description=StringValue UnquotedTag)
     |
-    (description=(STRING | UNQUOTED_STRING));
+    (description=StringValue);
 
 // ─── SoftwareSystemMeta fragment ───────────────────────────────────────────
 // Software systems have no technology: softwaresystem <name> [description] [tags]
 fragment SoftwareSystemMeta:
-    (description=(STRING | UNQUOTED_STRING) QuotedTag)
+    (description=StringValue QuotedTag)
     |
-    (description=(STRING | UNQUOTED_STRING) UnquotedTag)
+    (description=StringValue UnquotedTag)
     |
-    (description=(STRING | UNQUOTED_STRING));
+    (description=StringValue);
 
 // Person: person <name> [description] [tags] { ... }
 Person:
@@ -1545,7 +1552,7 @@ Person:
                 | NL+ relationshipExtensions+=RelationshipExtension
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
-                | NL+ relationships+=(Relationship | ImplicitRelationship)
+                | NL+ relationships+=Relationships
             )*
         NL+ '}'
     )?;
@@ -1564,7 +1571,7 @@ SoftwareSystem:
                 | NL+ elements+=Container
                 | NL+ groups+=Group
                 | NL+ relationshipExtensions+=RelationshipExtension
-                | NL+ relationships+=(Relationship | ImplicitRelationship)
+                | NL+ relationships+=Relationships
             )*
         NL+ '}'
     )?;
@@ -1584,7 +1591,7 @@ Container:
                 | NL+ relationshipExtensions+=RelationshipExtension
                 | NL+ elements+=Component
                 | NL+ groups+=Group
-                | NL+ relationships+=(Relationship | ImplicitRelationship)
+                | NL+ relationships+=Relationships
                 | NL+ techProps+=TechnologyProperty
             )*
         NL+ '}'
@@ -1602,7 +1609,7 @@ Component:
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ groupProps+=GroupProperty
-                | NL+ relationships+=(Relationship | ImplicitRelationship)
+                | NL+ relationships+=Relationships
                 | NL+ techProps+=TechnologyProperty
             )*
         NL+ '}'
@@ -1612,7 +1619,7 @@ Component:
 // Positional, like the reference: the token after the name is the metadata, then the
 // description, then the tags.
 fragment CustomElementMeta:
-    (metadata=(STRING | UNQUOTED_STRING) (description=(STRING | UNQUOTED_STRING) (tags+=(STRING | UNQUOTED_STRING))?)?);
+    (metadata=StringValue (description=StringValue (tags+=StringValue)?)?);
 
 // CustomElement: element <name> [metadata] [description] [tags] { ... }
 CustomElement:
@@ -1646,7 +1653,7 @@ DeploymentEnvironment:
                 | NL+ groups+=Group
                 | NL+ nodes+=DeploymentNode
                 | NL+ noRelationships+=NoRelationship
-                | NL+ relationships+=(Relationship | ImplicitRelationship)
+                | NL+ relationships+=Relationships
             )*
         NL+ '}'
     )?;
@@ -1662,21 +1669,21 @@ DeploymentGroup:
 // Parses description, technology, tags (quoted/unquoted), and instances count
 fragment DeploymentNodeMeta:
     (
-        (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* QuotedTag instances=UNQUOTED_STRING)
+        (description=StringValue technology=StringValue (',' technologyParts+=StringValue)* QuotedTag instances=UNQUOTED_STRING)
         |
-        (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* UnquotedTag instances=UNQUOTED_STRING)
+        (description=StringValue technology=StringValue (',' technologyParts+=StringValue)* UnquotedTag instances=UNQUOTED_STRING)
         |
-        (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* QuotedTag)
+        (description=StringValue technology=StringValue (',' technologyParts+=StringValue)* QuotedTag)
         |
-        (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* UnquotedTag)
+        (description=StringValue technology=StringValue (',' technologyParts+=StringValue)* UnquotedTag)
         |
-        (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))*)
+        (description=StringValue technology=StringValue (',' technologyParts+=StringValue)*)
         |
-        (description=(STRING | UNQUOTED_STRING) UnquotedTag instances=UNQUOTED_STRING)
+        (description=StringValue UnquotedTag instances=UNQUOTED_STRING)
         |
-        (description=(STRING | UNQUOTED_STRING) UnquotedTag)
+        (description=StringValue UnquotedTag)
         |
-        (description=(STRING | UNQUOTED_STRING))
+        (description=StringValue)
         |
         (instances=UNQUOTED_STRING)
     )?;
@@ -1699,7 +1706,7 @@ DeploymentNode:
                 | NL+ groups+=Group
                 | NL+ infrastructureNodes+=InfrastructureNode
                 | NL+ instancesProps+=InstancesProperty
-                | NL+ relationships+=(Relationship | ImplicitRelationship)
+                | NL+ relationships+=Relationships
                 | NL+ softwareSystemInstances+=SoftwareSystemInstance
                 | NL+ techProps+=TechnologyProperty
             )*
@@ -1719,24 +1726,24 @@ fragment Id:
 // token and splits it on commas, so a literal single-quoted list arrives as several
 // tokens and is collected here.
 fragment QuotedTag:
-    tags+=STRING (',' tags+=(STRING | UNQUOTED_STRING))*;
+    tags+=STRING (',' tags+=StringValue)*;
 
 // Unquoted tag: tag1 or a comma-separated list (unquoted strings or integers)
 fragment UnquotedTag:
-    tags+=UNQUOTED_STRING (',' tags+=(STRING | UNQUOTED_STRING))*;
+    tags+=UNQUOTED_STRING (',' tags+=StringValue)*;
 
 // Element name: quoted or unquoted string, or integer
 fragment Name:
-    name=(STRING | UNQUOTED_STRING);
+    name=StringValue;
 
 // Meta fragment: description [technology] [tags]
 // Shared by Container, Component, InfrastructureNode: the token after the description
 // is the technology, so tags always follow it.
 fragment Meta:
-    (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* QuotedTag)
-    | (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))* UnquotedTag)
-    | (description=(STRING | UNQUOTED_STRING) technology=(STRING | UNQUOTED_STRING) (',' technologyParts+=(STRING | UNQUOTED_STRING))*)
-    | (description=(STRING | UNQUOTED_STRING));
+    (description=StringValue technology=StringValue (',' technologyParts+=StringValue)* QuotedTag)
+    | (description=StringValue technology=StringValue (',' technologyParts+=StringValue)* UnquotedTag)
+    | (description=StringValue technology=StringValue (',' technologyParts+=StringValue)*)
+    | (description=StringValue);
 
 // InfrastructureNode: infrastructureNode <name> [description] [technology] [tags] { ... }
 InfrastructureNode:
@@ -1749,7 +1756,7 @@ InfrastructureNode:
                 | NL+ relationshipExtensions+=RelationshipExtension
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
-                | NL+ relationships+=(Relationship | ImplicitRelationship)
+                | NL+ relationships+=Relationships
                 | NL+ techProps+=TechnologyProperty
             )*
         NL+ '}'
@@ -1762,19 +1769,19 @@ fragment DeploymentGroups:
 
 // Single ambiguous value after instance reference — resolved post-parse
 fragment DeploymentGroupOrTag:
-    value=(STRING | UNQUOTED_STRING);
+    value=StringValue;
 
 // SoftwareSystemInstance: softwareSystemInstance <softwareSystem> [groups/tag] { ... }
 SoftwareSystemInstance:
     Id?
     (SOFTWARE_SYSTEM_INSTANCE_KW)
-    softwareSystem=[SoftwareSystem:QualifiedName]
+    softwareSystem=[SoftwareSystem:Identifier]
     (
         // 2+ comma-separated deployment groups (requires at least one comma)
-        (DeploymentGroups (',' DeploymentGroups)+ (tags+=STRING | tags+=UNQUOTED_STRING)?)
+        (DeploymentGroups (',' DeploymentGroups)+ (tags+=StringValue)?)
         |
         // Single deployment group followed by one or more space-separated tags
-        (DeploymentGroups (tags+=STRING | tags+=UNQUOTED_STRING)+)
+        (DeploymentGroups (tags+=StringValue)+)
         |
         // Single ambiguous value: resolved post-parse (deployment group or tag)
         DeploymentGroupOrTag
@@ -1788,7 +1795,7 @@ SoftwareSystemInstance:
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ healthChecks+=HealthCheck
-                | NL+ relationships+=(Relationship | ImplicitRelationship)
+                | NL+ relationships+=Relationships
             )*
         NL+ '}'
     )?;
@@ -1800,10 +1807,10 @@ ContainerInstance:
     container=[Container:Identifier]
     (
         // 2+ comma-separated deployment groups (requires at least one comma)
-        (DeploymentGroups (',' DeploymentGroups)+ (tags+=STRING | tags+=UNQUOTED_STRING)?)
+        (DeploymentGroups (',' DeploymentGroups)+ (tags+=StringValue)?)
         |
         // Single deployment group followed by one or more space-separated tags
-        (DeploymentGroups (tags+=STRING | tags+=UNQUOTED_STRING)+)
+        (DeploymentGroups (tags+=StringValue)+)
         |
         // Single ambiguous value: resolved post-parse (deployment group or tag)
         DeploymentGroupOrTag
@@ -1817,7 +1824,7 @@ ContainerInstance:
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ healthChecks+=HealthCheck
-                | NL+ relationships+=(Relationship | ImplicitRelationship)
+                | NL+ relationships+=Relationships
             )*
         NL+ '}'
     )?;
@@ -1829,10 +1836,10 @@ GenericInstance:
     element=[NamedElement:Identifier]
     (
         // 2+ comma-separated deployment groups (requires at least one comma)
-        (DeploymentGroups (',' DeploymentGroups)+ (tags+=STRING | tags+=UNQUOTED_STRING)?)
+        (DeploymentGroups (',' DeploymentGroups)+ (tags+=StringValue)?)
         |
         // Single deployment group followed by one or more space-separated tags
-        (DeploymentGroups (tags+=STRING | tags+=UNQUOTED_STRING)+)
+        (DeploymentGroups (tags+=StringValue)+)
         |
         // Single ambiguous value: resolved post-parse (deployment group or tag)
         DeploymentGroupOrTag
@@ -1846,7 +1853,7 @@ GenericInstance:
                 | NL+ EverywhereFeatures
                 | NL+ ElementPropertyFeatures
                 | NL+ healthChecks+=HealthCheck
-                | NL+ relationships+=(Relationship | ImplicitRelationship)
+                | NL+ relationships+=Relationships
             )*
         NL+ '}'
     )?;
@@ -1922,127 +1929,50 @@ Identifier returns string:
 // Identifier without the quoted form: a quoted value in a view filter is parsed as a
 // StringLiteralExpression, not as a reference.
 UnquotedIdentifier returns string:
-    UNQUOTED_STRING |
-    RELATIONSHIP_SOURCE |
-    ASSIGNMENT |          
-    (SOFTWARE_SYSTEM_KW DOT_SUFFIX?) |
-    (CONTAINER_KW DOT_SUFFIX?) |
-    (COMPONENT_KW) |
-    (PERSON_KW) | 
-    (DEPLOYMENT_NODE_KW DOT_SUFFIX?) |
-    (INFRASTRUCTURE_NODE_KW DOT_SUFFIX?) |
-    (DEPLOYMENT_ENV_KW DOT_SUFFIX?) |
-    (ELEMENT_KW) |
-    (GROUP_KW) |
-    (NAME_KW) |
-    (CUSTOM_KW) |
-    (IMAGE_KW) |
-    (KROKI_KW) |
-    (DEPLOYMENT_GROUP_KW DOT_SUFFIX?) |
-    INCLUDE_KW |
-    EXCLUDE_KW;
+    UNQUOTED_STRING
+    | RELATIONSHIP_SOURCE
+    | ASSIGNMENT
+    | NarrowIdentifierKeyword
+    | COMPONENT_KW
+    | PERSON_KW
+    | ELEMENT_KW
+    | GROUP_KW
+    | NAME_KW
+    | CUSTOM_KW
+    | IMAGE_KW
+    | KROKI_KW
+    | INCLUDE_KW
+    | EXCLUDE_KW;
+
+// Keywords that may be read as the name of an element that opens a line. Adding one
+// here changes how that line is dispatched: a reference is matched before a keyword-led
+// property, so broad lists belong in IdentifierKeyword, not in this one. These keywords
+// also accept a path tail, because they name containers of nested elements.
+NarrowIdentifierKeyword returns string:
+    (SOFTWARE_SYSTEM_KW DOT_SUFFIX?)
+    | (CONTAINER_KW DOT_SUFFIX?)
+    | (DEPLOYMENT_NODE_KW DOT_SUFFIX?)
+    | (INFRASTRUCTURE_NODE_KW DOT_SUFFIX?)
+    | (DEPLOYMENT_ENV_KW DOT_SUFFIX?)
+    | (DEPLOYMENT_GROUP_KW DOT_SUFFIX?);
 
 // ComplexIdentifier: supports dot, slash, and hyphen suffixes for hierarchical paths
 ComplexIdentifier returns string:
-    ( IdentifierStart (DOT_SUFFIX | SLASH_SUFFIX | HYPHEN_SUFFIX)* ) 
+    (UNQUOTED_STRING | IdentifierKeyword) (DOT_SUFFIX | SLASH_SUFFIX | HYPHEN_SUFFIX)*
     | (DOT_SUFFIX | SLASH_SUFFIX | HYPHEN_SUFFIX)+;
 
-IdentifierStart returns string:
-    UNQUOTED_STRING | IdentifierKeyword;
-
-// Keywords that can start an identifier (reserved words that double as valid names)
+// Keywords that may stand in for an identifier or a value. The lexer tags most of
+// them with the KEYWORD category; the enumeration values below are listed here
+// because nothing else references them, and an unreachable terminal is not lexed.
 IdentifierKeyword returns string:
-    DEPLOYMENT_ENV_KW
-    | SOFTWARE_SYSTEM_KW
-    | CONTAINER_KW
-    | PERSON_KW
-    | AUTOLAYOUT_KW
-    | INFRASTRUCTURE_NODE_KW
-    | DEPLOYMENT_NODE_KW
-    | SYSTEM_LANDSCAPE_KW
-    | CUSTOM_KW
-    | SYSTEM_CONTEXT_KW
-    | COMPONENTS_KW
-    | COMPONENT_KW
-    | GROUP_KW
-    | THIS_KW
-    | DEPLOYMENT_GROUP_KW
-    | ANIMATION_KW
-    | STYLES_KW
-    | ELEMENT_KW
-    | RELATIONSHIP_KW
-    | SHAPE_KW
-    | BACKGROUND_KW
-    | THEME_KW
-    | THEMES_KW
-    | DESCRIPTION_KW
-    | NAME_KW
-    | SOFTWARE_SYSTEM_INSTANCE_KW
-    | CONTAINER_INSTANCE_KW
-    | INSTANCEOF_KW
-    | PLANTUML_KW
-    | MERMAID_KW
-    | KROKI_KW
-    | IMAGE_KW
-    | INCLUDE_KW
-    | EXCLUDE_KW
-    | TECHNOLOGY_KW
-    | URL_KW
-    | TAG_KW
-    | TAGS_KW
-    | STROKE_KW
-    | METADATA_KW
-    | STROKE_WIDTH_KW
-    | FONTSIZE_KW
-    | FILTERED_KW
-    | ICON_KW
-    | DASHED_KW
-    | COLOR_KW
-    | COLOUR_KW
-    | JUMP_KW
-    | STYLE_KW
-    | LIGHT_KW
-    | DARK_KW
-    | POSITION_KW
-    | ROUTING_KW
-    | WIDTH_KW
-    | HEIGHT_KW
-    | INSTANCES_KW
-    | PROPERTIES_KW
-    | DYNAMIC_KW
-    | DEPLOYMENT_KW
-    | MODEL_KW
-    | VIEWS_KW
-    | TERMINOLOGY_KW
-    | SCOPE_KW
-    | VISIBILITY_KW
-    | USERS_KW
-    | CONFIGURATION_KW
-    | PERSPECTIVE_KW
-    | PERSPECTIVES_KW
-    | TRUE_KW
-    | FALSE_KW
-    | LANDSCAPE_KW
-    | NONE_KW
-    | DEFAULT_KW
-    | THICKNESS_KW
-    | HIERARCHICAL_KW
-    | FLAT_KW
+    KEYWORD
     | READ_KW
     | WRITE_KW
     | SOLID_KW
     | DOTTED_KW
     | DIRECT_KW
     | ORTHOGONAL_KW
-    | CURVED_KW
-    | PRIVATE_KW
-    | PUBLIC_KW
-    | VALUE_KW
-    | TITLE_KW
-    | WORKSPACE_KW
-    | EXTENDS_KW
-    | ARCHETYPES_KW
-    | HEALTHCHECK_KW;
+    | CURVED_KW;
 
 // AnyKeyword: matches any keyword token — used to accept reserved words as values
 AnyKeyword returns string:
@@ -2064,10 +1994,6 @@ AnyKeyword returns string:
 // Path: a complex identifier or quoted string (used for file paths, URLs, etc.)
 Path returns string:
     PATH_TOKEN | ComplexIdentifier | STRING;
-
-// QualifiedName: an identifier optionally with dot-separated hierarchy
-QualifiedName returns string:
-    Identifier;
 
 // ─── Directive keywords (start with !) ─────────────────────────────────────
 
@@ -2213,6 +2139,10 @@ terminal STEP_ORDER: /[0-9]+(\.[0-9]+)*[ \t]*:(?![^\s])/;
 // their format is validated in the TypeScript validator. A single quote is an
 // ordinary character here, like in the reference tokenizer, which only treats
 // double quotes as string delimiters.
+// Never matched by the lexer: the KEYWORD category is assigned to the keyword
+// terminals by C4TokenBuilder, so IdentifierKeyword needs no per-keyword list.
+terminal KEYWORD: /(?!)/;
+
 terminal UNQUOTED_STRING: /['a-zA-Z0-9_\u00A0-\uFFFF](['\w\u00A0-\uFFFF.\/:]|-(?![>\/]))*/;
 
 hidden terminal WS: /[ \t]+/;

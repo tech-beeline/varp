@@ -275,6 +275,29 @@ describe('parser diagnostics', () => {
 
         expect(diagnostics(doc)).toEqual(['Expected: <name> <value>']);
     });
+
+    it('covers the whole word of a rejected directive', async () => {
+        const doc = await buildDocument(`workspace {
+    !contstant NAME VALUE
+}
+`);
+
+        const text = doc.textDocument.getText();
+        const [start, end] = [doc.diagnostics![0].range.start, doc.diagnostics![0].range.end];
+        expect(text.slice(doc.textDocument.offsetAt(start), doc.textDocument.offsetAt(end))).toBe('!contstant');
+    });
+
+    it('reports a rejected directive with the tokens of the block', async () => {
+        const doc = await buildDocument(`workspace {
+    !contstant NAME VALUE
+}
+`);
+
+        expect(diagnostics(doc)).toEqual([
+            'Unexpected tokens (expected: name, description, properties, !docs, !decisions, !identifiers, '
+            + '!impliedRelationships, model, views, configuration, !script, !plugin, !const, !include).'
+        ]);
+    });
 });
 
 describe('workspace diagnostics', () => {

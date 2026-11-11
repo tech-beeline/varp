@@ -64,32 +64,42 @@ function impliedRelationshipIsAllowed(source: NamedElement, destination: NamedEl
     return !isAncestor(source, destination) && !isAncestor(destination, source);
 }
 
-/** Relationships declared so far, indexed by source and destination element. */
+/** Relationships declared so far, indexed by source, destination and description. */
 class RelationshipRegistry {
-    private readonly descriptionsBySource = new Map<NamedElement, Map<NamedElement, Set<string>>>();
+    private readonly declarationsBySource = new Map<NamedElement, Map<NamedElement, Map<string, AstNode>>>();
 
     /** Whether any relationship, whatever its description, exists between the two elements. */
     hasAny(source: NamedElement, destination: NamedElement): boolean {
-        return this.descriptionsBySource.get(source)?.has(destination) ?? false;
+        return this.declarationsBySource.get(source)?.has(destination) ?? false;
     }
 
-    has(source: NamedElement, destination: NamedElement, description: string): boolean {
-        return this.descriptionsBySource.get(source)?.get(destination)?.has(description) ?? false;
+    /** The declaration registered for the pair and description, if any. */
+    find(source: NamedElement, destination: NamedElement, description: string): AstNode | undefined {
+        return this.declarationsBySource.get(source)?.get(destination)?.get(description);
     }
 
-    add(source: NamedElement, destination: NamedElement, description: string): void {
-        let byDestination = this.descriptionsBySource.get(source);
+    add(source: NamedElement, destination: NamedElement, description: string, declaration: AstNode): void {
+        let byDestination = this.declarationsBySource.get(source);
         if (!byDestination) {
-            byDestination = new Map<NamedElement, Set<string>>();
-            this.descriptionsBySource.set(source, byDestination);
+            byDestination = new Map<NamedElement, Map<string, AstNode>>();
+            this.declarationsBySource.set(source, byDestination);
         }
-        let descriptions = byDestination.get(destination);
-        if (!descriptions) {
-            descriptions = new Set<string>();
-            byDestination.set(destination, descriptions);
+        let declarations = byDestination.get(destination);
+        if (!declarations) {
+            declarations = new Map<string, AstNode>();
+            byDestination.set(destination, declarations);
         }
-        descriptions.add(description);
+        declarations.set(description, declaration);
     }
+}
+
+/**
+ * A declared relationship that repeats one already declared or implied between the same
+ * elements with the same description, together with the declaration it repeats.
+ */
+export interface DuplicateRelationship {
+    declaration: DeclaredRelationship;
+    original: AstNode;
 }
 
 /**
@@ -100,19 +110,20 @@ class RelationshipRegistry {
  * implied relationships are created between the enclosing elements of its source and
  * destination, unless one already exists.
  */
-export function findDuplicateRelationships(relationships: DeclaredRelationship[]): DeclaredRelationship[] {
+export function findDuplicateRelationships(relationships: DeclaredRelationship[]): DuplicateRelationship[] {
     const registry = new RelationshipRegistry();
-    const duplicates: DeclaredRelationship[] = [];
+    const duplicates: DuplicateRelationship[] = [];
 
     for (const relationship of relationships) {
         const { source, destination } = relationship;
         const description = descriptionOf(relationship.node);
 
-        if (registry.has(source, destination, description)) {
-            duplicates.push(relationship);
+        const original = registry.find(source, destination, description);
+        if (original !== undefined) {
+            duplicates.push({ declaration: relationship, original });
             continue;
         }
-        registry.add(source, destination, description);
+        registry.add(source, destination, description, relationship.node);
 
         if (!relationship.impliedEnabled
             || !createsImpliedRelationships(source)
@@ -122,7 +133,7 @@ export function findDuplicateRelationships(relationships: DeclaredRelationship[]
         for (let impliedSource: NamedElement | undefined = source; impliedSource; impliedSource = parentElementOf(impliedSource)) {
             for (let impliedDestination: NamedElement | undefined = destination; impliedDestination; impliedDestination = parentElementOf(impliedDestination)) {
                 if (impliedRelationshipIsAllowed(impliedSource, impliedDestination) && !registry.hasAny(impliedSource, impliedDestination)) {
-                    registry.add(impliedSource, impliedDestination, description);
+                    registry.add(impliedSource, impliedDestination, description, relationship.node);
                 }
             }
         }

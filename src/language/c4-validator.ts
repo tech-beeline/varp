@@ -16,6 +16,7 @@
 
 import { AstNode, AstUtils, isAstNode, type ValidationAcceptor, type ValidationChecks } from 'langium';
 import { URI } from 'vscode-uri';
+import type { DiagnosticRelatedInformation } from 'vscode-languageserver';
 import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isArchetypeInstance, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, ModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty, type StringLiteralExpression, isElementEqExpression, isElementNotEqExpression, isBinaryExpression, isSingleElementExpression, isStringLiteralExpression, isExcludeProperty, type ExcludeProperty, type ViewExpression } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
@@ -385,11 +386,21 @@ export function registerValidationChecks(services: C4Services) {
     registry.register(checks, validator);
 }
 
-/** A recorded name or identifier occurrence: its declaring document and the node to anchor a diagnostic to. */
+/** A recorded name or identifier occurrence: its declaring document, its node and the node to anchor a diagnostic to. */
 interface DuplicateOccurrence {
     docUri?: string;
     anchor: any;
+    node: AstNode;
 }
+
+/** Related location pointing at another place in the workspace that a diagnostic refers to. */
+function relatedLocation(node: AstNode, message: string): DiagnosticRelatedInformation[] | undefined {
+    const range = node.$cstNode?.range;
+    const uri = AstUtils.getDocument(node)?.uri.toString();
+    return range && uri ? [{ location: { uri, range }, message }] : undefined;
+}
+
+const FIRST_DECLARED_HERE = 'First declared here';
 
 /** A top-level element collected for uniqueness checks, together with its occurrence. */
 interface CollectedTopLevelElement extends DuplicateOccurrence {
@@ -999,9 +1010,18 @@ export class C4Validator {
     checkViewsBlock(viewsBlock: ViewsBlock, accept: ValidationAcceptor): void {
         if (viewsBlock.themeProps.length > 0 && viewsBlock.themesProps.length > 0) {
             const message = "It's recommended to use either 'theme' or 'themes', but not both.";
-            // Anchor each warning to the declaration it concerns, not to the whole block.
-            accept('warning', message, { node: viewsBlock.themeProps[0] });
-            accept('warning', message, { node: viewsBlock.themesProps[0] });
+            const theme = viewsBlock.themeProps[0];
+            const themes = viewsBlock.themesProps[0];
+            // Each warning is anchored to the declaration it concerns and points at the
+            // one it conflicts with, so the two are reachable from each other.
+            accept('warning', message, {
+                node: theme,
+                relatedInformation: relatedLocation(themes, "The 'themes' declaration is here")
+            });
+            accept('warning', message, {
+                node: themes,
+                relatedInformation: relatedLocation(theme, "The 'theme' declaration is here")
+            });
         }
     }
 
@@ -1105,7 +1125,7 @@ export class C4Validator {
         const identifiers = new Map<string, DuplicateOccurrence>();
 
         for (const { element, docUri, anchor } of collected) {
-            const current: DuplicateOccurrence = { docUri, anchor };
+            const current: DuplicateOccurrence = { docUri, anchor, node: element };
             const name = C4Utils.stripQuotes(element.name);
             if (name) {
                 if (isCustomElement(element)) {
@@ -1139,7 +1159,11 @@ export class C4Validator {
         }
         const involvesRoot = current.docUri === rootUri || previous.docUri === rootUri;
         if (!involvesRoot && previous.docUri === current.docUri) return;
-        accept('error', message, { node: current.anchor, property });
+        accept('error', message, {
+            node: current.anchor,
+            property,
+            relatedInformation: relatedLocation(previous.node, FIRST_DECLARED_HERE)
+        });
     }
 
     /**
@@ -1157,7 +1181,7 @@ export class C4Validator {
         if (!node || typeof node !== 'object') return;
         for (const element of node.elements ?? []) {
             if (isGroup(element)) this.collectTopLevelElements(element, collected, visitedDocuments, anchor);
-            else collected.push({ element, docUri: AstUtils.getDocument(element)?.uri.toString(), anchor: anchor ?? element });
+            else collected.push({ element, docUri: AstUtils.getDocument(element)?.uri.toString(), anchor: anchor ?? element, node: element });
         }
         for (const group of node.groups ?? []) {
             this.collectTopLevelElements(group, collected, visitedDocuments, anchor);
@@ -1214,7 +1238,11 @@ export class C4Validator {
         // groups inside it are independent of the group the element itself belongs to.
         if (!isGroup(node.$container)) return;
         if (this.hasGroupSeparator(node)) return;
-        accept('warning', "To use nested groups, please define a model property named 'structurizr.groupSeparator'.", { node, property: 'name' });
+        accept('warning', "To use nested groups, please define a model property named 'structurizr.groupSeparator'.", {
+            node,
+            property: 'name',
+            relatedInformation: relatedLocation(node.$container, 'The enclosing group is here')
+        });
     }
 
     /** Returns true when a model block of the document declares a 'structurizr.groupSeparator' property. */
@@ -1237,23 +1265,33 @@ export class C4Validator {
 
     /** Validates uniqueness of container names and identifiers within a SoftwareSystem */
     checkUniqueContainersInSystem(softwareSystem: SoftwareSystem, accept: ValidationAcceptor): void {
-        const containerNames = new Set<string>();
-        const containerIds = new Set<string>();
+        const containerNames = new Map<string, AstNode>();
+        const containerIds = new Map<string, AstNode>();
         const containers = softwareSystem.elements;
         for (const container of containers) {
             const name = C4Utils.stripQuotes(container.name);
             if (name) {
-                if (containerNames.has(name)) {
-                    accept('error', `A container named '${name}' already exists for this software system`, { node: container, property: 'name' });
+                const previous = containerNames.get(name);
+                if (previous) {
+                    accept('error', `A container named '${name}' already exists for this software system`, {
+                        node: container,
+                        property: 'name',
+                        relatedInformation: relatedLocation(previous, FIRST_DECLARED_HERE)
+                    });
                 } else {
-                    containerNames.add(name);
+                    containerNames.set(name, container);
                 }
             }
             if (container.id) {
-                if (containerIds.has(container.id)) {
-                    accept('error', `The identifier "${container.id}" is already in use`, { node: container, property: 'id' });
+                const previous = containerIds.get(container.id);
+                if (previous) {
+                    accept('error', `The identifier "${container.id}" is already in use`, {
+                        node: container,
+                        property: 'id',
+                        relatedInformation: relatedLocation(previous, FIRST_DECLARED_HERE)
+                    });
                 } else {
-                    containerIds.add(container.id);
+                    containerIds.set(container.id, container);
                 }
             }
         }
@@ -1261,23 +1299,33 @@ export class C4Validator {
 
     /** Validates uniqueness of component names and identifiers within a Container */
     checkUniqueComponentsInContainer(container: any, accept: ValidationAcceptor): void {
-        const componentNames = new Set<string>();
-        const componentIds = new Set<string>();
+        const componentNames = new Map<string, AstNode>();
+        const componentIds = new Map<string, AstNode>();
         const components = container.elements || [];
         for (const component of components) {
             const name = C4Utils.stripQuotes(component.name);
             if (name) {
-                if (componentNames.has(name)) {
-                    accept('error', `A component named '${name}' already exists for this container`, { node: component, property: 'name' });
+                const previous = componentNames.get(name);
+                if (previous) {
+                    accept('error', `A component named '${name}' already exists for this container`, {
+                        node: component,
+                        property: 'name',
+                        relatedInformation: relatedLocation(previous, FIRST_DECLARED_HERE)
+                    });
                 } else {
-                    componentNames.add(name);
+                    componentNames.set(name, component);
                 }
             }
             if (component.id) {
-                if (componentIds.has(component.id)) {
-                    accept('error', `The identifier "${component.id}" is already in use`, { node: component, property: 'id' });
+                const previous = componentIds.get(component.id);
+                if (previous) {
+                    accept('error', `The identifier "${component.id}" is already in use`, {
+                        node: component,
+                        property: 'id',
+                        relatedInformation: relatedLocation(previous, FIRST_DECLARED_HERE)
+                    });
                 } else {
-                    componentIds.add(component.id);
+                    componentIds.set(component.id, component);
                 }
             }
         }
@@ -1289,14 +1337,26 @@ export class C4Validator {
      * document structure are rejected.
      */
     checkWorkspaceMetadata(workspace: Workspace, accept: ValidationAcceptor): void {
-        if (workspace.modelBlocks.length > 1) {
-            for (let index = 1; index < workspace.modelBlocks.length; index++) {
-                accept('error', "Multiple models are not permitted in a DSL definition.", { node: workspace, property: 'modelBlocks', index });
+        const modelBlocks = workspace.modelBlocks;
+        if (modelBlocks.length > 1) {
+            for (let index = 1; index < modelBlocks.length; index++) {
+                accept('error', "Multiple models are not permitted in a DSL definition.", {
+                    node: workspace,
+                    property: 'modelBlocks',
+                    index,
+                    relatedInformation: relatedLocation(modelBlocks[0], FIRST_DECLARED_HERE)
+                });
             }
         }
-        if (workspace.viewsBlocks.length > 1) {
-            for (let index = 1; index < workspace.viewsBlocks.length; index++) {
-                accept('error', "Multiple view sets are not permitted in a DSL definition.", { node: workspace, property: 'viewsBlocks', index });
+        const viewsBlocks = workspace.viewsBlocks;
+        if (viewsBlocks.length > 1) {
+            for (let index = 1; index < viewsBlocks.length; index++) {
+                accept('error', "Multiple view sets are not permitted in a DSL definition.", {
+                    node: workspace,
+                    property: 'viewsBlocks',
+                    index,
+                    relatedInformation: relatedLocation(viewsBlocks[0], FIRST_DECLARED_HERE)
+                });
             }
         }
     }
@@ -1353,9 +1413,12 @@ export class C4Validator {
             });
         }
 
-        for (const duplicate of findDuplicateRelationships(declared)) {
-            const message = `A relationship between "${canonicalElementName(duplicate.source)}" and "${canonicalElementName(duplicate.destination)}" already exists`;
-            accept('error', message, { node: duplicate.node, property: 'target' });
+        for (const { declaration, original } of findDuplicateRelationships(declared)) {
+            const message = `A relationship between "${canonicalElementName(declaration.source)}" and "${canonicalElementName(declaration.destination)}" already exists`;
+            accept('error', message, {
+                node: declaration.node,
+                relatedInformation: relatedLocation(original, FIRST_DECLARED_HERE)
+            });
         }
     }
 
@@ -1410,7 +1473,12 @@ export class C4Validator {
      */
     checkSingleWorkspace(doc: C4Document, accept: ValidationAcceptor): void {
         for (let index = 1; index < doc.workspaces.length; index++) {
-            accept('error', 'Multiple workspaces are not permitted in a DSL definition.', { node: doc, property: 'workspaces', index });
+            accept('error', 'Multiple workspaces are not permitted in a DSL definition.', {
+                node: doc,
+                property: 'workspaces',
+                index,
+                relatedInformation: relatedLocation(doc.workspaces[0], FIRST_DECLARED_HERE)
+            });
         }
     }
 
@@ -1434,14 +1502,19 @@ export class C4Validator {
 
     /** Validates that all view keys within a document are unique; a repeated key is reported on the later view. */
     checkUniqueViewKeys(doc: C4Document, accept: ValidationAcceptor): void {
-        const seenKeys = new Set<string>();
+        const seenKeys = new Map<string, AstNode>();
         for (const view of this.collectDocumentViews(doc)) {
             const key = this.safeGetKey(view);
             if (!key) continue;
-            if (seenKeys.has(key)) {
-                accept('error', `A view with the key ${key} already exists`, { node: view, property: 'key' });
+            const previous = seenKeys.get(key);
+            if (previous) {
+                accept('error', `A view with the key ${key} already exists`, {
+                    node: view,
+                    property: 'key',
+                    relatedInformation: relatedLocation(previous, FIRST_DECLARED_HERE)
+                });
             } else {
-                seenKeys.add(key);
+                seenKeys.set(key, view);
             }
         }
     }
@@ -1696,8 +1769,13 @@ export class C4Validator {
         }
         if (detectedDefaultMarkers.length > 1) {
             // The last marker wins; the earlier ones are the ones that never take effect.
+            const winner = detectedDefaultMarkers[detectedDefaultMarkers.length - 1];
             detectedDefaultMarkers.slice(0, -1).forEach(marker => {
-                accept('warning', "Only one view can be marked as 'default' across the entire workspace.", { node: marker, property: 'value' });
+                accept('warning', "Only one view can be marked as 'default' across the entire workspace.", {
+                    node: marker,
+                    property: 'value',
+                    relatedInformation: relatedLocation(winner, 'This view is marked as default')
+                });
             });
         }
     }

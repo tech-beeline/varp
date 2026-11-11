@@ -420,6 +420,15 @@ workspace {
         expect(messages(doc, ERROR_SEVERITY)).toContain(
             'A relationship between "SoftwareSystem://B" and "SoftwareSystem://A" already exists'
         );
+        const duplicate = (doc.diagnostics ?? []).find(diagnostic => {
+            const message = typeof diagnostic.message === 'string' ? diagnostic.message : diagnostic.message.value;
+            return message.includes('already exists');
+        })!;
+        const text = doc.textDocument.getText();
+        expect(text.slice(
+            doc.textDocument.offsetAt(duplicate.range.start),
+            doc.textDocument.offsetAt(duplicate.range.end)
+        )).toBe('b -> a');
     });
 
     it('accepts the same pair with a different description', async () => {
@@ -1194,3 +1203,254 @@ workspace {
         );
     });
 });
+
+describe('related information of duplicates', () => {
+    /** The first diagnostic whose message contains the given text. */
+    function duplicate(doc: LangiumDocument, text: string): any {
+        return (doc.diagnostics ?? []).find(diagnostic => {
+            const message = typeof diagnostic.message === 'string' ? diagnostic.message : diagnostic.message.value;
+            return message.includes(text);
+        });
+    }
+
+    /** The document text covered by a related location. */
+    function textAt(doc: LangiumDocument, range: any): string {
+        return doc.textDocument.getText().slice(
+            doc.textDocument.offsetAt(range.start),
+            doc.textDocument.offsetAt(range.end)
+        );
+    }
+
+    it('points a repeated relationship at the declaration it repeats', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A"
+        b = softwareSystem "B"
+        a -> b "uses"
+        a -> b "uses"
+    }
+}
+`);
+
+        const related = duplicate(doc, 'already exists').relatedInformation[0];
+        expect(related.message).toBe('First declared here');
+        expect(textAt(doc, related.location.range)).toBe('a -> b "uses"');
+    });
+
+    it('points a relationship that repeats an implied one at the relationship that implies it', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A"
+        b = softwareSystem "B" {
+            c = container "C"
+        }
+        c -> a
+        b -> a
+    }
+}
+`);
+
+        const related = duplicate(doc, 'already exists').relatedInformation[0];
+        expect(textAt(doc, related.location.range)).toBe('c -> a');
+    });
+
+    it('points a repeated container name at the first container', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        s = softwareSystem "S" {
+            first = container "Same"
+            second = container "Same"
+        }
+    }
+}
+`);
+
+        const related = duplicate(doc, "A container named 'Same' already exists").relatedInformation[0];
+        expect(textAt(doc, related.location.range)).toContain('container "Same"');
+        expect(textAt(doc, related.location.range)).not.toContain('second');
+    });
+
+    it('points a repeated view key at the first view', async () => {
+        const doc = await build(`
+views {
+    systemLandscape "shared" {
+        include *
+    }
+    systemLandscape "shared" {
+        include *
+    }
+}
+`);
+
+        const related = duplicate(doc, 'A view with the key shared').relatedInformation[0];
+        expect(textAt(doc, related.location.range)).toContain('systemLandscape "shared"');
+    });
+
+    it('points a repeated element name at the first declaration', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        softwareSystem "Shared"
+        person "Shared"
+    }
+}
+`);
+
+        const related = duplicate(doc, "A person or software system named 'Shared'").relatedInformation[0];
+        expect(textAt(doc, related.location.range)).toContain('softwareSystem "Shared"');
+    });
+
+    it('points at the declaration in another file', async () => {
+        const docs = await buildProject({
+            'main.dsl': 'workspace {\n    model {\n        !include "one.dsl"\n        !include "two.dsl"\n    }\n}\n',
+            'one.dsl': 'softwareSystem "Shared"\n',
+            'two.dsl': 'person "Shared"\n',
+        });
+
+        const related = duplicate(docs.get('main.dsl')!, 'already exists').relatedInformation[0];
+        expect(related.location.uri).toBe(Utils.resolvePath(PROJECT, 'one.dsl').toString());
+    });
+
+    it('points a repeated model block at the first model', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A"
+    }
+    model {
+        b = softwareSystem "B"
+    }
+}
+`);
+
+        const related = duplicate(doc, 'Multiple models are not permitted').relatedInformation[0];
+        expect(textAt(doc, related.location.range)).toContain('a = softwareSystem "A"');
+        expect(textAt(doc, related.location.range)).not.toContain('b = softwareSystem "B"');
+    });
+
+    it('points a repeated view set at the first view set', async () => {
+        const doc = await build(`
+workspace {
+    views {
+        systemLandscape "first" {
+            include *
+        }
+    }
+    views {
+        systemLandscape "second" {
+            include *
+        }
+    }
+}
+`);
+
+        const related = duplicate(doc, 'Multiple view sets are not permitted').relatedInformation[0];
+        expect(textAt(doc, related.location.range)).toContain('systemLandscape "first"');
+    });
+
+    it('points a repeated workspace at the first workspace', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A"
+    }
+}
+workspace {
+    model {
+        b = softwareSystem "B"
+    }
+}
+`);
+
+        const related = duplicate(doc, 'Multiple workspaces are not permitted').relatedInformation[0];
+        expect(textAt(doc, related.location.range)).toContain('a = softwareSystem "A"');
+    });
+});
+
+describe('related information of conflicting declarations', () => {
+    /** The document text covered by a related location. */
+    function textAt(doc: LangiumDocument, range: any): string {
+        return doc.textDocument.getText().slice(
+            doc.textDocument.offsetAt(range.start),
+            doc.textDocument.offsetAt(range.end)
+        );
+    }
+
+    function messageOf(diagnostic: any): string {
+        return typeof diagnostic.message === 'string' ? diagnostic.message : diagnostic.message.value;
+    }
+
+    it('links theme and themes to each other', async () => {
+        const doc = await build(`
+workspace {
+    views {
+        theme https://example.com/one.json
+        themes https://example.com/two.json
+    }
+}
+`);
+
+        const warnings = (doc.diagnostics ?? []).filter(diagnostic =>
+            messageOf(diagnostic).includes("either 'theme' or 'themes'"));
+        expect(warnings).toHaveLength(2);
+        expect(warnings[0].relatedInformation![0].message).toBe("The 'themes' declaration is here");
+        expect(textAt(doc, warnings[0].relatedInformation![0].location.range))
+            .toBe('themes https://example.com/two.json');
+        expect(warnings[1].relatedInformation![0].message).toBe("The 'theme' declaration is here");
+        expect(textAt(doc, warnings[1].relatedInformation![0].location.range))
+            .toBe('theme https://example.com/one.json');
+    });
+
+    it('points an overridden default marker at the view that stays default', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        a = softwareSystem "A"
+    }
+    views {
+        systemContext a "One" {
+            include *
+            default
+        }
+        systemContext a "Two" {
+            include *
+            default
+        }
+    }
+}
+`);
+
+        const warning = (doc.diagnostics ?? []).find(diagnostic =>
+            messageOf(diagnostic).includes("Only one view can be marked as 'default'"))!;
+        const defaultLines = doc.textDocument.getText().split(/\r?\n/)
+            .flatMap((line, index) => line.trim() === 'default' ? [index] : []);
+        expect(warning.range.start.line).toBe(defaultLines[0]);
+        expect(warning.relatedInformation![0].message).toBe('This view is marked as default');
+        expect(warning.relatedInformation![0].location.range.start.line).toBe(defaultLines[1]);
+    });
+
+    it('points a nested group at the group that encloses it', async () => {
+        const doc = await build(`
+workspace {
+    model {
+        group "Outer" {
+            group "Inner" {
+                a = softwareSystem "A"
+            }
+        }
+    }
+}
+`);
+
+        const warning = (doc.diagnostics ?? []).find(diagnostic =>
+            messageOf(diagnostic).includes('structurizr.groupSeparator'))!;
+        const related = warning.relatedInformation![0];
+        expect(related.message).toBe('The enclosing group is here');
+        expect(textAt(doc, related.location.range)).toContain('group "Outer"');
+        expect(related.location.range.start.line).toBeLessThan(warning.range.start.line);
+    });
+});
+

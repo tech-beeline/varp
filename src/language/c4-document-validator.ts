@@ -56,6 +56,7 @@ export class C4DocumentValidator extends DefaultDocumentValidator {
     ): Promise<Diagnostic[]> {
         const diagnostics = await super.validateDocument(document, options, cancelToken);
         const result = withoutRecoveredCascades(document, diagnostics);
+        extendDirectiveRanges(document, result);
         const warning = standaloneConstantWarning(this.sharedServices, document);
         if (warning) {
             result.push(warning);
@@ -77,6 +78,35 @@ export class C4DocumentValidator extends DefaultDocumentValidator {
         super.processLinkingErrors(document, diagnostics, options);
         dropScopeReferences(diagnostics, reported);
         dropLinkingErrorsOnReportedTokens(diagnostics, reported);
+    }
+}
+
+/**
+ * Extends a diagnostic that points at the `!` of a directive to the whole word.
+ *
+ * The lexer reads `!` as a token of its own and the directive name after it, so a
+ * rejected directive such as `!contstant` is reported on a single character unless
+ * the range is widened to the rest of the word.
+ */
+function extendDirectiveRanges(document: LangiumDocument, diagnostics: Diagnostic[]): void {
+    const text = document.textDocument.getText();
+    for (const diagnostic of diagnostics) {
+        if (!isParsingDiagnostic(diagnostic)) {
+            continue;
+        }
+        const start = document.textDocument.offsetAt(diagnostic.range.start);
+        const end = document.textDocument.offsetAt(diagnostic.range.end);
+        if (end - start !== 1 || text[start] !== '!') {
+            continue;
+        }
+        let cursor = end;
+        while (cursor < text.length && /[\w$]/.test(text[cursor])) {
+            cursor++;
+        }
+        if (cursor === end) {
+            continue;
+        }
+        diagnostic.range = { start: diagnostic.range.start, end: document.textDocument.positionAt(cursor) };
     }
 }
 

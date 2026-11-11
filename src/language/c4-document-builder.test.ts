@@ -15,7 +15,7 @@
 */
 
 import { describe, it, expect } from 'vitest';
-import type { FileSystemProvider, LangiumDocument } from 'langium';
+import { DocumentState, type FileSystemProvider, type LangiumDocument } from 'langium';
 import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
 
@@ -80,31 +80,56 @@ function messages(document: LangiumDocument): string[] {
     );
 }
 
+/** Builds the services and indexes the two documents, as the workspace scan does. */
+function indexDocuments(files: Record<string, string>) {
+    const services = createC4Services({
+        connection: undefined as any,
+        fileSystemProvider: () => memoryFileSystem(files)
+    }).C4;
+    const documents = services.shared.workspace.LangiumDocuments;
+    const factory = services.shared.workspace.LangiumDocumentFactory;
+    documents.addDocument(factory.fromString(INCLUDING_CONTENT, URI.parse(INCLUDING)));
+    documents.addDocument(factory.fromString(OTHER_CONTENT, URI.parse(OTHER)));
+    return { services, documents, including: documents.getDocument(URI.parse(INCLUDING))! };
+}
+
 describe('include discovery', () => {
     it('loads the includes of documents indexed by the workspace scan', async () => {
-        const services = createC4Services({
-            connection: undefined as any,
-            fileSystemProvider: () => memoryFileSystem({
-                [INCLUDING]: INCLUDING_CONTENT,
-                [OTHER]: OTHER_CONTENT,
-                [TARGET]: TARGET_CONTENT
-            })
-        }).C4;
-
         // The documents are indexed as after the workspace scan, and the update
         // arrives for another file: scanning a document must not depend on it
         // being part of the call that triggered the build phases.
-        const documents = services.shared.workspace.LangiumDocuments;
-        const factory = services.shared.workspace.LangiumDocumentFactory;
-        const including = factory.fromString(INCLUDING_CONTENT, URI.parse(INCLUDING));
-        const other = factory.fromString(OTHER_CONTENT, URI.parse(OTHER));
-        documents.addDocument(including);
-        documents.addDocument(other);
+        const { services, documents, including } = indexDocuments({
+            [INCLUDING]: INCLUDING_CONTENT,
+            [OTHER]: OTHER_CONTENT,
+            [TARGET]: TARGET_CONTENT
+        });
 
         const builder = services.shared.workspace.DocumentBuilder;
+        const validated: string[][] = [];
+        builder.onDocumentPhase(DocumentState.Validated, (document) => {
+            if (document.uri.toString() === INCLUDING) {
+                validated.push(messages(document));
+            }
+        });
+
         await builder.update([URI.parse(OTHER)], []);
 
         expect(documents.hasDocument(URI.parse(TARGET))).toBe(true);
-        expect(messages(including).join(' ')).not.toContain('could not be found');
+        expect(validated.length).toBeGreaterThan(0);
+        for (const reported of validated) {
+            expect(reported.join(' ')).not.toContain('could not be found');
+        }
+    });
+
+    it('reports a target that is missing', async () => {
+        const { services, documents, including } = indexDocuments({
+            [INCLUDING]: INCLUDING_CONTENT,
+            [OTHER]: OTHER_CONTENT
+        });
+
+        await services.shared.workspace.DocumentBuilder.update([URI.parse(OTHER)], []);
+
+        expect(documents.hasDocument(URI.parse(TARGET))).toBe(false);
+        expect(messages(including).join(' ')).toContain('could not be found');
     });
 });

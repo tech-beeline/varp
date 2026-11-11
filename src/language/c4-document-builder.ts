@@ -16,6 +16,7 @@
 
 import {
     DefaultDocumentBuilder,
+    DocumentState,
     LangiumDocument,
     AstUtils,
     AstNode,
@@ -32,14 +33,16 @@ import * as includeResolver from './c4-include-resolver';
  * Include/extends targets are discovered dynamically: a directive cannot be read
  * until its file has been parsed, so the flow is "scan, load, rebuild".
  *
- * Langium reaches this flow through two entry points: update() for LSP changes
- * (didOpen/didChange/watched files) and build() for workspace initialization.
- * Both are handled here, but the scan is not tied to the documents of the call
- * that triggered it: workspace initialization is cancellable, and the workspace
- * lock cancels it as soon as the editor reports a change. Its documents are
- * already in the index by then, so they are validated by the next update without
- * their targets ever being loaded. Scanning every indexed document that has not
- * been scanned yet covers that case.
+ * The scan runs as a build phase listener, before the documents are validated, so
+ * the first validation already sees the targets and does not report an include that
+ * is still loading. The targets themselves are built, and the documents that
+ * reference them are relinked, by the follow-up pass at the end of update()/build().
+ *
+ * The scan is not tied to the documents of the call that triggered it: workspace
+ * initialization is cancellable, and the workspace lock cancels it as soon as the
+ * editor reports a change. Its documents are already in the index by then, so they
+ * are validated by the next update without their targets ever being loaded.
+ * Scanning every indexed document that has not been scanned yet covers that case.
  */
 export class C4DocumentBuilder extends DefaultDocumentBuilder {
 
@@ -48,6 +51,7 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
     constructor(services: LangiumSharedCoreServices) {
         super(services);
         this.shared = services;
+        this.onBuildPhase(DocumentState.IndexedReferences, documents => this.scanIncludes(documents));
     }
 
     // Tracks include/extends targets that were loaded successfully (keyed by the
@@ -59,18 +63,23 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
     // removes the document again, so it is scanned with its new content.
     private scannedDocuments = new Set<string>();
 
+    // Documents whose targets were loaded after the linking phase ran. They are
+    // relinked and validated again at the end of the pass.
+    private awaitingRebuild = new Set<string>();
+
     override async update(changed: URI[], deleted: URI[], cancelToken?: any): Promise<void> {
         for (const uri of changed) {
             this.scannedDocuments.delete(uri.toString());
         }
         for (const uri of deleted) {
             this.scannedDocuments.delete(uri.toString());
+            this.awaitingRebuild.delete(uri.toString());
         }
 
         // Step 1: Let the parent process all documents through build phases
         await super.update(changed, deleted, cancelToken);
 
-        // Step 2-3: Load the targets that were never scanned and rebuild the
+        // Step 2-3: Load the targets that no phase has reached and rebuild the
         // documents whose targets became available.
         await this.loadPendingIncludes(cancelToken);
     }
@@ -90,25 +99,46 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
     }
 
     /**
+     * Build phase listener: loads the targets of the documents that were linked in
+     * this pass, so validation sees them. The documents that reference a freshly
+     * loaded target are relinked afterwards, because their symbols were not in the
+     * index while they were linked.
+     */
+    private async scanIncludes(documents: LangiumDocument[]): Promise<void> {
+        const pending = documents.filter(document => !this.scannedDocuments.has(document.uri.toString()));
+        const result = await this.discoverIncludes(pending);
+        for (const uri of result.parentUris) {
+            this.awaitingRebuild.add(uri);
+        }
+    }
+
+    /**
      * Loads the targets of every indexed document that has not been scanned yet and
-     * rebuilds the documents whose targets were loaded after their validation.
+     * rebuilds the documents whose targets were loaded after they were linked.
      */
     private async loadPendingIncludes(cancelToken?: any): Promise<void> {
         const pending = (this.langiumDocuments?.all.toArray() ?? [])
             .filter(document => !this.scannedDocuments.has(document.uri.toString()));
         const result = await this.discoverIncludes(pending);
+        for (const uri of result.parentUris) {
+            this.awaitingRebuild.add(uri);
+        }
 
-        if (result.newUris.length === 0) {
+        const toRebuild = [...new Set([...this.awaitingRebuild, ...result.newUris.map(uri => uri.toString())])];
+        if (toRebuild.length === 0) {
             return;
+        }
+
+        if (result.newUris.length > 0) {
+            console.log(`[C4 Builder] Discovered ${result.newUris.length} new include file(s), rebuilding ${toRebuild.length} document(s)`);
         }
 
         // Follow up with update(): the parents are already Validated and build()
         // skips every phase for a document whose state is already >= the target
         // state, so they would never be relinked against the freshly loaded
         // fragments. update() resets them to Changed, which performs that relink.
-        const allToUpdate = [...new Set([...result.parentUris, ...result.newUris.map(uri => uri.toString())])];
-        console.log(`[C4 Builder] Discovered ${result.newUris.length} new include file(s), rebuilding ${allToUpdate.length} document(s)`);
-        await super.update(allToUpdate.map(uri => URI.parse(uri)), [], cancelToken);
+        await super.update(toRebuild.map(uri => URI.parse(uri)), [], cancelToken);
+        this.awaitingRebuild.clear();
     }
 
     /**
@@ -119,7 +149,10 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
      * Documents added by the loaders are scanned in the same pass, so a fragment
      * that includes further fragments is followed to the end.
      */
-    private async discoverIncludes(documents: LangiumDocument[]): Promise<{ newUris: URI[]; parentUris: string[] }> {
+    private async discoverIncludes(documents: LangiumDocument[]): Promise<{
+        newUris: URI[];
+        parentUris: string[];
+    }> {
         const newUris: URI[] = [];
         const parentUris: string[] = [];
         const parentSeen = new Set<string>();

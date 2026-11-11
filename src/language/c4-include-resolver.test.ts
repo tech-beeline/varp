@@ -224,15 +224,29 @@ describe('workspace graph & constant scoping', () => {
         expect(getAncestorChain(shared, fragUri)).toEqual([mainUri]);
     });
 
-    it('resolves a constant declared in the parent file (reported instability scenario)', async () => {
+    it('attributes the files of a directory !include to the including workspace', async () => {
+        const { services } = await createProject({
+            'main.dsl': '!const MODE "shared"\n!include "model"\nworkspace {\n}\n',
+            'model/a.dsl': 'person "User"\n',
+        });
+        const shared = services.shared;
+        const fileUri = Utils.resolvePath(PROJECT, 'model/a.dsl').toString();
+        const mainUri = Utils.resolvePath(PROJECT, 'main.dsl').toString();
+        const fileRoot = rootOf(services, 'model/a.dsl');
+
+        expect(getAncestorChain(shared, fileUri)).toEqual([mainUri]);
+        expect(substituteConstants(shared, '${MODE}', fileRoot!)).toBe('shared');
+    });
+
+    it('resolves a constant declared in the parent file', async () => {
         const { services } = await createProject({
             'main.dsl': '!const PEOPLE_INCLUDE "people.dsl"\n!include "${PEOPLE_INCLUDE}"\nworkspace {\n}\n',
             'people.dsl': 'person "User"\n',
         });
         const peopleRoot = rootOf(services, 'people.dsl');
         expect(peopleRoot).toBeDefined();
-        // The constant is only declared in main.dsl (the ancestor) - the lookup must find it
-        // through the !include graph instead of scanning all open documents.
+        // The constant is only declared in main.dsl (the ancestor), so the lookup has to
+        // follow the !include graph.
         expect(substituteConstants(services.shared, '${PEOPLE_INCLUDE}', peopleRoot!)).toBe('people.dsl');
     });
 

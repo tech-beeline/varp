@@ -172,9 +172,8 @@ export function resolveIncludedRoot(
 //
 // The root workspace of a document is discovered by walking the parent graph:
 // a parent document references its children through `!include` directives (anywhere
-// in the AST) or through a `Workspace.extendsUri`. Walking this graph is what keeps
-// ${CONST} lookups scoped to the document's own workspace instead of scanning every
-// open document in insertion (nondeterministic) order.
+// in the AST) or through a `Workspace.extendsUri`. Constants and relative paths are
+// then scoped to that workspace, so a document resolves by what reaches it.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Resolves ${NAME} placeholders using only the constants declared in the node's own document. */
@@ -308,12 +307,36 @@ const ancestorChainCaches = new WeakMap<LangiumSharedCoreServices, WorkspaceCach
  * Returns the URI of the document that directly references `childUri` through a
  * `!include` directive or a workspace `extendsUri`, or undefined when no loaded
  * document references it. The reverse reference index (see getParentIndex) is
- * already cached per workspace build, so this is a plain O(1) lookup.
+ * already cached per workspace build, so this is a plain lookup.
  * Deterministic: when several documents reference the same target, the one with
  * the lowest URI string wins (same rule as findParentDocument).
+ *
+ * `!include` also accepts a directory and loads every file below it. Those files
+ * carry no edge of their own, so a file is attributed to the document that
+ * included its closest referenced ancestor directory.
  */
 export function getParentUri(shared: LangiumSharedCoreServices, childUri: string): string | undefined {
-    return getParentIndex(shared).get(childUri)?.parentUri;
+    const index = getParentIndex(shared);
+    const direct = index.get(childUri);
+    if (direct) return direct.parentUri;
+    let directory = parentDirectory(childUri);
+    while (directory !== undefined) {
+        const edge = index.get(directory);
+        if (edge) return edge.parentUri;
+        directory = parentDirectory(directory);
+    }
+    return undefined;
+}
+
+/** URI of the directory containing the given document, or undefined at the root. */
+function parentDirectory(uriString: string): string | undefined {
+    try {
+        const uri = URI.parse(uriString);
+        const value = Utils.dirname(uri).toString();
+        return value === uriString ? undefined : value;
+    } catch {
+        return undefined;
+    }
 }
 
 /**
@@ -402,10 +425,9 @@ export function getConstantsForDocument(shared: LangiumSharedCoreServices, docUr
  * `contextNode`: parent files first (closest ancestor first, root last), then
  * sibling documents that share the same root workspace (sorted by URI).
  *
- * Unlike the previous implementation - which scanned every open document in
- * insertion (nondeterministic) order - this never searches documents from
- * unrelated workspaces and always resolves the same way for the same input,
- * eliminating "sometimes resolves to the wrong sibling file" behavior.
+ * Documents of unrelated workspaces are never searched, so the same input always
+ * resolves the same way: by the workspace that owns the document, not by the order
+ * in which documents were loaded.
  */
 export function lookupConstantInWorkspace(shared: LangiumSharedCoreServices, name: string, contextNode: AstNode): string | undefined {
     const doc = documentOf(contextNode);

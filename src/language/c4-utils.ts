@@ -345,3 +345,19 @@ export function declaredIdentifier(node: any): string | undefined {
 export function describeType(type: string): string {
     return type.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
 }
+
+/**
+ * Orders perspectives the way the reference exporter does: by name in plain
+ * code-unit order. A vendor export sorts them, so the same document has to
+ * produce the same sequence here.
+ *
+ * @param perspectives perspectives carrying a `name` field
+ * @returns a sorted copy
+ */
+export function sortPerspectives<T extends { name?: unknown }>(perspectives: T[]): T[] {
+    return [...perspectives].sort((left, right) => {
+        const a = typeof left?.name === 'string' ? left.name : '';
+        const b = typeof right?.name === 'string' ? right.name : '';
+        return a < b ? -1 : a > b ? 1 : 0;
+    });
+}

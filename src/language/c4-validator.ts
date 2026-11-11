@@ -16,11 +16,12 @@
 
 import { AstNode, AstUtils, isAstNode, type ValidationAcceptor, type ValidationChecks } from 'langium';
 import { URI } from 'vscode-uri';
-import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, ModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty, type StringLiteralExpression, isElementEqExpression, isElementNotEqExpression, isBinaryExpression, isSingleElementExpression, isStringLiteralExpression, isExcludeProperty, type ExcludeProperty, type ViewExpression } from '../generated/ast';
+import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isArchetypeInstance, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, ModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty, type StringLiteralExpression, isElementEqExpression, isElementNotEqExpression, isBinaryExpression, isSingleElementExpression, isStringLiteralExpression, isExcludeProperty, type ExcludeProperty, type ViewExpression } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
 import * as includeResolver from './c4-include-resolver';
 import { C4Utils, declaredIdentifier } from './c4-utils';
+import type { ViewKeyProvider } from './c4-viewkey-provider';
 import { parseQuotedFilterText } from './c4-quoted-filter';
 import { canonicalElementName, findDuplicateRelationships, type DeclaredRelationship } from './c4-implied-relationships';
 
@@ -128,6 +129,7 @@ export function registerValidationChecks(services: C4Services) {
     const registry = services.validation.ValidationRegistry;
     const validator = services.validation.C4Validator;
     validator.sharedServices = services.shared;
+    validator.viewKeyProvider = services.workspace.ViewKeyProvider;
 
     const checks: ValidationChecks<C4AstType> = {
         IconPositionProperty: [
@@ -144,7 +146,8 @@ export function registerValidationChecks(services: C4Services) {
             (node, accept) => validator.checkOnlyOneDefaultView(node, accept),
             (node, accept) => validator.checkSingleWorkspace(node, accept),
             (node, accept) => validator.checkRootContentOutsideWorkspace(node, accept),
-            (node, accept) => validator.checkDuplicateRelationships(node, accept)
+            (node, accept) => validator.checkDuplicateRelationships(node, accept),
+            (node, accept) => validator.checkWorkspaceDefinition(node, accept)
         ],
         ModelBlock: [
             (node, accept) => validator.checkIncludeElements(node, accept, 'ModelBlock')
@@ -191,28 +194,36 @@ export function registerValidationChecks(services: C4Services) {
             (node, accept) => validator.checkIncludeElements(node, accept, 'SystemLandscapeView')
         ],
         SystemContextView: [
-            (node, accept) => validator.checkIncludeElements(node, accept, 'SystemContextView')
+            (node, accept) => validator.checkIncludeElements(node, accept, 'SystemContextView'),
+            (node, accept) => validator.checkSoftwareSystemViewScope(node, accept)
         ],
         ContainerView: [
-            (node, accept) => validator.checkIncludeElements(node, accept, 'ContainerView')
+            (node, accept) => validator.checkIncludeElements(node, accept, 'ContainerView'),
+            (node, accept) => validator.checkSoftwareSystemViewScope(node, accept)
         ],
         ComponentView: [
-            (node, accept) => validator.checkIncludeElements(node, accept, 'ComponentView')
+            (node, accept) => validator.checkIncludeElements(node, accept, 'ComponentView'),
+            (node, accept) => validator.checkContainerViewScope(node, accept)
         ],
         DeploymentView: [
-            (node, accept) => validator.checkIncludeElements(node, accept, 'DeploymentView')
+            (node, accept) => validator.checkIncludeElements(node, accept, 'DeploymentView'),
+            (node, accept) => validator.checkSoftwareSystemViewScope(node, accept),
+            (node, accept) => validator.checkDeploymentEnvironmentScope(node, accept)
         ],
         DynamicView: [
-            (node, accept) => validator.checkIncludeElements(node, accept, 'DynamicView')
+            (node, accept) => validator.checkIncludeElements(node, accept, 'DynamicView'),
+            (node, accept) => validator.checkDynamicViewScope(node, accept)
         ],
         FilteredView: [
-            (node, accept) => validator.checkIncludeElements(node, accept, 'FilteredView')
+            (node, accept) => validator.checkIncludeElements(node, accept, 'FilteredView'),
+            (node, accept) => validator.checkFilteredViewBaseKey(node, accept)
         ],
         CustomView: [
             (node, accept) => validator.checkIncludeElements(node, accept, 'CustomView')
         ],
         ImageView: [
-            (node, accept) => validator.checkIncludeElements(node, accept, 'ImageView')
+            (node, accept) => validator.checkIncludeElements(node, accept, 'ImageView'),
+            (node, accept) => validator.checkImageViewScope(node, accept)
         ],
         StringLiteralExpression: [
             (node, accept) => validator.checkQuotedViewExpression(node, accept)
@@ -351,7 +362,8 @@ export function registerValidationChecks(services: C4Services) {
             (node, accept) => validator.checkNestedGroup(node, accept)
         ],
         Include: [
-            (node, accept) => validator.checkPathCharacters(node, accept, 'file')
+            (node, accept) => validator.checkPathCharacters(node, accept, 'file'),
+            (node, accept) => validator.checkIncludeTarget(node, accept)
         ],
         DocsDirective: [
             (node, accept) => validator.checkPathCharacters(node, accept, 'path')
@@ -384,6 +396,13 @@ interface CollectedTopLevelElement extends DuplicateOccurrence {
     element: any;
 }
 
+/** Whether the document declares any node at all; an empty or comment-only file declares none. */
+function hasDeclarations(doc: C4Document): boolean {
+    const record = doc as unknown as Record<string, unknown>;
+    return Object.entries(record).some(([key, value]) =>
+        !key.startsWith('$') && Array.isArray(value) && value.length > 0);
+}
+
 /**
  * Validates C4 DSL semantics: element uniqueness, include file consistency,
  * property constraints (colors, shapes, borders), view key uniqueness, etc.
@@ -391,6 +410,7 @@ interface CollectedTopLevelElement extends DuplicateOccurrence {
  */
 export class C4Validator {
     public sharedServices: any;
+    public viewKeyProvider?: ViewKeyProvider;
 
     /** Formats an error message for unexpected tokens or disallowed element types in a block */
     private formatIncludeError(blockType: string, item: any): string {
@@ -438,30 +458,61 @@ export class C4Validator {
     private referenceExists(text: string, node: StringLiteralExpression): boolean {
         const name = C4Utils.stripQuotes(text).trim().toLowerCase();
         if (!name) return false;
-        const names = this.referenceNames(node);
+        const names = this.referenceElements(node);
         return names.has(name) || names.has(name.split('.').pop() ?? name);
     }
 
-    /** Identifiers of the elements and relationships of the workspace root. */
-    private referenceNames(node: StringLiteralExpression): Set<string> {
-        const names = new Set<string>();
+    /** The element declared with the given identifier in the workspace that owns the node. */
+    private referenceElement(text: string, node: AstNode): AstNode | undefined {
+        const name = text.trim().toLowerCase();
+        const elements = this.referenceElements(node);
+        return elements.get(name) ?? elements.get(name.split('.').pop() ?? name);
+    }
+
+    /** Declared identifiers of the workspace root, mapped to the nodes that declare them. */
+    private referenceElements(node: AstNode): Map<string, AstNode> {
+        const elements = new Map<string, AstNode>();
+        this.visitWorkspace(node, item => {
+            const id = declaredIdentifier(item);
+            if (id && !elements.has(id.toLowerCase())) {
+                elements.set(id.toLowerCase(), item);
+            }
+        });
+        return elements;
+    }
+
+    /** Keys of the views declared by the workspace root. */
+    private workspaceViewKeys(node: AstNode): Set<string> {
+        const keys = new Set<string>();
+        this.visitWorkspace(node, item => {
+            const key = this.viewKey(item);
+            if (key) keys.add(key.toLowerCase());
+        });
+        return keys;
+    }
+
+    /** The key a view carries, explicit or generated by the same rule the JSON output uses. */
+    private viewKey(node: AstNode): string | undefined {
+        if (!this.isViewNode(node) || !this.viewKeyProvider) return undefined;
+        return this.viewKeyProvider.getKey(node as any);
+    }
+
+    /** Visits the workspace root that owns the node together with every file it includes. */
+    private visitWorkspace(node: AstNode, visit: (item: AstNode) => void): void {
         const document = AstUtils.getDocument(node);
-        if (!document) return names;
+        if (!document) return;
         const rootUri = includeResolver.getRootWorkspaceUri(this.sharedServices, document.uri.toString());
         const rootDocument = this.sharedServices.workspace.LangiumDocuments.getDocument(URI.parse(rootUri));
         const root = rootDocument?.parseResult.value ?? document.parseResult.value;
-        this.collectReferenceNames(root, names, new Set([document.uri.toString()]));
-        return names;
+        this.visitContents(root, visit, new Set([document.uri.toString()]));
     }
 
-    /** Collects names and identifiers from a subtree, following its !include directives. */
-    private collectReferenceNames(node: any, names: Set<string>, visited: Set<string>): void {
+    /** Visits a subtree and the parse trees of the files it includes, each file once. */
+    private visitContents(node: any, visit: (item: AstNode) => void, visited: Set<string>): void {
         if (!node || typeof node !== 'object') return;
         const items = [node, ...AstUtils.streamAllContents(node)];
         for (const item of items) {
-            // Filters address elements and groups by identifier; a name is not one.
-            const id = declaredIdentifier(item);
-            if (id) names.add(id.toLowerCase());
+            visit(item);
         }
         for (const item of items) {
             for (const inc of (item as any).includes ?? []) {
@@ -472,7 +523,7 @@ export class C4Validator {
                     if (visited.has(uri)) continue;
                     visited.add(uri);
                 }
-                this.collectReferenceNames(includedRoot, names, visited);
+                this.visitContents(includedRoot, visit, visited);
             }
         }
     }
@@ -616,6 +667,42 @@ export class C4Validator {
     }
 
     /**
+     * Reports an !include whose target is neither a loaded document nor a directory
+     * of loaded documents. The message names the resolved path, because that is the
+     * path the reader has to correct.
+     */
+    checkIncludeTarget(node: Include, accept: ValidationAcceptor): void {
+        if (!node.file) return;
+        const constants = (path: string, context: AstNode) =>
+            includeResolver.substituteConstants(this.sharedServices, path, context);
+        const loaded = includeResolver.resolveIncludedDocument(this.sharedServices, node.file, node, {
+            withDslFallback: true,
+            constants,
+        });
+        if (loaded) return;
+        const uri = includeResolver.resolveTargetUri(node.file, node, { constants });
+        if (!uri || this.documentLoadedFrom(uri)) return;
+        // Canonical paths of the reference implementation start with an upper-case
+        // drive letter; a file URI keeps whatever case the path was written in.
+        const path = uri.scheme === 'file'
+            ? uri.fsPath.replace(/^([a-z]):/, (_, drive: string) => `${drive.toUpperCase()}:`)
+            : uri.toString();
+        accept('error', `${path} could not be found`, { node, property: 'file' });
+    }
+
+    /** Whether the URI names a loaded document, or a directory whose direct children are loaded. */
+    private documentLoadedFrom(uri: URI): boolean {
+        const documents = this.sharedServices.workspace.LangiumDocuments;
+        if (documents.hasDocument(uri)) return true;
+        const directory = uri.toString().replace(/\/$/, '');
+        return documents.all.some((document: any) => {
+            const target = document.uri.toString();
+            const slash = target.lastIndexOf('/');
+            return slash > 0 && target.slice(0, slash) === directory;
+        });
+    }
+
+    /**
      * Validates that a group's direct children are allowed in the block that
      * encloses the group. The grammar accepts the union of all element kinds and
      * directives inside a group, so the enclosing context is enforced here.
@@ -713,7 +800,7 @@ export class C4Validator {
         } else if (scope.deploymentGroupIds.has(raw)) {
             accept('error', '!element cannot target a deployment group.', { node, property: 'id' });
         } else {
-            accept('error', `!element target "${raw}" could not be found.`, { node, property: 'id' });
+            accept('error', `An element identified by "${raw}" could not be found`, { node, property: 'id' });
         }
     }
 
@@ -918,6 +1005,83 @@ export class C4Validator {
         }
     }
 
+    /** Validates the software system a system context, container or deployment view is scoped to. */
+    checkSoftwareSystemViewScope(node: any, accept: ValidationAcceptor): void {
+        this.checkViewScopeReference(node.softwareSystem, node, 'softwareSystem',
+            'software system', 'software system',
+            element => isSoftwareSystem(element) || isArchetypeInstance(element), accept);
+    }
+
+    /** Validates the container a component view is scoped to. */
+    checkContainerViewScope(node: any, accept: ValidationAcceptor): void {
+        this.checkViewScopeReference(node.container, node, 'container',
+            'container', 'container',
+            element => isContainer(element) || isArchetypeInstance(element), accept);
+    }
+
+    /** Validates the deployment environment a deployment view is scoped to. */
+    checkDeploymentEnvironmentScope(node: any, accept: ValidationAcceptor): void {
+        this.checkViewScopeReference(node.environment, node, 'environment',
+            'environment', undefined,
+            element => isDeploymentEnvironment(element), accept);
+    }
+
+    /** Validates the element a dynamic view is scoped to: a software system or a container. */
+    checkDynamicViewScope(node: any, accept: ValidationAcceptor): void {
+        this.checkViewScopeReference(node.element, node, 'element',
+            'software system or container', 'software system or container',
+            element => isSoftwareSystem(element) || isContainer(element) || isArchetypeInstance(element), accept);
+    }
+
+    /** Validates the element an image view is scoped to. */
+    checkImageViewScope(node: any, accept: ValidationAcceptor): void {
+        this.checkViewScopeReference(node.element, node, 'element', 'element', undefined, () => true, accept);
+    }
+
+    /** Validates that a filtered view is based on a view that the workspace declares. */
+    checkFilteredViewBaseKey(node: any, accept: ValidationAcceptor): void {
+        const baseKey = C4Utils.stripQuotes(node.baseKey);
+        if (!baseKey) return;
+        if (this.workspaceViewKeys(node).has(baseKey.toLowerCase())) return;
+        accept('error', `The view "${baseKey}" does not exist`, { node, property: 'baseKey' });
+    }
+
+    /**
+     * Reports a view scope reference the way the reference implementation does: an
+     * identifier that names nothing is missing under its own noun, while an identifier
+     * that names another element kind is reported as an element of the wrong kind.
+     */
+    private checkViewScopeReference(
+        reference: any,
+        node: AstNode,
+        property: string,
+        noun: string,
+        kind: string | undefined,
+        accepts: (element: NamedElement) => boolean,
+        accept: ValidationAcceptor
+    ): void {
+        if (!reference || typeof reference.$refText !== 'string') return;
+        const name = C4Utils.stripQuotes(reference.$refText);
+        if (!name) return;
+        const found = reference.ref ?? this.referenceElement(name, node);
+        const target = found && this.isViewTarget(found) ? found : undefined;
+        if (target && accepts(target)) return;
+        if (target && kind) {
+            accept('error', `The element "${name}" is not a ${kind}`, { node, property });
+        } else {
+            accept('error', `The ${noun} "${name}" does not exist`, { node, property });
+        }
+    }
+
+    /** Whether the node is a model element that a view can be scoped to. */
+    private isViewTarget(node: AstNode): boolean {
+        return isPerson(node) || isSoftwareSystem(node) || isContainer(node) || isComponent(node)
+            || isDeploymentNode(node) || isInfrastructureNode(node) || isSoftwareSystemInstance(node)
+            || isContainerInstance(node) || isGenericInstance(node) || isCustomElement(node)
+            || isGroup(node) || isDeploymentGroup(node) || isDeploymentEnvironment(node)
+            || isArchetypeInstance(node);
+    }
+
     /**
      * Validates name and identifier uniqueness of top-level elements across the whole
      * document, covering root-level elements, elements nested in groups, every
@@ -945,15 +1109,15 @@ export class C4Validator {
             const name = C4Utils.stripQuotes(element.name);
             if (name) {
                 if (isCustomElement(element)) {
-                    this.reportDuplicate(customElementNames, name, current, rootUri, accept, `A top-level element named '${name}' already exists.`, 'name');
+                    this.reportDuplicate(customElementNames, name, current, rootUri, accept, `A top-level element named '${name}' already exists`, 'name');
                 } else if (isDeploymentEnvironment(element)) {
-                    this.reportDuplicate(deploymentEnvironmentNames, name, current, rootUri, accept, `A deployment environment named '${name}' already exists.`, 'name');
+                    this.reportDuplicate(deploymentEnvironmentNames, name, current, rootUri, accept, `A deployment environment named '${name}' already exists`, 'name');
                 } else if (isPerson(element) || isSoftwareSystem(element)) {
-                    this.reportDuplicate(personOrSystemNames, name, current, rootUri, accept, `A person or software system named '${name}' already exists.`, 'name');
+                    this.reportDuplicate(personOrSystemNames, name, current, rootUri, accept, `A person or software system named '${name}' already exists`, 'name');
                 }
             }
             if (element.id) {
-                this.reportDuplicate(identifiers, element.id, current, rootUri, accept, `The identifier '${element.id}' is already in use.`, 'id');
+                this.reportDuplicate(identifiers, element.id, current, rootUri, accept, `The identifier "${element.id}" is already in use`, 'id');
             }
         }
     }
@@ -1080,14 +1244,14 @@ export class C4Validator {
             const name = C4Utils.stripQuotes(container.name);
             if (name) {
                 if (containerNames.has(name)) {
-                    accept('error', `A container named '${name}' already exists in this software system.`, { node: container, property: 'name' });
+                    accept('error', `A container named '${name}' already exists for this software system`, { node: container, property: 'name' });
                 } else {
                     containerNames.add(name);
                 }
             }
             if (container.id) {
                 if (containerIds.has(container.id)) {
-                    accept('error', `The identifier '${container.id}' is already in use in this software system.`, { node: container, property: 'id' });
+                    accept('error', `The identifier "${container.id}" is already in use`, { node: container, property: 'id' });
                 } else {
                     containerIds.add(container.id);
                 }
@@ -1104,14 +1268,14 @@ export class C4Validator {
             const name = C4Utils.stripQuotes(component.name);
             if (name) {
                 if (componentNames.has(name)) {
-                    accept('error', `A component named '${name}' already exists in this container.`, { node: component, property: 'name' });
+                    accept('error', `A component named '${name}' already exists for this container`, { node: component, property: 'name' });
                 } else {
                     componentNames.add(name);
                 }
             }
             if (component.id) {
                 if (componentIds.has(component.id)) {
-                    accept('error', `The identifier '${component.id}' is already in use in this container.`, { node: component, property: 'id' });
+                    accept('error', `The identifier "${component.id}" is already in use`, { node: component, property: 'id' });
                 } else {
                     componentIds.add(component.id);
                 }
@@ -1275,7 +1439,7 @@ export class C4Validator {
             const key = this.safeGetKey(view);
             if (!key) continue;
             if (seenKeys.has(key)) {
-                accept('error', `A view with the key '${key}' already exists.`, { node: view, property: 'key' });
+                accept('error', `A view with the key ${key} already exists`, { node: view, property: 'key' });
             } else {
                 seenKeys.add(key);
             }
@@ -1284,13 +1448,29 @@ export class C4Validator {
 
     /** Safely extracts the key from a view, returning undefined for view types without keys */
     private safeGetKey(view: any): string | undefined {
-        if (isSystemContextView(view) || isContainerView(view) || isComponentView(view) ||
+        if (!this.isViewNode(view)) return undefined;
+        // Keys are compared without their surrounding quotes.
+        return C4Utils.stripQuotes(view.key) || undefined;
+    }
+
+    /** Whether the node is one of the view types that can carry a key. */
+    private isViewNode(view: any): boolean {
+        return isSystemContextView(view) || isContainerView(view) || isComponentView(view) ||
             isSystemLandscapeView(view) || isDeploymentView(view) || isDynamicView(view) ||
-            isFilteredView(view) || isCustomView(view) || isImageView(view)) {
-            // Keys are compared without their surrounding quotes.
-            return C4Utils.stripQuotes((view).key) || undefined;
-        }
-        return undefined;
+            isFilteredView(view) || isCustomView(view) || isImageView(view);
+    }
+
+    /**
+     * Reports a workspace file that declares nothing at all. A file included as a
+     * fragment has no workspace of its own, so only files nothing includes are checked.
+     */
+    checkWorkspaceDefinition(doc: C4Document, accept: ValidationAcceptor): void {
+        const document = AstUtils.getDocument(doc);
+        if (!document) return;
+        if (document.parseResult.parserErrors.length > 0 || document.parseResult.lexerErrors.length > 0) return;
+        if (hasDeclarations(doc)) return;
+        if (includeResolver.getParentUri(this.sharedServices, document.uri.toString())) return;
+        accept('error', 'No workspace definition was found - please check your DSL', { node: doc });
     }
 
     /** Placeholder for workspace-level validation (currently unused) */

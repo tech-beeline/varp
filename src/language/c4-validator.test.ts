@@ -144,7 +144,7 @@ views {
 
         expect(doc.parseResult.parserErrors).toHaveLength(0);
         const errors = messages(doc, ERROR_SEVERITY).filter(m => m.includes('already exists'));
-        expect(errors).toEqual(["A view with the key 'shared' already exists."]);
+        expect(errors).toEqual(["A view with the key shared already exists"]);
     });
 
     it('detects duplicates declared in a root views block next to a workspace', async () => {
@@ -164,7 +164,7 @@ workspace {
 `);
 
         expect(doc.parseResult.parserErrors).toHaveLength(0);
-        expect(messages(doc, ERROR_SEVERITY)).toContain("A view with the key 'shared' already exists.");
+        expect(messages(doc, ERROR_SEVERITY)).toContain("A view with the key shared already exists");
     });
 
     it('treats a quoted and an unquoted key as the same key', async () => {
@@ -180,7 +180,7 @@ views {
 `);
 
         expect(doc.parseResult.parserErrors).toHaveLength(0);
-        expect(messages(doc, ERROR_SEVERITY)).toContain("A view with the key 'shared' already exists.");
+        expect(messages(doc, ERROR_SEVERITY)).toContain("A view with the key shared already exists");
     });
 
     it('accepts distinct keys in a root views block', async () => {
@@ -491,7 +491,7 @@ workspace {
 
         expect(doc.parseResult.parserErrors).toHaveLength(0);
         expect(messages(doc, ERROR_SEVERITY)).toContain(
-            "A person or software system named 'Shared' already exists."
+            "A person or software system named 'Shared' already exists"
         );
     });
 
@@ -503,7 +503,7 @@ person "Shared"
 
         expect(doc.parseResult.parserErrors).toHaveLength(0);
         expect(messages(doc, ERROR_SEVERITY)).toContain(
-            "A person or software system named 'Shared' already exists."
+            "A person or software system named 'Shared' already exists"
         );
     });
 
@@ -519,7 +519,7 @@ workspace {
 
         expect(doc.parseResult.parserErrors).toHaveLength(0);
         expect(messages(doc, ERROR_SEVERITY)).toContain(
-            "A person or software system named 'Shared' already exists."
+            "A person or software system named 'Shared' already exists"
         );
     });
 
@@ -539,7 +539,7 @@ workspace {
 
         expect(doc.parseResult.parserErrors).toHaveLength(0);
         expect(messages(doc, ERROR_SEVERITY)).toContain(
-            "A person or software system named 'Shared' already exists."
+            "A person or software system named 'Shared' already exists"
         );
     });
 
@@ -555,7 +555,7 @@ workspace {
 
         expect(doc.parseResult.parserErrors).toHaveLength(0);
         expect(messages(doc, ERROR_SEVERITY)).toContain(
-            "A top-level element named 'Shared' already exists."
+            "A top-level element named 'Shared' already exists"
         );
     });
 
@@ -589,7 +589,7 @@ workspace {
 
         expect(main.parseResult.parserErrors).toHaveLength(0);
         expect(messages(main, ERROR_SEVERITY)).toContain(
-            "A person or software system named 'Shared' already exists."
+            "A person or software system named 'Shared' already exists"
         );
     });
 
@@ -610,7 +610,7 @@ workspace {
         const main = docs.get('main.dsl')!;
 
         expect(messages(main, ERROR_SEVERITY)).toContain(
-            "A person or software system named 'Shared' already exists."
+            "A person or software system named 'Shared' already exists"
         );
     });
 
@@ -631,7 +631,7 @@ softwareSystem "Shared"
 
         expect(messages(main, ERROR_SEVERITY)).toHaveLength(0);
         expect(messages(fragment, ERROR_SEVERITY)).toContain(
-            "A person or software system named 'Shared' already exists."
+            "A person or software system named 'Shared' already exists"
         );
     });
 
@@ -672,7 +672,7 @@ softwareSystem "Shared"
         const main = docs.get('main.dsl')!;
 
         expect(messages(main, ERROR_SEVERITY).filter(m => m.includes('already exists'))).toEqual([
-            "A person or software system named 'Shared' already exists."
+            "A person or software system named 'Shared' already exists"
         ]);
     });
 
@@ -1064,7 +1064,7 @@ workspace {
 
         expect(doc.parseResult.parserErrors).toHaveLength(0);
         expect(messages(doc, ERROR_SEVERITY)).toContain(
-            '!element target "r1" could not be found.'
+            'An element identified by "r1" could not be found'
         );
     });
 
@@ -1129,7 +1129,7 @@ workspace {
 
         expect(doc.parseResult.parserErrors).toHaveLength(0);
         expect(messages(doc, ERROR_SEVERITY)).toContain(
-            '!element target "zzz" could not be found.'
+            'An element identified by "zzz" could not be found'
         );
     });
 
@@ -1190,7 +1190,7 @@ workspace {
         // A dangling form-1 reference must not be reported as a form-2 lookup of the
         // left-hand assignment id; Langium reports the unresolved reference itself.
         expect(messages(doc, ERROR_SEVERITY)).not.toContain(
-            '!element target "ext1" could not be found.'
+            'An element identified by "ext1" could not be found'
         );
     });
 });

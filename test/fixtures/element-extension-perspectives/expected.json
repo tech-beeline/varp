@@ -1,0 +1,61 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "softwareSystems" : [ {
+      "documentation" : { },
+      "id" : "1",
+      "name" : "System",
+      "perspectives" : [ {
+        "description" : "Also added by the extension",
+        "name" : "Beta",
+        "value" : "Second"
+      }, {
+        "description" : "Added by the extension",
+        "name" : "Zulu",
+        "url" : "https://example.com/zulu",
+        "value" : "Overlay"
+      } ],
+      "properties" : {
+        "structurizr.dsl.identifier" : "system"
+      },
+      "tags" : "Element,Software System,Extended"
+    } ]
+  },
+  "name" : "Element Extension Perspectives",
+  "properties" : {
+    "structurizr.inspection.error" : "4",
+    "structurizr.dsl" : "d29ya3NwYWNlICJFbGVtZW50IEV4dGVuc2lvbiBQZXJzcGVjdGl2ZXMiIHsNCg0KICAgIG1vZGVsIHsNCiAgICAgICAgc3lzdGVtID0gc29mdHdhcmVTeXN0ZW0gIlN5c3RlbSINCg0KICAgICAgICAhZWxlbWVudCBzeXN0ZW0gew0KICAgICAgICAgICAgdGFncyAiRXh0ZW5kZWQiDQogICAgICAgICAgICBwZXJzcGVjdGl2ZXMgew0KICAgICAgICAgICAgICAgIHBlcnNwZWN0aXZlICJadWx1IiB7DQogICAgICAgICAgICAgICAgICAgIGRlc2NyaXB0aW9uICJBZGRlZCBieSB0aGUgZXh0ZW5zaW9uIg0KICAgICAgICAgICAgICAgICAgICB2YWx1ZSAiT3ZlcmxheSINCiAgICAgICAgICAgICAgICAgICAgdXJsICJodHRwczovL2V4YW1wbGUuY29tL3p1bHUiDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgICAgIHBlcnNwZWN0aXZlICJCZXRhIiB7DQogICAgICAgICAgICAgICAgICAgIGRlc2NyaXB0aW9uICJBbHNvIGFkZGVkIGJ5IHRoZSBleHRlbnNpb24iDQogICAgICAgICAgICAgICAgICAgIHZhbHVlICJTZWNvbmQiDQogICAgICAgICAgICAgICAgfQ0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQogICAgfQ0KDQogICAgdmlld3Mgew0KICAgICAgICBzeXN0ZW1jb250ZXh0IHN5c3RlbSB7DQogICAgICAgICAgICBpbmNsdWRlICoNCiAgICAgICAgICAgIGF1dG9sYXlvdXQNCiAgICAgICAgfQ0KICAgIH0NCg0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "systemContextViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "generatedKey" : true,
+      "key" : "SystemContext-001",
+      "name" : "System Context View: System",
+      "order" : 1,
+      "softwareSystemId" : "1"
+    } ]
+  }
+}

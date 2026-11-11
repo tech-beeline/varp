@@ -23,9 +23,11 @@ import {
     LangiumSharedCoreServices,
     Mutable,
     ParserOptions,
+    ParseResult,
     TextDocument,
 } from 'langium';
 import { URI } from 'vscode-uri';
+import { recoverParseResult } from './c4-parse-recovery';
 
 /**
  * Removes a single leading UTF-8 byte order mark (\uFEFF) from the given text.
@@ -73,6 +75,21 @@ export class C4LangiumDocumentFactory extends DefaultLangiumDocumentFactory {
             return super.createAsync(uri, stripBom(content), cancelToken);
         }
         return super.createAsync(uri, content, cancelToken);
+    }
+
+    protected override parse<T extends AstNode>(uri: URI, text: string, options?: ParserOptions): ParseResult<T> {
+        const services = this.serviceRegistry.getServices(uri);
+        return recoverParseResult(text, masked => services.parser.LangiumParser.parse<T>(masked, options));
+    }
+
+    protected override async parseAsync<T extends AstNode>(
+        uri: URI,
+        text: string,
+        _cancellationToken: Cancellation.CancellationToken,
+    ): Promise<ParseResult<T>> {
+        // Recovery needs several parse attempts side by side, and the default async
+        // parser only wraps the synchronous one in a promise.
+        return this.parse<T>(uri, text);
     }
 
     override async update<T extends AstNode = AstNode>(

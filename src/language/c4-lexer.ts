@@ -67,9 +67,9 @@ const IDENTIFIER_KEYWORDS = new Set([
 const LEXER_KEYWORDS = new Set(['THIS_KW', 'INCLUDE_KW', 'EXCLUDE_KW']);
 
 /**
- * Literal keywords that the lexer no longer matches itself: `UNQUOTED_STRING`
- * covers them and `C4Lexer` retags the token by its image. A keyword left in the
- * token table costs a match attempt at every input position.
+ * Literal keywords recognised through `UNQUOTED_STRING`: `C4Lexer` retags the token
+ * by its image, so a keyword kept in the token table would only add a match attempt
+ * at every input position.
  */
 const KEYWORD_LITERALS = new WeakMap<TokenType, KeywordInfo>();
 
@@ -206,11 +206,24 @@ export class C4Lexer extends DefaultLexer {
             if (keyword === null) {
                 continue;
             }
+            // A keyword directly before an arrow is the source of a relationship, not
+            // the keyword that opens a declaration. The reference implementation decides
+            // by the second token of the line; keeping the token an identifier lets the
+            // parser make the same decision before it commits to a block entry.
+            if (!quoted && isRelationshipAhead(tokens[i + 1])) {
+                continue;
+            }
             token.tokenType = keyword;
             token.tokenTypeIdx = keyword.tokenTypeIdx ?? token.tokenTypeIdx;
         }
         return result;
     }
+}
+
+/** Whether the token starts the arrow of a relationship. */
+function isRelationshipAhead(token: { image: string } | undefined): boolean {
+    return token !== undefined
+        && (token.image === '->' || token.image === '-/>' || token.image === '--');
 }
 
 /** The token type a quoted keyword stands for, or `undefined` for a plain string. */

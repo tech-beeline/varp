@@ -16,7 +16,7 @@
 
 import { AstNode, AstUtils, Reference, isReference } from 'langium';
 import { URI } from 'vscode-uri';
-import { flatId, C4Utils, archetypeChain, archetypeInstanceType, declaredIdentifier, type FlatIdResolvers } from './c4-utils';
+import { flatId, C4Utils, archetypeChain, archetypeInstanceType, declaredIdentifier, sortPerspectives, type FlatIdResolvers } from './c4-utils';
 import { parseQuotedFilterText, type QuotedFilterParseResult } from './c4-quoted-filter';
 import { encodePlantUml } from './plantuml-encoder';
 import { layoutDot } from './graphviz-layout';
@@ -2182,7 +2182,7 @@ class JsonGenerator {
                 perspectives.push(perspective);
             }
         }
-        return perspectives.length > 0 ? perspectives : undefined;
+        return perspectives.length > 0 ? sortPerspectives(perspectives) : undefined;
     }
 
     /** Returns the description text for a node, with constant substitution applied. */
@@ -7620,6 +7620,8 @@ class JsonGenerator {
             }
             if (Object.keys(props).length > 0) { mods ??= {}; mods.properties = props; }
         }
+        const perspectives = this.perspectivesToJson(ext.perspectivesBlocks);
+        if (perspectives) { mods ??= {}; mods.perspectives = perspectives; }
         return mods;
     }
 
@@ -7640,6 +7642,15 @@ class JsonGenerator {
         if (mods.url !== undefined) jsonElement.url = mods.url;
         if (mods.properties) {
             jsonElement.properties = { ...(jsonElement.properties ?? {}), ...mods.properties };
+        }
+        if (mods.perspectives) {
+            // The element's own perspectives are emitted by the enricher, so only the
+            // ones from overlays are present here. A name that is already set keeps
+            // its entry, and the result is ordered the way the reference exports it.
+            const existing: any[] = Array.isArray(jsonElement.perspectives) ? jsonElement.perspectives : [];
+            const names = new Set(existing.map((perspective: any) => perspective?.name));
+            const additions = mods.perspectives.filter((perspective: any) => !names.has(perspective?.name));
+            jsonElement.perspectives = sortPerspectives(existing.concat(additions));
         }
     }
 

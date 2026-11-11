@@ -33,6 +33,8 @@ import { C4GeneratorHandler } from './c4-json-generator-handler';
 import { ViewKeyProvider } from './c4-viewkey-provider';
 import { C4ParserErrorMessageProvider } from './c4-parser-error-handler';
 import { C4Lexer, C4TokenBuilder } from './c4-lexer';
+import { C4Linker } from './c4-linker';
+import { C4DocumentValidator } from './c4-document-validator';
 import { createC4CompletionParser } from './c4-completion-parser';
 
 export type C4AddedServices = {
@@ -86,9 +88,11 @@ export const C4Module: Module<C4Services, PartialLangiumServices & C4AddedServic
     references: {
         NameProvider: () => new C4NameProvider(),
         ScopeProvider: (services: C4Services) => new C4ScopeProvider(services),
+        Linker: (services: C4Services) => new C4Linker(services),
     },
    validation: {
-       C4Validator: () => new C4Validator()
+       C4Validator: () => new C4Validator(),
+       DocumentValidator: (services: C4Services) => new C4DocumentValidator(services)
    },
     lsp: {
         CompletionProvider: (services: C4Services) => new C4CompletionProvider(services),

@@ -19,7 +19,7 @@ import { IParserErrorMessageProvider, IToken, TokenType } from 'chevrotain';
 import { allowedTokensByBlock } from './c4-tokens';
 
 export class C4ParserErrorMessageProvider extends LangiumParserErrorMessageProvider implements IParserErrorMessageProvider {
-    
+
     override buildMismatchTokenMessage(options: {
         expected: TokenType;
         actual: IToken;
@@ -28,23 +28,104 @@ export class C4ParserErrorMessageProvider extends LangiumParserErrorMessageProvi
     }): string {
         const { ruleName } = options;
 
-        // Static view contexts
-        if (ruleName.startsWith('SystemLandscapeView')) {
-            return `Unexpected tokens (expected: ${allowedTokensByBlock['SystemLandscapeView'].join(', ')}).`;
-        }
-        if (ruleName.startsWith('SystemContextView')) {
-            return `Unexpected tokens (expected: ${allowedTokensByBlock['SystemContextView'].join(', ')}).`;
-        }
-        if (ruleName.startsWith('ContainerView')) {
-            return `Unexpected tokens (expected: ${allowedTokensByBlock['ContainerView'].join(', ')}).`;
-        }
-        if (ruleName.startsWith('ComponentView')) {
-            return `Unexpected tokens (expected: ${allowedTokensByBlock['ComponentView'].join(', ')}).`;
+        // The input ended inside a block. The reference parser reports the same and
+        // names the likely cause, which a token list alone does not.
+        if (options.actual.tokenType.name === 'EOF') {
+            const tokens = this.expectedTokens(ruleName);
+            const expectedList = tokens ? ` (expected: ${tokens.join(', ')})` : '';
+            return `Unexpected end of DSL content${expectedList} - are one or more closing curly braces missing?`;
         }
 
-        // Try to match ruleName against known block keys
-        // Order matters: check more specific names first (e.g. 'ContainerInstance' before 'Container')
-        const exactKey = [
+        // The document has ended and the token belongs to no block. A block-level
+        // token list would be misleading here, so only the token is reported.
+        if (options.expected.name === 'EOF') {
+            return `Unexpected token '${options.actual.image}'`;
+        }
+
+        // A group is declared with a name and a body, so the brace is part of the
+        // declaration itself rather than a token this block accepts.
+        if (ruleName.startsWith('Group') && options.expected.name === '{') {
+            return 'Expected: group <name> {';
+        }
+
+        const expected = this.buildExpectedMessage(ruleName);
+        if (expected !== undefined) {
+            return expected;
+        }
+
+        return super.buildMismatchTokenMessage(options);
+    }
+
+    override buildNoViableAltMessage(options: {
+        expectedPathsPerAlt: TokenType[][][];
+        actual: IToken[];
+        previous: IToken;
+        customUserDescription: string;
+        ruleName: string;
+    }): string {
+        // Without this the default message lists every lookahead path of the
+        // alternatives, which for a block with many entries is hundreds of lines.
+        const expected = this.buildExpectedMessage(options.ruleName);
+        if (expected !== undefined) {
+            return expected;
+        }
+
+        return super.buildNoViableAltMessage(options);
+    }
+
+    override buildNotAllInputParsedMessage(options: {
+        firstRedundant: IToken;
+        ruleName: string;
+    }): string {
+        return `Unexpected token '${options.firstRedundant.image}'`;
+    }
+
+    override buildEarlyExitMessage(options: {
+        expectedIterationPaths: TokenType[][];
+        actual: IToken[];
+        previous: IToken;
+        customUserDescription: string;
+        ruleName: string;
+    }): string {
+        // The default message explains the predicted paths of the first iteration,
+        // which describes the grammar instead of what the block accepts.
+        const expected = this.buildExpectedMessage(options.ruleName);
+        if (expected !== undefined) {
+            return expected;
+        }
+
+        return super.buildEarlyExitMessage(options);
+    }
+
+    /** The message naming what the block of the given rule accepts, or `undefined` for an unknown rule. */
+    private buildExpectedMessage(ruleName: string): string | undefined {
+        // A property block holds no keywords: every entry is a name and a value.
+        if (ruleName.startsWith('Propert')) {
+            return 'Expected: <name> <value>';
+        }
+        const tokens = this.expectedTokens(ruleName);
+        return tokens === undefined ? undefined : `Unexpected tokens (expected: ${tokens.join(', ')}).`;
+    }
+
+    /** The keywords the block of the given rule accepts, or `undefined` for an unknown rule. */
+    private expectedTokens(ruleName: string): string[] | undefined {
+        // Static view contexts
+        if (ruleName.startsWith('SystemLandscapeView')) {
+            return allowedTokensByBlock['SystemLandscapeView'];
+        }
+        if (ruleName.startsWith('SystemContextView')) {
+            return allowedTokensByBlock['SystemContextView'];
+        }
+        if (ruleName.startsWith('ContainerView')) {
+            return allowedTokensByBlock['ContainerView'];
+        }
+        if (ruleName.startsWith('ComponentView')) {
+            return allowedTokensByBlock['ComponentView'];
+        }
+
+        // Rule names of the generated rules, longest first: 'ContainerInstance'
+        // has to win over 'Container', and 'SoftwareSystemInstance' over 'SoftwareSystem'.
+        const knownBlocks = [
             'Workspace', 'ModelBlock',
             'SoftwareSystemInstance', 'SoftwareSystem',
             'ContainerInstance', 'Container',
@@ -66,27 +147,19 @@ export class C4ParserErrorMessageProvider extends LangiumParserErrorMessageProvi
             'Group'
         ];
 
-        for (const key of exactKey) {
-            if (ruleName.startsWith(key)) {
-                const tokens = allowedTokensByBlock[key];
+        for (const block of knownBlocks) {
+            if (ruleName.startsWith(block)) {
+                const tokens = allowedTokensByBlock[block];
                 if (tokens) {
-                    return `Unexpected tokens (expected: ${tokens.join(', ')}).`;
+                    return tokens;
                 }
             }
         }
 
         // Fallback for ViewsBlock
         if (ruleName.startsWith('Views')) {
-            return `Unexpected tokens (expected: ${allowedTokensByBlock['ViewsBlock'].join(', ')}).`;
+            return allowedTokensByBlock['ViewsBlock'];
         }
-
-        return super.buildMismatchTokenMessage(options);
-    }
-
-    override buildNotAllInputParsedMessage(options: {
-        firstRedundant: IToken;
-        ruleName: string;
-    }): string {
-        return `Unexpected tokens.`;
+        return undefined;
     }
 }

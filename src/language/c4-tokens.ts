@@ -327,9 +327,10 @@ export const allowedTokensByBlock: Record<string, string[]> = {
         '!script', '!plugin', '!const', '!include'
     ],
     ElementExtension: [
-        'description', 'technology', 'tags', 'url', 'properties', '->',
+        'description', 'technology', 'tags', 'url', 'properties', 'perspectives', '->',
         'deploymentNode', 'infrastructureNode', 'containerInstance',
         'softwareSystemInstance', 'instanceof', 'group', 'container', 'component',
+        'archetype instance',
         '!docs', '!decisions', '!impliedRelationships',
         '!script', '!plugin', '!const', '!include'
     ],

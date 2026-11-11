@@ -1246,6 +1246,7 @@ fragment ElementExtensionBody:
         | NL+ tagsProps+=TagProperty
         | NL+ urlProps+=UrlProperty
         | NL+ properties+=PropertiesBlock
+        | NL+ perspectivesBlocks+=PerspectivesBlock
         | NL+ nodes+=DeploymentNode
         | NL+ infrastructureNodes+=InfrastructureNode
         | NL+ softwareSystemInstances+=SoftwareSystemInstance
@@ -1459,7 +1460,7 @@ Group:
 // The body is mandatory, as in Structurizr, where the directive is only recognised
 // together with the context start token, and it may nest further -/> directives.
 NoRelationship:
-    (source=[NamedElement:Identifier] | sourceThis?=THIS_KW)
+    (source=[NamedElement:RelationshipSource] | sourceThis?=THIS_KW)
     NO_ARROW
     (target=[NamedElement:Identifier] | targetThis?=THIS_KW)
     (description=STRING)?
@@ -1478,7 +1479,7 @@ Relationships:
 Relationship:
     Id?
     (
-        (source=[RelationshipMember:Identifier] | sourceThis?=THIS_KW)
+        (source=[RelationshipMember:RelationshipSource] | sourceThis?=THIS_KW)
         (arrow=ARROW | ('--' archetype=[ArchetypeDefinition:Identifier] ARROW))
         (target=[RelationshipMember:Identifier] | targetThis?=THIS_KW)
     )
@@ -1943,6 +1944,17 @@ UnquotedIdentifier returns string:
     | KROKI_KW
     | INCLUDE_KW
     | EXCLUDE_KW;
+
+// Source of a relationship. Keywords are absent on purpose: the lexer keeps a keyword
+// there an `UNQUOTED_STRING` when the next token is an arrow, the same way the reference
+// implementation decides by the second token of the line. Without this, a block entry is
+// picked by the first token alone, and a keyword that the block does not accept as a
+// declaration is read as the source of a relationship instead of being reported.
+RelationshipSource returns string:
+    UNQUOTED_STRING
+    | RELATIONSHIP_SOURCE
+    | ASSIGNMENT
+    | STRING;
 
 // Keywords that may be read as the name of an element that opens a line. Adding one
 // here changes how that line is dispatched: a reference is matched before a keyword-led

@@ -37,6 +37,43 @@ function diagnostics(doc: LangiumDocument): string[] {
 }
 
 describe('element extension bodies', () => {
+    it('reports an unknown word in !element as an unexpected token', async () => {
+        const doc = await buildDocument(`
+workspace {
+    model {
+        sys = softwareSystem "System"
+        !element sys {
+            1
+        }
+    }
+}
+`);
+
+        const errors = diagnostics(doc);
+        expect(errors).toHaveLength(1);
+        expect(errors[0]).toContain("Unexpected token '1' (expected: ");
+        expect(errors[0]).toContain('tags');
+        expect(errors[0]).toContain('archetype instance');
+        expect(errors[0]).toContain("No archetype named '1' is defined.");
+    });
+
+    it('lists the keywords of the enclosing block for an unknown archetype name', async () => {
+        const doc = await buildDocument(`
+workspace {
+    model {
+        sys = softwareSystem "System"
+        zz
+    }
+}
+`);
+
+        const errors = diagnostics(doc);
+        expect(errors).toHaveLength(1);
+        expect(errors[0]).toContain("Unexpected token 'zz' (expected: ");
+        expect(errors[0]).toContain('softwaresystem');
+        expect(errors[0]).toContain('archetype instance');
+    });
+
     it('accepts an archetype instance with a name inside !element', async () => {
         const doc = await buildDocument(`
 workspace {

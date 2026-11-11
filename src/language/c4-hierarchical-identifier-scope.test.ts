@@ -82,7 +82,7 @@ describe('hierarchical identifier references', () => {
         const result = await relationshipOf(fixtureProject(ENTRY('c -> s.c1')));
         expect(result.parserErrors).toBe(0);
         expect(result.source).toBeNull();
-        expect(result.sourceError).toContain("Could not resolve reference to RelationshipMember named 'c'");
+        expect(result.sourceError).toContain('The source element "c" does not exist');
         expect(result.destination).toBe('Container#c1');
     }, 60000);
 
@@ -118,7 +118,7 @@ c -> c1 "Sibling"
         });
         expect(result.parserErrors).toBe(0);
         expect(result.source).toBeNull();
-        expect(result.sourceError).toContain("Could not resolve reference to RelationshipMember named 'comp'");
+        expect(result.sourceError).toContain('The source element "comp" does not exist');
         expect(result.destination).toBe('Container#c1');
     }, 60000);
 });

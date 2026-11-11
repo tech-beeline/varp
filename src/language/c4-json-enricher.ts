@@ -24,7 +24,7 @@
 import { AstUtils, LangiumSharedCoreServices, type AstNode, type FileSystemNode } from 'langium';
 import { base64EncodeBytes } from './c4-base64';
 import { Utils, URI } from 'vscode-uri';
-import { flatId, declaredIdentifier, contextElement } from './c4-utils';
+import { flatId, declaredIdentifier, contextElement, sortPerspectives } from './c4-utils';
 import { base64EncodeUtf8, isDslPortable, isDslSourceRetained, retainedDslText } from './c4-dsl-source';
 import {
     AdrsDirective,
@@ -382,7 +382,7 @@ export class C4JsonEnricher {
             const existing = Array.isArray(target.perspectives) ? target.perspectives : [];
             const ownNames = new Set(ownPerspectives.map((p: any) => p?.name).filter((n: any) => typeof n === 'string'));
             const additions = existing.filter((p: any) => typeof p?.name !== 'string' || !ownNames.has(p.name));
-            target.perspectives = [...ownPerspectives, ...additions];
+            target.perspectives = sortPerspectives([...ownPerspectives, ...additions]);
         }
         if (target.technology === undefined) {
             const tech = this.firstPropValue(node.techProps);
@@ -451,7 +451,11 @@ export class C4JsonEnricher {
         return result;
     }
 
-    /** Reads the first PerspectivesBlock items into plain JSON objects. */
+    /**
+     * Reads the perspectives of an element. A perspective is written either as a
+     * block (`perspective "Name" { description … value … }`) or inline
+     * (`"Name" "Description"`), and both forms end up in the same JSON shape.
+     */
     private collectPerspectives(blocks: any[] | undefined): any[] | undefined {
         const items = blocks?.at(0)?.items;
         if (!Array.isArray(items) || items.length === 0) return undefined;
@@ -460,9 +464,11 @@ export class C4JsonEnricher {
             const name = typeof item?.name === 'string' ? item.name.replace(/^["']|["']$/g, '') : undefined;
             if (!name) continue;
             const perspective: any = { name };
-            const desc = typeof item?.description === 'string' ? item.description.replace(/^["']|["']$/g, '') : undefined;
+            const desc = this.firstPropValue(item?.descriptionProps)
+                ?? (typeof item?.description === 'string' ? item.description.replace(/^["']|["']$/g, '') : undefined);
             if (desc) perspective.description = desc;
-            const value = typeof item?.value === 'string' ? item.value.replace(/^["']|["']$/g, '') : undefined;
+            const value = this.firstPropValue(item?.valueProps)
+                ?? (typeof item?.value === 'string' ? item.value.replace(/^["']|["']$/g, '') : undefined);
             if (value) perspective.value = value;
             const url = this.firstPropValue(item?.urlProps);
             if (url) perspective.url = url;

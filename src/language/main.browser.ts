@@ -25,10 +25,10 @@
  * 2. Uses EmptyFileSystem, but extends it: the extension host owns the workspace
  *    there, so local reads are forwarded to it over LSP (c4/readFile,
  *    c4/readDirectory, c4/readBinary, c4/stat, c4/exists)
- * 3. Registers the same c4/getContentForUri, c4/getFullContentForUri,
- *    c4/getThemes and c4/getRootUri handlers as the Node.js version, but
- *    not the Node.js-only c4/applyTextMeasurements and c4/listProjects;
- *    getContentForUri omits textMeasurements (the webview measures text itself)
+ * 3. Registers the same custom request handlers as the Node.js version, except
+ *    c4/listProjects (only the Node.js-only MCP server queries it);
+ *    getContentForUri omits textMeasurements (the webview measures text itself
+ *    and sends the widths back through c4/applyTextMeasurements)
  * 4. The FileSystemProvider patch for remote URLs is shared with the Node.js version
  * 
  * Both versions share the same service creation logic via createC4Services().
@@ -133,6 +133,14 @@ connection.onRequest('c4/getViewRefs', (params: { uri: string }) => {
         rootUri: C4.generation.C4GeneratorHandler.getRootUri(params.uri),
         views: C4.generation.C4GeneratorHandler.getViewRefs(params.uri)
     };
+});
+
+// Re-runs the auto-layout of the cached workspace with the text widths the webview
+// measured after the first render. The renderer sizes a frame from its measured
+// name/metadata, so the layout has to reserve that space - otherwise the frame
+// overlaps its right-hand neighbour. Returns the views to re-render.
+connection.onRequest('c4/applyTextMeasurements', async (params: { uri: string; generation: number; widths: Record<string, number> }) => {
+    return await C4.generation.C4GeneratorHandler.applyTextMeasurements(params.uri, params.generation, params.widths);
 });
 
 // Applies a drawio file's layout to the cached view (drawio layout import). The

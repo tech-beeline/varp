@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import { NodeFileSystem } from 'langium/node';
 import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
+import { withUnsupportedSyncMethods } from './c4-binary-file-system';
 
 const ROOT = join(tmpdir(), 'c4-path-completion');
 
@@ -55,6 +56,30 @@ function labels(items: any[]): string[] {
     return items.map(item => item.label);
 }
 
+/**
+ * Completes with a file system that only answers asynchronous reads, like the web
+ * language server, whose workspace is reached over LSP.
+ */
+async function completeTemplateAsyncOnly(template: string) {
+    const provider = withUnsupportedSyncMethods(NodeFileSystem.fileSystemProvider());
+    const services = createC4Services({
+        connection: undefined as any,
+        fileSystemProvider: () => provider
+    }).C4;
+    const uri = URI.file(join(ROOT, 'workspace.dsl'));
+    const text = template.replace('<C>', '');
+    writeFileSync(uri.fsPath, text);
+    const document = services.shared.workspace.LangiumDocumentFactory.fromString(text, uri);
+    services.shared.workspace.LangiumDocuments.addDocument(document);
+    await services.shared.workspace.DocumentBuilder.build([document]);
+
+    const result: any = await services.lsp.CompletionProvider!.getCompletion(document, {
+        textDocument: { uri: uri.toString() },
+        position: document.textDocument.positionAt(template.indexOf('<C>')),
+    } as any);
+    return (result?.items ?? []) as any[];
+}
+
 describe('path completion', () => {
     it('offers the dsl files and folders for !include', async () => {
         const items = await completeTemplate(`workspace {
@@ -87,6 +112,16 @@ describe('path completion', () => {
 }`);
 
         expect(labels(items)).toEqual(['inner.dsl']);
+    });
+
+    it('offers paths when the file system has asynchronous reads only', async () => {
+        const items = await completeTemplateAsyncOnly(`workspace {
+    model {
+        !include <C>
+    }
+}`);
+
+        expect(labels(items)).toEqual(['docs/', 'models/', 'alpha.dsl', 'beta.dsl']);
     });
 
     it('offers folders for !docs', async () => {

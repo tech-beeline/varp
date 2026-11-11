@@ -16,6 +16,16 @@ const browserAliases = {
     'crypto': 'crypto-browserify'
 };
 
+// Some dependencies (e.g. randombytes, pulled in by crypto-browserify) read the
+// Node-only `global`, which the browser does not define.
+const browserDefines = {
+    global: 'globalThis'
+};
+
+// Node-oriented dependencies also read `process`; the browser bundles get the shim
+// below instead.
+const browserInject = ['src/shims/process.browser.ts'];
+
 const contexts = [
     esbuild.build({
         ...common,
@@ -39,6 +49,8 @@ const contexts = [
         platform: 'browser',
         external: ['vscode'],
         format: 'cjs',
+        define: browserDefines,
+        inject: browserInject,
         alias: { ...browserAliases, 'graphviz-layout-glue': webGlue }
     }),
     esbuild.build({
@@ -47,6 +59,8 @@ const contexts = [
         outfile: 'dist/server.browser.js',
         platform: 'browser',
         format: 'iife',
+        define: browserDefines,
+        inject: browserInject,
         alias: { ...browserAliases, 'graphviz-layout-glue': webGlue }
     })
 ];

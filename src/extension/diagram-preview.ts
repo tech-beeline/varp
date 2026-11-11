@@ -356,6 +356,11 @@ export class DiagramPreview {
         return this.renderedGeneration;
   }
 
+  /** Whether the webview has built the JSON the preview currently holds. */
+  public isRendered(): boolean {
+        return this.renderedGeneration !== undefined && this.renderedGeneration === this.currentJsonGeneration;
+  }
+
   public getCurrentViewKey(): string | undefined {
         return this.currentViewKey;
   }
@@ -522,10 +527,19 @@ export class DiagramPreview {
                 }
               });
             } else if (message.command === 'export-svg') {
-              // Export current diagram to SVG
-              structurizr.diagram.exportCurrentDiagramToSVG({ metadata: true, crop: true }, function(svgMarkup) {
-                vscode.postMessage({ command: 'svg-result', svg: svgMarkup });
-              });
+              // Export current diagram to SVG. A request that arrives before the
+              // diagram is built has to answer, otherwise the caller waits forever.
+              if (!structurizr.diagram) {
+                vscode.postMessage({ command: 'svg-result', error: 'the diagram is not built yet' });
+                return;
+              }
+              try {
+                structurizr.diagram.exportCurrentDiagramToSVG({ metadata: true, crop: true }, function(svgMarkup) {
+                  vscode.postMessage({ command: 'svg-result', svg: svgMarkup });
+                });
+              } catch (error) {
+                vscode.postMessage({ command: 'svg-result', error: String(error) });
+              }
               } else if (message.command === 'views-updated') {
                 applyViewUpdates(message);
               } else if (message.viewKey !== undefined) {

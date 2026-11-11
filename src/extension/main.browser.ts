@@ -27,8 +27,11 @@ export function activate(context: vscode.ExtensionContext): void {
     const serverMain = vscode.Uri.joinPath(context.extensionUri, 'dist', 'server.browser.js');
     const worker = new Worker(serverMain.toString(true));
 
+    // The workspace scheme differs between web hosts (vscode-vfs, a vendor-specific
+    // scheme, or `file` when a local folder is opened), so only the language is
+    // matched here.
     const clientOptions: LanguageClientOptions = {
-        documentSelector: [{ scheme: 'file', language: 'c4' }, { scheme: 'untitled', language: 'c4' }]
+        documentSelector: [{ language: 'c4' }]
     };
 
     client = new LanguageClient('c4', 'C4', worker, clientOptions);

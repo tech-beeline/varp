@@ -18,3 +18,5 @@ plans/
 .vscode/*
 .kilo/*
 native/graphviz/build*/
+.vscode-test-web/
+test/web/dist/

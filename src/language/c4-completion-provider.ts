@@ -143,26 +143,26 @@ export class C4CompletionProvider extends DefaultCompletionProvider {
         });
     }
 
-    override getCompletion(document: LangiumDocument, params: CompletionParams): ReturnType<DefaultCompletionProvider['getCompletion']> {
+    override async getCompletion(document: LangiumDocument, params: CompletionParams): ReturnType<DefaultCompletionProvider['getCompletion']> {
         const values = this.valueCompletionAt(document, params.position);
         if (values) {
-            return Promise.resolve({ isIncomplete: false, items: values });
+            return { isIncomplete: false, items: values };
         }
         const expression = this.expressionAt(document, params.position);
         if (expression) {
-            return Promise.resolve({ isIncomplete: false, items: expression });
+            return { isIncomplete: false, items: expression };
         }
         const declaration = this.declarationValueAt(document, params.position);
         if (declaration) {
-            return Promise.resolve({ isIncomplete: false, items: declaration });
+            return { isIncomplete: false, items: declaration };
         }
-        const paths = this.pathCompletionAt(document, params.position);
+        const paths = await this.pathCompletionAt(document, params.position);
         if (paths) {
-            return Promise.resolve({ isIncomplete: false, items: paths });
+            return { isIncomplete: false, items: paths };
         }
         const keywords = this.keywordCompletionAt(document, params.position);
         if (keywords) {
-            return Promise.resolve({ isIncomplete: false, items: keywords });
+            return { isIncomplete: false, items: keywords };
         }
         return super.getCompletion(document, params);
     }
@@ -170,8 +170,11 @@ export class C4CompletionProvider extends DefaultCompletionProvider {
     /**
      * Files and folders next to the current document for the path directives
      * (`!include`, `!docs`, `!adrs`, `!script`, `!plugin`, `icon`).
+     *
+     * The directory is read asynchronously: the web language server reaches the
+     * workspace only over LSP and has no synchronous file system.
      */
-    private pathCompletionAt(document: LangiumDocument, position: Position): CompletionItem[] | undefined {
+    private async pathCompletionAt(document: LangiumDocument, position: Position): Promise<CompletionItem[] | undefined> {
         const text = document.textDocument.getText();
         const offset = document.textDocument.offsetAt(position);
         const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
@@ -193,7 +196,7 @@ export class C4CompletionProvider extends DefaultCompletionProvider {
         const folder = directory ? Utils.resolvePath(base, directory) : base;
         let entries: FileSystemNode[];
         try {
-            entries = this.fileSystem.readDirectorySync(folder);
+            entries = await this.fileSystem.readDirectory(folder);
         } catch {
             return undefined;
         }

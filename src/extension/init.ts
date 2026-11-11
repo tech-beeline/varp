@@ -50,6 +50,10 @@ const fitnessResultsView = new FitnessResultsView();
 // Guards against registering the notification handler more than once.
 let refreshNotificationRegistered = false;
 
+/** How long an export waits for the webview to build the delivered JSON. */
+const EXPORT_RENDER_TIMEOUT_MS = 30_000;
+const EXPORT_RENDER_POLL_MS = 100;
+
 /**
  * Sets the Language Client used for communicating with the language server backend.
  * Called after the language server starts successfully.
@@ -308,6 +312,22 @@ function replaceViewInPayload(json: any, view: any): void {
 }
 
 /**
+ * Waits for the webview to finish building the workspace it was sent. An export
+ * requested right after the preview opens would otherwise reach a webview that
+ * has no diagram yet.
+ */
+async function waitForPreviewRender(preview: DiagramPreview): Promise<boolean> {
+    const deadline = Date.now() + EXPORT_RENDER_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+        if (preview.isRendered()) {
+            return true;
+        }
+        await new Promise(resolve => setTimeout(resolve, EXPORT_RENDER_POLL_MS));
+    }
+    return preview.isRendered();
+}
+
+/**
  * Initializes all VS Code extension components: views, commands, and event handlers.
  * 
  * Sets up:
@@ -516,6 +536,8 @@ export function init(context: ExtensionContext): void {
                 preview.updateWebView(currentJson, currentViewKey || '');
             }
 
+            await waitForPreviewRender(preview);
+
             // Wait for the webview to export to DrawIO format via postMessage
             const drawioResult = await new Promise<any>((resolve) => {
                 const panel = preview.getPanel();
@@ -611,6 +633,8 @@ export function init(context: ExtensionContext): void {
     );
 
     // ===== Command: Export to SVG =====
+    // Returns the exported markup so callers that cancel the save dialog (or
+    // automation) can use the diagram without writing a file.
     context.subscriptions.push(
         commands.registerCommand('varp.export-svg', async () => {
             const currentJson = preview.getCurrentJson();
@@ -624,6 +648,8 @@ export function init(context: ExtensionContext): void {
             if (!preview.isOpen()) {
                 preview.updateWebView(currentJson, currentViewKey || '');
             }
+
+            await waitForPreviewRender(preview);
 
             // Wait for the webview to render and export SVG via postMessage
             const svgResult = await new Promise<string | null>((resolve) => {
@@ -643,7 +669,7 @@ export function init(context: ExtensionContext): void {
 
             if (!svgResult) {
                 window.showErrorMessage('Failed to export diagram to SVG.');
-                return;
+                return undefined;
             }
 
             const uri = await window.showSaveDialog({
@@ -653,12 +679,13 @@ export function init(context: ExtensionContext): void {
                     : undefined
             });
 
-            if (!uri) return;
+            if (!uri) return svgResult;
 
             const buffer = new TextEncoder().encode(svgResult);
             await workspace.fs.writeFile(uri, buffer);
 
             window.showInformationMessage('Exported diagram to SVG format.');
+            return svgResult;
         })
     );
 

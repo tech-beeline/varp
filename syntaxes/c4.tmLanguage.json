@@ -67,7 +67,7 @@
       "name": "constant.numeric.c4"
     },
     {
-      "match": "(<->|->|-/>|==|!=|&&|\\|\\||~)",
+      "match": "(==|!=|&&|\\|\\||~)",
       "name": "keyword.operator.c4"
     },
     {
@@ -287,19 +287,19 @@
           "match": "(--)([^\\n]*?)(->|-/>)",
           "captures": {
             "1": {
-              "name": "keyword.operator.c4"
+              "name": "keyword.symbol.c4"
             },
             "2": {
               "name": "string.unquoted.relationship.c4"
             },
             "3": {
-              "name": "keyword.operator.c4"
+              "name": "keyword.symbol.c4"
             }
           }
         },
         {
           "match": "(<->|->|-/>)",
-          "name": "keyword.operator.c4"
+          "name": "keyword.symbol.c4"
         }
       ]
     }

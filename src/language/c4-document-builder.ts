@@ -82,6 +82,10 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
         // Step 2-3: Load the targets that no phase has reached and rebuild the
         // documents whose targets became available.
         await this.loadPendingIncludes(cancelToken);
+
+        // Step 4: Re-run validation for the rest of the touched workspaces, so their
+        // diagnostics reflect the new state as well.
+        await this.revalidateWorkspaces(changed, deleted, cancelToken);
     }
 
     /**
@@ -139,6 +143,33 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
         // fragments. update() resets them to Changed, which performs that relink.
         await super.update(toRebuild.map(uri => URI.parse(uri)), [], cancelToken);
         this.awaitingRebuild.clear();
+    }
+
+    /**
+     * Re-runs validation for every document of the workspaces touched by the update.
+     *
+     * Diagnostics are published when a document reaches the Validated phase, while an
+     * update rebuilds only the changed documents and their reference dependents. The
+     * relation this language cares about - a workspace and the files it includes - is
+     * not a reference relation: an included file does not reference the file that
+     * includes it. Without this pass, a file would keep the diagnostics of the
+     * previous state until it is reopened, and files that are not open would never be
+     * refreshed at all.
+     *
+     * The documents are not re-parsed: Langium's `validation: true` build option resets
+     * them to the reference index and runs linking and validation again, which is the
+     * documented way to force re-validation. A pass over a workspace of several
+     * hundred files measures in the hundreds of milliseconds.
+     */
+    private async revalidateWorkspaces(changed: URI[], deleted: URI[], cancelToken?: any): Promise<void> {
+        const roots = new Set([...changed, ...deleted]
+            .map(uri => includeResolver.getRootWorkspaceUri(this.shared, uri.toString())));
+        if (roots.size === 0) return;
+        const documents = (this.langiumDocuments?.all.toArray() ?? []).filter(document =>
+            document.state >= DocumentState.Validated
+            && roots.has(includeResolver.getRootWorkspaceUri(this.shared, document.uri.toString())));
+        if (documents.length === 0) return;
+        await super.build(documents, { validation: true }, cancelToken);
     }
 
     /**

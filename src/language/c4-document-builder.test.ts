@@ -17,6 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { DocumentState, type FileSystemProvider, type LangiumDocument } from 'langium';
 import { URI } from 'vscode-uri';
+import { TextDocument } from 'vscode-languageserver-textdocument';
 import { createC4Services } from './c4-module';
 
 const INCLUDING = 'file:///ws/including.dsl';
@@ -92,6 +93,91 @@ function indexDocuments(files: Record<string, string>) {
     documents.addDocument(factory.fromString(OTHER_CONTENT, URI.parse(OTHER)));
     return { services, documents, including: documents.getDocument(URI.parse(INCLUDING))! };
 }
+
+/** Builds the services and indexes a single workspace document in an in-memory file system. */
+function projectDocuments(files: Record<string, string>, rootUri: URI) {
+    const services = createC4Services({
+        connection: undefined as any,
+        fileSystemProvider: () => memoryFileSystem(files)
+    }).C4;
+    const documents = services.shared.workspace.LangiumDocuments;
+    const factory = services.shared.workspace.LangiumDocumentFactory;
+    const root = factory.fromString(files[rootUri.toString()], rootUri);
+    documents.addDocument(root);
+    return { services, documents, root };
+}
+
+/** Opens the given documents in the editor: their text wins over the file system. */
+function openDocuments(services: any, documents: Record<string, string>) {
+    const textDocuments = services.shared.workspace.TextDocuments;
+    for (const [uri, text] of Object.entries(documents)) {
+        textDocuments.set(TextDocument.create(uri, 'c4', 1, text));
+    }
+}
+
+describe('workspace-wide diagnostics', () => {
+    // The group separator is a workspace-wide model property: the fragment's
+    // diagnostics change when the root document declares it, although the fragment
+    // itself was not edited. The fragment is closed in the editor.
+    const groupRoot = (properties: string) => `workspace {
+    model {
+${properties}        !include "fragment.dsl"
+    }
+}
+`;
+    const GROUP_FRAGMENT = `group "Outer" {
+    group "Inner" {
+        person "User"
+    }
+}
+`;
+    const GROUP_SEPARATOR = `        properties {
+            structurizr.groupSeparator "/"
+        }
+`;
+    const ROOT_URI = URI.parse('file:///ws/root.dsl');
+    const FRAGMENT_URI = URI.parse('file:///ws/fragment.dsl');
+
+    it('refreshes a closed included file when its workspace changes', async () => {
+        const { services, documents, root } = projectDocuments({
+            [ROOT_URI.toString()]: groupRoot(''),
+            [FRAGMENT_URI.toString()]: GROUP_FRAGMENT
+        }, ROOT_URI);
+        openDocuments(services, { [ROOT_URI.toString()]: groupRoot('') });
+        const builder = services.shared.workspace.DocumentBuilder;
+        await builder.build([root], { validation: true });
+        const fragment = documents.getDocument(FRAGMENT_URI)!;
+        expect(messages(fragment).join(' ')).toContain('groupSeparator');
+
+        openDocuments(services, { [ROOT_URI.toString()]: groupRoot(GROUP_SEPARATOR) });
+        await builder.update([ROOT_URI], []);
+
+        expect(messages(fragment).join(' ')).not.toContain('groupSeparator');
+    });
+
+    it('refreshes a closed workspace when an included file changes', async () => {
+        const rootContent = `workspace {
+    model {
+        !include "fragment.dsl"
+        softwareSystem "Shared"
+    }
+}
+`;
+        const { services, root } = projectDocuments({
+            [ROOT_URI.toString()]: rootContent,
+            [FRAGMENT_URI.toString()]: 'softwareSystem "Shared"\n'
+        }, ROOT_URI);
+        openDocuments(services, { [FRAGMENT_URI.toString()]: 'softwareSystem "Shared"\n' });
+        const builder = services.shared.workspace.DocumentBuilder;
+        await builder.build([root], { validation: true });
+        expect(messages(root).join(' ')).toContain("named 'Shared' already exists");
+
+        openDocuments(services, { [FRAGMENT_URI.toString()]: 'person "Other"\n' });
+        await builder.update([FRAGMENT_URI], []);
+
+        expect(messages(root).join(' ')).not.toContain("named 'Shared' already exists");
+    });
+});
 
 describe('include discovery', () => {
     it('loads the includes of documents indexed by the workspace scan', async () => {

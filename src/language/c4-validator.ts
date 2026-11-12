@@ -14,10 +14,10 @@
 	limitations under the License.
 */
 
-import { AstNode, AstUtils, isAstNode, type ValidationAcceptor, type ValidationChecks } from 'langium';
+import { AstNode, AstUtils, isAstNode, WorkspaceCache, type ValidationAcceptor, type ValidationChecks } from 'langium';
 import { URI } from 'vscode-uri';
 import type { DiagnosticRelatedInformation } from 'vscode-languageserver';
-import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isArchetypeInstance, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, ModelBlock, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty, type StringLiteralExpression, isElementEqExpression, isElementNotEqExpression, isBinaryExpression, isSingleElementExpression, isStringLiteralExpression, isExcludeProperty, type ExcludeProperty, type ViewExpression } from '../generated/ast';
+import { StyleDescriptionProperty, InstancesProperty, isArchetypeDefinition, isArchetypeInstance, isComponent, isComponentView, isContainer, isContainerInstance, isContainerView, isCustomElement, isCustomView, isDeploymentGroup, isGenericInstance, isDeploymentNode, isDeploymentView, isDynamicView, isFilteredView, isImageView, isInfrastructureNode, isNamedElement, isPerson, isRelationship, isSoftwareSystem, isGroup, isSoftwareSystemInstance, isSystemContextView, isSystemLandscapeView, NamedElement, ViewsBlock, type C4AstType, type C4Document, type Workspace, PropertyItem, isDeploymentEnvironment, Include, SoftwareSystem, IconProperty, ThemeProperty, DocsDirective, AdrsDirective, PositionProperty, OpacityProperty, ThicknessProperty, FontSizeProperty, WidthProperty, HeightProperty, StrokeWidthProperty, AutoLayoutProperty, TerminologyBlock, HealthCheck, DeploymentNode, Group, isPropertiesBlock, isModelBlock, ModelBlock, isPropertyItem, IconPositionProperty, isImplicitRelationship, isImpliedRelationshipsProperty, type StringLiteralExpression, isElementEqExpression, isElementNotEqExpression, isBinaryExpression, isSingleElementExpression, isStringLiteralExpression, isExcludeProperty, type ExcludeProperty, type ViewExpression } from '../generated/ast';
 import type { C4Services } from './c4-module';
 import { getBlockTokens, isTypeAllowedInBlock } from './c4-tokens';
 import * as includeResolver from './c4-include-resolver';
@@ -422,6 +422,8 @@ function hasDeclarations(doc: C4Document): boolean {
 export class C4Validator {
     public sharedServices: any;
     public viewKeyProvider?: ViewKeyProvider;
+    /** Workspace-wide `structurizr.groupSeparator` lookup, evicted on any workspace update. */
+    private groupSeparatorCache?: WorkspaceCache<string, boolean>;
 
     /** Formats an error message for unexpected tokens or disallowed element types in a block */
     private formatIncludeError(blockType: string, item: any): string {
@@ -1245,22 +1247,29 @@ export class C4Validator {
         });
     }
 
-    /** Returns true when a model block of the document declares a 'structurizr.groupSeparator' property. */
+    /**
+     * Returns true when the workspace that owns the node declares a
+     * 'structurizr.groupSeparator' property on its model. The property configures the
+     * model as a whole, so it may sit in the root workspace document or in any file
+     * the model includes - not only next to the group it applies to.
+     */
     private hasGroupSeparator(node: AstNode): boolean {
-        const root = AstUtils.getDocument(node)?.parseResult.value as any;
-        if (!root) return false;
-        const modelBlocks = [
-            ...(root.modelBlocks ?? []),
-            ...(root.workspaces ?? []).flatMap((workspace: any) => workspace.modelBlocks ?? [])
-        ];
-        for (const modelBlock of modelBlocks) {
-            for (const properties of modelBlock.properties ?? []) {
-                for (const item of properties.items ?? []) {
-                    if (C4Utils.stripQuotes(item.name) === 'structurizr.groupSeparator') return true;
-                }
-            }
-        }
-        return false;
+        const document = AstUtils.getDocument(node);
+        if (!document) return false;
+        const rootUri = includeResolver.getRootWorkspaceUri(this.sharedServices, document.uri.toString());
+        this.groupSeparatorCache ??= new WorkspaceCache<string, boolean>(this.sharedServices);
+        return this.groupSeparatorCache.get(rootUri, () => {
+            const documents = this.sharedServices.workspace.LangiumDocuments;
+            const root = documents.getDocument(URI.parse(rootUri))?.parseResult.value ?? document.parseResult.value;
+            let declared = false;
+            this.visitContents(root, (item) => {
+                if (declared || !isPropertyItem(item)) return;
+                const properties = item.$container;
+                if (!isPropertiesBlock(properties) || !isModelBlock(properties.$container)) return;
+                if (C4Utils.stripQuotes(item.name) === 'structurizr.groupSeparator') declared = true;
+            }, new Set<string>());
+            return declared;
+        });
     }
 
     /** Validates uniqueness of container names and identifiers within a SoftwareSystem */

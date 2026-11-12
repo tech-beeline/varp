@@ -277,6 +277,55 @@ workspace {
         expect(messages(doc, ERROR_SEVERITY)).toHaveLength(0);
     });
 
+    it('accepts nested groups in an included file when the root workspace declares a separator', async () => {
+        const docs = await buildProject({
+            'main.dsl': `workspace {
+    model {
+        properties {
+            structurizr.groupSeparator "/"
+        }
+        !include "model.dsl"
+    }
+}
+`,
+            'model.dsl': `group "Outer" {
+    group "Inner" {
+        person "User"
+    }
+}
+`,
+        });
+        const doc = docs.get('model.dsl')!;
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, WARNING_SEVERITY)).not.toContain(
+            "To use nested groups, please define a model property named 'structurizr.groupSeparator'."
+        );
+    });
+
+    it('warns about nested groups in an included file when no separator is declared', async () => {
+        const docs = await buildProject({
+            'main.dsl': `workspace {
+    model {
+        !include "model.dsl"
+    }
+}
+`,
+            'model.dsl': `group "Outer" {
+    group "Inner" {
+        person "User"
+    }
+}
+`,
+        });
+        const doc = docs.get('model.dsl')!;
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(messages(doc, WARNING_SEVERITY)).toContain(
+            "To use nested groups, please define a model property named 'structurizr.groupSeparator'."
+        );
+    });
+
     it('accepts a group inside a deployment node that sits in a group', async () => {
         const doc = await build(`
 workspace {

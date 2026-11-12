@@ -238,6 +238,7 @@
     "build:graphviz": "node native/graphviz/build.mjs",
     "test": "vitest run",
     "test:web": "node esbuild.mjs && esbuild test/web/smoke.ts --bundle --platform=browser --format=cjs --external:vscode --outfile=test/web/dist/smoke.js --log-level=info && vscode-test-web --browserType=chromium --quality=stable --extensionDevelopmentPath=. --extensionTestsPath=test/web/dist/smoke.js test/web/workspace",
+    "dev:web": "node esbuild.mjs && vscode-test-web --browserType=chromium --quality=stable --extensionDevelopmentPath=. test/web/workspace",
     "package": "vsce package --no-dependencies",
     "dev": "npm run build && node -e \"require('http').createServer((req, res) => { res.writeHead(200, {'Content-Type': 'text/html'}); res.end('<h1>c4varp VS Code Extension</h1><p>This is a VS Code extension project.</p>'); }).listen(3000, '0.0.0.0');\""
   },

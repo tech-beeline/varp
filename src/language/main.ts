@@ -35,6 +35,7 @@ import { createConnection, ProposedFeatures } from 'vscode-languageserver/node';
 import { URI } from 'vscode-uri';
 import { createC4Services } from './c4-module';
 import { HttpCache, defaultFetcher, validateTheme } from './http-cache';
+import { DEFAULT_THEME_JSON, isDefaultThemeUrl } from './c4-default-theme';
 
 // Create an LSP connection using Node.js IPC (stdio) transport
 // This communicates with the VS Code extension host process
@@ -169,8 +170,14 @@ connection.onRequest('c4/getThemes', async (params: { themes: string[] }) => {
     const urls = Array.isArray(params?.themes) ? params.themes : [];
     const themes: { url: string; content: string }[] = [];
     for (const url of urls) {
+        // The built-in default theme is bundled: the Structurizr cloud no longer
+        // serves its URL, so it must not go to the network.
+        if (isDefaultThemeUrl(url)) {
+            themes.push({ url, content: DEFAULT_THEME_JSON });
+            continue;
+        }
         if (!/^https?:\/\//i.test(url)) {
-            continue; // only http(s) themes are fetched; built-ins are not supported here
+            continue; // only http(s) themes are fetched; anything else is not a remote resource
         }
         try {
             const content = await httpCache.readRemoteWithCache(url, validateTheme);

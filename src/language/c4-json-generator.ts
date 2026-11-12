@@ -86,10 +86,7 @@ import { C4Services } from './c4-module';
 import type { ViewRef } from '../shared/view-refs';
 import * as includeResolver from './c4-include-resolver';
 import { SHAPE_NORMALIZE, BORDER_NORMALIZE, ROUTING_NORMALIZE, ICON_POSITION_NORMALIZE } from './c4-validator';
-
-// Default theme constants
-const DEFAULT_THEME_URL = "https://static.structurizr.com/themes/default/theme.json";
-const DEFAULT_THEME_NAME = "default";
+import { DEFAULT_THEME, DEFAULT_THEME_URL, isDefaultThemeName, isDefaultThemeUrl } from './c4-default-theme';
 
 /** Compares strings by UTF-16 code unit, matching the ordering of the model's style set. */
 function compareCodeUnits(a: string, b: string): number {
@@ -412,9 +409,9 @@ class JsonGenerator {
         'double-angle': 'DoubleAngleBrackets',
         'none': 'None'
     };
-    /** Element styles loaded from external themes (!theme), mirroring structurizr.ui.themes. */
+    /** Element styles loaded from declared themes (theme / themes), mirroring structurizr.ui.themes. */
     private readonly themeStyles: any[] = [];
-    /** Relationship styles loaded from external themes (!theme), mirroring structurizr.ui.themes[].relationships. */
+    /** Relationship styles loaded from declared themes (theme / themes), mirroring structurizr.ui.themes[].relationships. */
     private readonly themeRelationshipStyles: any[] = [];
     /** Merged element style map (theme + workspace) keyed by tag, built lazily for Graphviz node sizing. */
     private elementStyleMap: Record<string, any> | undefined = undefined;
@@ -437,9 +434,9 @@ class JsonGenerator {
         this.collectStyles(workspace);
         this.collectThemes(workspace);
 
-        // Download external theme files (!theme) so element sizes defined by
-        // themes are reflected in the Graphviz layout (the webview downloads the
-        // same files at render time via loadTheme).
+        // Load declared theme files (theme / themes) so element sizes defined by
+        // themes are reflected in the Graphviz layout (the webview applies the
+        // same themes at render time).
         await this.collectThemeStyles();
         this.collectProperties(workspace);
         this.collectTerminology(workspace);
@@ -1398,8 +1395,8 @@ class JsonGenerator {
     }
     
     /**
-     * Collects theme URLs from !theme and !themes directives across all documents and includes.
-     * Resolves theme names: "default" → DEFAULT_THEME_URL, others → URL as-is.
+     * Collects theme URLs from theme and themes declarations across all documents and includes.
+     * Resolves the built-in default theme name (any case) to DEFAULT_THEME_URL, others are kept as-is.
      */
     private collectThemes(node: AstNode | undefined, visited: Set<string> = new Set<string>) {
         if (!node) return;
@@ -1413,13 +1410,13 @@ class JsonGenerator {
             if (parent) this.collectThemes(parent, visited);
         }
 
-        // Reads !theme / !themes from a views, styles or root block.
+        // Reads theme / themes from a views, styles or root block.
         const extractThemes = (holder: any) => {
             const single = C4Utils.stripQuotes(holder.themeProps?.at(0)?.value);
-            if (single) this.themes.add(single === DEFAULT_THEME_NAME ? DEFAULT_THEME_URL : single);
+            if (single) this.themes.add(isDefaultThemeName(single) ? DEFAULT_THEME_URL : single);
             holder.themesProps?.at(0)?.values?.forEach((value: string) => {
                 const theme = C4Utils.stripQuotes(value);
-                if (theme) this.themes.add(theme === DEFAULT_THEME_NAME ? DEFAULT_THEME_URL : theme);
+                if (theme) this.themes.add(isDefaultThemeName(theme) ? DEFAULT_THEME_URL : theme);
             });
         };
 
@@ -1448,10 +1445,10 @@ class JsonGenerator {
     }
 
     /**
-     * Downloads external theme files (!theme) and collects their element styles so
-     * Graphviz plans for the sizes the webview will render after downloading the
-     * same theme files. Absolute http(s) URLs are fetched; relative/local paths are
-     * skipped (the webview resolves them against its own base URL).
+     * Resolves declared theme files (theme / themes) and collects their element styles so
+     * Graphviz plans for the sizes the webview will render once the same themes are applied.
+     * The built-in default theme is bundled; absolute http(s) URLs are fetched;
+     * relative/local paths are skipped (the webview resolves them against its own base URL).
      */
     private async collectThemeStyles(): Promise<void> {
         // A fresh JsonGenerator is created per generate() call, so clear defensively.
@@ -1462,21 +1459,28 @@ class JsonGenerator {
         // main.ts / main.browser.ts (60s TTL) that already serves !include and
         // extendsUri remote URLs - no separate theme cache is needed.
         const fs = this.services.shared.workspace.FileSystemProvider;
-        if (!fs || typeof fs.readFile !== 'function') return;
+        const addThemeStyles = (theme: any) => {
+            if (theme && Array.isArray(theme.elements)) {
+                for (const style of theme.elements) this.themeStyles.push(style);
+            }
+            // The webview merges theme.relationships into the relationship
+            // style lookup, so collect them too - otherwise themed
+            // relationship fontSize/width would not be reflected in the layout.
+            if (theme && Array.isArray(theme.relationships)) {
+                for (const style of theme.relationships) this.themeRelationshipStyles.push(style);
+            }
+        };
         for (const themeUrl of this.themes) {
+            // The built-in default theme is bundled: its cloud URL is no longer served.
+            if (isDefaultThemeUrl(themeUrl)) {
+                addThemeStyles(DEFAULT_THEME);
+                continue;
+            }
             if (!/^https?:\/\//i.test(themeUrl)) continue;
+            if (!fs || typeof fs.readFile !== 'function') continue;
             try {
                 const text = await fs.readFile(URI.parse(themeUrl));
-                const theme = JSON.parse(text);
-                if (theme && Array.isArray(theme.elements)) {
-                    for (const style of theme.elements) this.themeStyles.push(style);
-                }
-                // The webview merges theme.relationships into the relationship
-                // style lookup, so collect them too - otherwise themed
-                // relationship fontSize/width would not be reflected in the layout.
-                if (theme && Array.isArray(theme.relationships)) {
-                    for (const style of theme.relationships) this.themeRelationshipStyles.push(style);
-                }
+                addThemeStyles(JSON.parse(text));
             } catch (err) {
                 // One-line, stack-less: the failure is either a remote-cache hit
                 // ("Cached document is invalid") or a network/TLS error. A full

@@ -19,7 +19,7 @@ import { isWorkspace, C4Document, isC4Document } from '../generated/ast';
 import { URI } from 'vscode-uri';
 import * as includeResolver from './c4-include-resolver';
 import type { C4Services } from './c4-module';
-import { C4JsonEnricher } from './c4-json-enricher';
+import { C4JsonEnricher, type EnrichOptions } from './c4-json-enricher';
 import { applyDrawioLayoutToView } from './c4-drawio-layout';
 import type { ViewRef } from '../shared/view-refs';
 
@@ -562,8 +562,11 @@ export class C4GeneratorHandler {
      * the additional documentation content on top without re-generating the
      * model/views, so the enrichment is cheap. Returns undefined when no render
      * JSON is cached yet.
+     *
+     * `options` selects the optional enrichment steps (see {@link EnrichOptions});
+     * the fitness checks ask for the unused elements to be pruned, the export does not.
      */
-    public async getFullContentForUri(uri: string): Promise<any> {
+    public async getFullContentForUri(uri: string, options?: EnrichOptions): Promise<any> {
         // ensureContentForUri regenerates on demand, so the full/export JSON heals
         // the same way the render JSON does when the cache was invalidated without
         // a successful build.
@@ -574,7 +577,7 @@ export class C4GeneratorHandler {
         // Deep-clone the render JSON so the cached copy stays untouched and the
         // enricher can freely inject nested `documentation` into model elements.
         const fullJson = structuredClone(entry.json);
-        await this.enricher.enrich(rootUri, fullJson);
+        await this.enricher.enrich(rootUri, fullJson, options);
         return fullJson;
     }
 }

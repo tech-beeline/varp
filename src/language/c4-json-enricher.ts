@@ -80,6 +80,36 @@ function documentationFormat(name: string): 'Markdown' | 'AsciiDoc' {
 }
 
 /**
+ * Model fields holding element arrays. An element array nests the next ones: a
+ * deployment node holds other nodes and instances, a system holds containers, a
+ * container holds components.
+ */
+const MODEL_ELEMENT_KEYS = [
+    'customElements',
+    'people',
+    'softwareSystems',
+    'containers',
+    'components',
+    'deploymentNodes',
+    'infrastructureNodes',
+    'softwareSystemInstances',
+    'containerInstances'
+];
+
+/** Element fields that point at another model element by id. */
+const MODEL_REFERENCE_KEYS = ['softwareSystemId', 'containerId', 'componentId', 'elementId', 'parentId'];
+
+/** Optional steps of {@link C4JsonEnricher.enrich}. */
+export interface EnrichOptions {
+    /**
+     * Removes the model elements that connect to nothing and appear in no view. An
+     * element survives when it has at least one incoming or outgoing relationship,
+     * is drawn by a view, or is needed by a surviving element.
+     */
+    pruneUnusedElements?: boolean;
+}
+
+/**
  * A random version 4 UUID, the identifier used for an element that declares none.
  * Uses the platform generator when available and falls back to random bytes.
  */
@@ -185,8 +215,9 @@ export class C4JsonEnricher {
      *
      * @param rootUri  the URI string of the root workspace document
      * @param json     the (cloned) render JSON to enrich
+     * @param options  optional steps to run on top of the enrichment
      */
-    public async enrich(rootUri: string, json: any): Promise<void> {
+    public async enrich(rootUri: string, json: any, options: EnrichOptions = {}): Promise<void> {
         const doc = this.services.workspace.LangiumDocuments.getDocument(URI.parse(rootUri));
         if (!doc) return;
         const root = doc.parseResult.value;
@@ -240,6 +271,98 @@ export class C4JsonEnricher {
         // Inject per-element fields (url/properties/perspectives/technology) that
         // the render pipeline drops when defined directly on the DSL element.
         this.enrichElementFields(root, json?.model, rootUri, this.isHierarchicalIdentifiers(root));
+
+        if (options.pruneUnusedElements) {
+            this.pruneUnusedElements(json);
+        }
+    }
+
+    /**
+     * Removes the model elements that add nothing to the model: no relationship in
+     * either direction and no view that draws them. An element that survives keeps
+     * the elements it needs - its parents in the model tree and the elements its id
+     * fields point at - so no reference is left dangling.
+     */
+    private pruneUnusedElements(json: any): void {
+        const model = json?.model;
+        if (!model || typeof model !== 'object') return;
+
+        const parents = new Map<string, string>();
+        const referenced = new Map<string, Set<string>>();
+        const connected = new Set<string>();
+
+        const collect = (node: any, parentId?: string): void => {
+            if (!node || typeof node !== 'object' || Array.isArray(node)) return;
+            const id = typeof node.id === 'string' ? node.id : undefined;
+            if (id !== undefined) {
+                if (parentId !== undefined) parents.set(id, parentId);
+                const targets = referenced.get(id) ?? new Set<string>();
+                for (const key of MODEL_REFERENCE_KEYS) {
+                    if (typeof node[key] === 'string') targets.add(node[key]);
+                }
+                if (targets.size > 0) referenced.set(id, targets);
+            }
+            for (const relationship of Array.isArray(node.relationships) ? node.relationships : []) {
+                if (typeof relationship?.sourceId === 'string') connected.add(relationship.sourceId);
+                if (typeof relationship?.destinationId === 'string') connected.add(relationship.destinationId);
+            }
+            for (const key of MODEL_ELEMENT_KEYS) {
+                const children = node[key];
+                if (!Array.isArray(children)) continue;
+                for (const child of children) collect(child, id);
+            }
+        };
+        collect(model);
+
+        // Elements kept on their own: those with a relationship and those a view draws.
+        const keep = new Set<string>([...connected, ...this.viewedElementIds(json?.views)]);
+        // Survivors pull in what they need (tree parents and referenced elements).
+        const pending = [...keep];
+        while (pending.length > 0) {
+            const id = pending.pop()!;
+            for (const target of referenced.get(id) ?? []) {
+                if (!keep.has(target)) {
+                    keep.add(target);
+                    pending.push(target);
+                }
+            }
+            const parent = parents.get(id);
+            if (parent !== undefined && !keep.has(parent)) {
+                keep.add(parent);
+                pending.push(parent);
+            }
+        }
+
+        const prune = (node: any): void => {
+            for (const key of MODEL_ELEMENT_KEYS) {
+                const children = node[key];
+                if (!Array.isArray(children)) continue;
+                for (const child of children) prune(child);
+                const kept = children.filter((child: any) => typeof child?.id !== 'string' || keep.has(child.id));
+                if (kept.length === 0) delete node[key];
+                else if (kept.length !== children.length) node[key] = kept;
+            }
+        };
+        prune(model);
+    }
+
+    /** Ids of the elements the views draw, including the element each view is scoped to. */
+    private viewedElementIds(views: any): Set<string> {
+        const ids = new Set<string>();
+        if (!views || typeof views !== 'object') return ids;
+        for (const value of Object.values(views)) {
+            if (!Array.isArray(value)) continue;
+            for (const view of value) {
+                if (!view || typeof view !== 'object') continue;
+                for (const element of Array.isArray(view.elements) ? view.elements : []) {
+                    if (typeof element?.id === 'string') ids.add(element.id);
+                }
+                for (const key of ['elementId', 'softwareSystemId', 'containerId', 'componentId']) {
+                    if (typeof view[key] === 'string') ids.add(view[key]);
+                }
+            }
+        }
+        return ids;
     }
 
     /** Whether `!identifiers hierarchical` is in effect for the workspace. */

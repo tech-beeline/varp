@@ -201,7 +201,9 @@ export function registerFitnessChecks(client: C4LanguageClient, view: FitnessRes
     const checks = new FitnessChecks(
         client.outputChannel,
         async (uri: string) => {
-            const res: any = await client.sendRequest('c4/getFullContentForUri', { uri });
+            // The checks evaluate the architecture, so the full JSON is requested without
+            // the elements that no relationship and no diagram tie to it.
+            const res: any = await client.sendRequest('c4/getFullContentForUri', { uri, pruneUnusedElements: true });
             return res?.json;
         },
         result => view.update(result)

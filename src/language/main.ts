@@ -154,8 +154,12 @@ connection.onRequest('c4/importDrawioLayout', async (params: { uri: string; view
 // render JSON enriched with documentation not produced by the render pipeline
 // (e.g. `documentation.decisions` from !adrs/!decisions). Used for export/tooling;
 // the diagram preview keeps using the lighter render JSON from getContentForUri.
-connection.onRequest('c4/getFullContentForUri', async (params: { uri: string }) => {
-    const content = await C4.generation.C4GeneratorHandler.getFullContentForUri(params.uri);
+// `pruneUnusedElements` drops the model elements that have no relationship and are
+// drawn by no view (the fitness checks ask for it).
+connection.onRequest('c4/getFullContentForUri', async (params: { uri: string; pruneUnusedElements?: boolean }) => {
+    const content = await C4.generation.C4GeneratorHandler.getFullContentForUri(params.uri, {
+        pruneUnusedElements: params.pruneUnusedElements
+    });
     return content ? { json: content } : null;
 });
 

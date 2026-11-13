@@ -563,3 +563,38 @@ workspace {
         expect(handler.getContentForUri(uri)?.generation).toBe(built.generation);
     });
 });
+
+describe('full content for the fitness checks', () => {
+    const dsl = `workspace {
+    model {
+        a = softwareSystem "Alpha"
+        b = softwareSystem "Beta"
+        isolated = softwareSystem "Isolated"
+        a -> b "Calls"
+    }
+}`;
+
+    const systemNames = (full: any): string[] => full.model.softwareSystems.map((system: any) => system.name);
+
+    it('drops the elements with no relationship and no diagram on request', async () => {
+        const services = newServices();
+        const handler = services.generation.C4GeneratorHandler;
+        const uri = 'file:///full-prune.dsl';
+        await buildAndGenerate(services, uri, dsl);
+
+        const full = await handler.getFullContentForUri(uri, { pruneUnusedElements: true });
+
+        expect(systemNames(full)).toEqual(['Alpha', 'Beta']);
+    });
+
+    it('keeps those elements when the option is not requested', async () => {
+        const services = newServices();
+        const handler = services.generation.C4GeneratorHandler;
+        const uri = 'file:///full-keep.dsl';
+        await buildAndGenerate(services, uri, dsl);
+
+        const full = await handler.getFullContentForUri(uri);
+
+        expect(systemNames(full)).toEqual(['Alpha', 'Beta', 'Isolated']);
+    });
+});

@@ -15,7 +15,7 @@
 */
 
 import { window, workspace } from 'vscode';
-import { generateHmac, gzipBody } from './hmac';
+import { generateHmac } from './hmac';
 import type { C4LanguageClient } from './init';
 import type { FitnessResult, FitnessResultsView } from './fitness-results-view';
 import { archopsConfigured } from '../shared/archops';
@@ -83,8 +83,10 @@ export function summarize(response: any): string {
  * Runs the fitness checks for a workspace JSON through the gateway. The method keeps
  * nothing, so the call is free of side effects for the product. Returns the result to
  * show, or undefined when the workspace is not configured for the checks - a workspace
- * without the `workspace_cmdb` property is skipped silently. The caller's `signal`
- * cancels the request when a newer workspace replaces it.
+ * without the `workspace_cmdb` property is skipped silently. The body is sent
+ * uncompressed: the signature covers the plain text, so the bytes on the wire must
+ * be that same text. The caller's `signal` cancels the request when a newer
+ * workspace replaces it.
  */
 export async function runFitnessChecks(json: any, signal?: AbortSignal): Promise<FitnessResult | undefined> {
     const target = fitnessTarget(json);
@@ -93,13 +95,13 @@ export async function runFitnessChecks(json: any, signal?: AbortSignal): Promise
     }
     const body = JSON.stringify(json);
     const headers: Record<string, string> = {
-        ...generateHmac('POST', target.path, body, 'application/json', true),
+        ...generateHmac('POST', target.path, body, 'application/json'),
         'Content-Type': 'application/json'
     };
     const response = await fetch(target.url, {
         method: 'POST',
         headers,
-        body: gzipBody(body),
+        body,
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]) : AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
     const text = await response.text();

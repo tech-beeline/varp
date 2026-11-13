@@ -31,6 +31,7 @@ import type { ViewRef } from "../shared/view-refs";
  * Both vscode-languageclient/node and vscode-languageclient/browser implement it.
  */
 export interface C4LanguageClient {
+    readonly outputChannel: { appendLine(value: string): void };
     onNotification(method: string, handler: (params: any) => void): void;
     onRequest(method: string, handler: (params: any) => any): void;
     sendRequest(method: string, params: any): Promise<any>;

@@ -67,25 +67,60 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
     // relinked and validated again at the end of the pass.
     private awaitingRebuild = new Set<string>();
 
+    // Number of running build/update passes, and the callbacks waiting for them to
+    // drain. A pass adds !include fragments to the index while it runs, so only the
+    // end of the pass leaves the workspace consistent.
+    private activePasses = 0;
+    private readonly idleWaiters: Array<() => void> = [];
+
+    /**
+     * Resolves once no build/update pass is running. Readers that resolve references
+     * across documents (JSON generation, exports) wait for this: in the middle of a
+     * pass the fragments loaded by it are still unparsed, and their references would
+     * resolve against an incomplete index.
+     */
+    public whenIdle(): Promise<void> {
+        if (this.activePasses === 0) {
+            return Promise.resolve();
+        }
+        return new Promise(resolve => this.idleWaiters.push(resolve));
+    }
+
+    private async runPass(pass: () => Promise<void>): Promise<void> {
+        this.activePasses += 1;
+        try {
+            await pass();
+        } finally {
+            this.activePasses -= 1;
+            if (this.activePasses === 0) {
+                for (const resolve of this.idleWaiters.splice(0)) {
+                    resolve();
+                }
+            }
+        }
+    }
+
     override async update(changed: URI[], deleted: URI[], cancelToken?: any): Promise<void> {
-        for (const uri of changed) {
-            this.scannedDocuments.delete(uri.toString());
-        }
-        for (const uri of deleted) {
-            this.scannedDocuments.delete(uri.toString());
-            this.awaitingRebuild.delete(uri.toString());
-        }
+        await this.runPass(async () => {
+            for (const uri of changed) {
+                this.scannedDocuments.delete(uri.toString());
+            }
+            for (const uri of deleted) {
+                this.scannedDocuments.delete(uri.toString());
+                this.awaitingRebuild.delete(uri.toString());
+            }
 
-        // Step 1: Let the parent process all documents through build phases
-        await super.update(changed, deleted, cancelToken);
+            // Step 1: Let the parent process all documents through build phases
+            await super.update(changed, deleted, cancelToken);
 
-        // Step 2-3: Load the targets that no phase has reached and rebuild the
-        // documents whose targets became available.
-        await this.loadPendingIncludes(cancelToken);
+            // Step 2-3: Load the targets that no phase has reached and rebuild the
+            // documents whose targets became available.
+            await this.loadPendingIncludes(cancelToken);
 
-        // Step 4: Re-run validation for the rest of the touched workspaces, so their
-        // diagnostics reflect the new state as well.
-        await this.revalidateWorkspaces(changed, deleted, cancelToken);
+            // Step 4: Re-run validation for the rest of the touched workspaces, so their
+            // diagnostics reflect the new state as well.
+            await this.revalidateWorkspaces(changed, deleted, cancelToken);
+        });
     }
 
     /**
@@ -97,9 +132,11 @@ export class C4DocumentBuilder extends DefaultDocumentBuilder {
         options?: BuildOptions,
         cancelToken?: any
     ): Promise<void> {
-        await super.build(documents, options, cancelToken);
+        await this.runPass(async () => {
+            await super.build(documents, options, cancelToken);
 
-        await this.loadPendingIncludes(cancelToken);
+            await this.loadPendingIncludes(cancelToken);
+        });
     }
 
     /**

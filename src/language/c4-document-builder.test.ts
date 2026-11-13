@@ -14,7 +14,7 @@
 	limitations under the License.
 */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { DocumentState, type FileSystemProvider, type LangiumDocument } from 'langium';
 import { URI } from 'vscode-uri';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -217,5 +217,63 @@ describe('include discovery', () => {
 
         expect(documents.hasDocument(URI.parse(TARGET))).toBe(false);
         expect(messages(including).join(' ')).toContain('could not be found');
+    });
+});
+
+describe('reads during a build pass', () => {
+    const ROOT = 'file:///ws/workspace.dsl';
+    const SYSTEMS = 'file:///ws/systems.dsl';
+    const RELATIONS = 'file:///ws/relations.dsl';
+
+    const FILES = {
+        [ROOT]: `workspace {
+    model {
+        !include systems.dsl
+        !include relations.dsl
+    }
+    views {
+        systemContext a "ctx" {
+            include *
+        }
+    }
+}
+`,
+        [SYSTEMS]: `a = softwareSystem "Alpha"
+b = softwareSystem "Beta"
+`,
+        [RELATIONS]: `a -> b "Calls"
+`
+    };
+
+    it('serves a read issued while the workspace is being built from the finished build', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        try {
+            const { services, root } = projectDocuments(FILES, URI.parse(ROOT));
+            const builder = services.shared.workspace.DocumentBuilder;
+            const handler = services.generation.C4GeneratorHandler;
+
+            const build = builder.build([root], { validation: true });
+            // The client asks for the model as soon as the build starts reporting
+            // content, while the pass that loads the fragments is still running.
+            const content = handler.ensureContentForUri(ROOT);
+            const view = handler.getViewContentForUri(ROOT, 'ctx');
+
+            await build;
+            const [entry, payload] = await Promise.all([content, view]);
+
+            const reported = warn.mock.calls.map((args) => args.join(' '));
+            expect(reported.filter((message) => message.includes('ComputedScopes'))).toEqual([]);
+
+            const systems = entry?.json.model.softwareSystems ?? [];
+            expect(systems.map((system: any) => system.name)).toEqual(['Alpha', 'Beta']);
+            expect(systems[0].relationships).toHaveLength(1);
+            expect(systems[0].relationships[0].destinationId).toBe(systems[1].id);
+
+            const elements = payload?.json.views.systemContextViews?.[0]?.elements ?? [];
+            expect(elements.map((element: any) => element.id))
+                .toEqual(expect.arrayContaining(systems.map((system: any) => system.id)));
+        } finally {
+            warn.mockRestore();
+        }
     });
 });

@@ -224,6 +224,20 @@ export class C4GeneratorHandler {
     }
 
     /**
+     * Waits for a running build/update pass to finish before reading the model.
+     *
+     * A pass indexes the !include fragments it discovers as it goes and links them only
+     * when it drains them at the end. Reading the model in between resolves references
+     * against that incomplete index, which silently leaves the affected elements and
+     * relationships out of the JSON. The client asks for the JSON as soon as the build
+     * reports its views, so generation regularly lands in that window.
+     */
+    private async waitForBuild(): Promise<void> {
+        const builder = this.services.shared.workspace.DocumentBuilder as { whenIdle?: () => Promise<void> };
+        await builder.whenIdle?.();
+    }
+
+    /**
      * Generates Structurizr-compatible JSON for a workspace node and stores it in the cache.
      * Logs errors if generation fails but does not throw (non-critical for the build pipeline).
      *
@@ -397,6 +411,7 @@ export class C4GeneratorHandler {
      * workspace (no workspace block, syntax error, or an unknown document).
      */
     public async ensureContentForUri(uri: string): Promise<GeneratedJson | null> {
+        await this.waitForBuild();
         const rootDoc = this.findRootWorkspace(uri);
         const workspaceNode = rootDoc ? this.getWorkspaceNode(rootDoc) : undefined;
         if (!rootDoc || !workspaceNode) {
@@ -425,6 +440,7 @@ export class C4GeneratorHandler {
      * workspace or the view key is unknown.
      */
     public async getViewContentForUri(uri: string, viewKey: string): Promise<GeneratedJson | null> {
+        await this.waitForBuild();
         const rootDoc = this.findRootWorkspace(uri);
         const workspaceNode = rootDoc ? this.getWorkspaceNode(rootDoc) : undefined;
         if (!rootDoc || !workspaceNode) {

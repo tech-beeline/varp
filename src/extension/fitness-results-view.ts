@@ -37,6 +37,7 @@ function escapeHtml(value: unknown): string {
 /** One check, classified by its verdict rather than by the technical success flag. */
 interface CheckRow {
     code: string;
+    name: string;
     status: string;
     detail: string;
 }
@@ -44,7 +45,13 @@ interface CheckRow {
 /** A check the service did not run, with the reason it reports. */
 interface SkippedRow {
     code: string;
+    name: string;
     reason: string;
+}
+
+/** The check's human-readable name, when the service reports a non-empty one. */
+function checkName(entry: any): string {
+    return typeof entry?.name === 'string' ? entry.name.trim() : '';
 }
 
 function classify(response: any): { violated: CheckRow[]; failed: CheckRow[]; passed: CheckRow[]; skipped: SkippedRow[] } {
@@ -56,14 +63,14 @@ function classify(response: any): { violated: CheckRow[]; failed: CheckRow[]; pa
         const counted = checkResult?.countDetail !== undefined
             ? `${checkResult.successDetail ?? 0}/${checkResult.countDetail}`
             : '';
-        const row: CheckRow = { code, status: result?.status ?? '', detail: counted };
+        const row: CheckRow = { code, name: checkName(result), status: result?.status ?? '', detail: counted };
         if (result?.success === false) failed.push(row);
         else if (checkResult?.is_check === false) violated.push(row);
         else passed.push(row);
     }
     const skipped = (response?.skipped ?? [])
         .filter((entry: any) => entry?.code)
-        .map((entry: any) => ({ code: entry.code, reason: entry.reason ?? '' }));
+        .map((entry: any) => ({ code: entry.code, name: checkName(entry), reason: entry.reason ?? '' }));
     return { violated, failed, passed, skipped };
 }
 
@@ -78,13 +85,19 @@ function collapsible(title: string, count: number, inner: string): string {
 function section(title: string, kind: string, rows: CheckRow[]): string {
     if (rows.length === 0) return '';
     const items = rows.map(row => `<li class="${kind}">
-            <span class="code">${escapeHtml(row.code)}</span>
+            ${checkLabel(row.code, row.name)}
             ${row.status ? `<span class="badge">${escapeHtml(row.status)}</span>` : ''}
             ${row.detail ? `<span class="detail">${escapeHtml(row.detail)}</span>` : ''}
         </li>`).join('\n');
     return collapsible(title, rows.length, `<ul>
 ${items}
     </ul>`);
+}
+
+/** The check code with its name, when the service reports one. */
+function checkLabel(code: string, name: string): string {
+    const label = `<span class="code">${escapeHtml(code)}</span>`;
+    return name ? `${label}<span class="name"> — ${escapeHtml(name)}</span>` : label;
 }
 
 /**
@@ -106,6 +119,7 @@ export function renderFitnessResults(result: FitnessResult | undefined): string 
         li.failed { border-left-color: var(--vscode-editorWarning-foreground); }
         li.passed { border-left-color: var(--vscode-charts-green, var(--vscode-testing-iconPassed)); }
         .code { font-family: var(--vscode-editor-font-family); font-weight: 600; }
+        .name { font-weight: 400; }
         .badge { margin-left: 8px; font-size: .85em; color: var(--vscode-descriptionForeground); }
         .detail { margin-left: 8px; font-size: .9em; }
         .message { margin: 4px 0 0; white-space: pre-wrap; }
@@ -126,7 +140,7 @@ export function renderFitnessResults(result: FitnessResult | undefined): string 
         .filter(Boolean).map(escapeHtml).join(' &middot; ');
     const skippedSection = skipped.length > 0
         ? collapsible('Skipped', skipped.length, `<ul>${skipped
-            .map(row => `<li><span class="code">${escapeHtml(row.code)}</span>${
+            .map(row => `<li>${checkLabel(row.code, row.name)}${
                 row.reason ? `<p class="message">${escapeHtml(row.reason)}</p>` : ''}</li>`).join('')}</ul>`)
         : '';
 
